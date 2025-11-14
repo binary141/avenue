@@ -91,6 +91,7 @@ func (s *Server) GetFile(c *gin.Context) {
 			Message: "could not convert ascii to int",
 			Error:   err.Error(),
 		})
+		return
 	}
 	file, err := s.persist.GetFileByID(id)
 	if err != nil {
@@ -146,6 +147,7 @@ func (s *Server) DeleteFile(c *gin.Context) {
 			Message: "could not convert ascii to int",
 			Error:   err.Error(),
 		})
+		return
 	}
 	f, err := s.persist.GetFileByID(id)
 	if err != nil {

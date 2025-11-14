@@ -22,7 +22,12 @@ func NewPersist(host, user, password, dbname string) *Persist {
 	// DB Migrations
 	err = db.AutoMigrate(&File{})
 	if err != nil {
-		panic(fmt.Sprintf("failed to migrate database: %v", err))
+		panic(fmt.Sprintf("failed to migrate database for files: %v", err))
+	}
+
+	err = db.AutoMigrate(&User{})
+	if err != nil {
+		panic(fmt.Sprintf("failed to migrate database for users: %v", err))
 	}
 	return &Persist{db: db}
 }

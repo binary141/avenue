@@ -27,7 +27,7 @@ func SetupServer(p *persist.Persist) Server {
 }
 func (s *Server) SetupRoutes() {
 	s.router.GET("/ping", s.pingHandler)
-	s.router.POST("/file/upload", s.Upload)
+	s.router.POST("/file", s.Upload)
 	s.router.GET("/file/list", s.ListFiles)
 	s.router.GET("/file/:fileID", s.GetFile)
 	s.router.DELETE("/file/:fileID", s.DeleteFile)

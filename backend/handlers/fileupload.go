@@ -2,7 +2,12 @@ package handlers
 
 import (
 	"avenue/backend/persist"
+	"bufio"
+	"errors"
 	"fmt"
+	"io"
+	"log"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/afero"
@@ -81,45 +86,57 @@ func (s *Server) ListFiles(c *gin.Context) {
 	c.JSON(200, files)
 }
 
-type GetFileReq struct {
-	ID uint `json:"id" binding:"required"`
+func (s *Server) GetFile(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("fileID"))
+	if err != nil {
+		c.JSON(400, Response{
+			Message: "could not convert ascii to int",
+			Error:   err.Error(),
+		})
+	}
+	file, err := s.persist.GetFileByID(id)
+	if err != nil {
+		c.JSON(500, Response{
+			Message: "could not get file",
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	c.Header("Content-Type", "text/event-stream")
+	c.Header("Cache-Control", "no-cache")
+	c.Header("Connection", "keep-alive")
+	c.Header("Transfer-Encoding", "chunked")
+
+	filePath := fmt.Sprintf("%s%s.%s", file.Path, file.Name, file.Extension)
+	log.Printf("getting file: %v", filePath)
+	fileData, err := s.fs.Open(filePath)
+	if err != nil {
+		c.JSON(500, Response{
+			Message: "could not read file",
+			Error:   err.Error(),
+		})
+		return
+	}
+	defer fileData.Close()
+
+	f := bufio.NewReader(fileData)
+	b := make([]byte, 4096)
+	for {
+		n, err := f.Read(b)
+		if n > 0 {
+			c.SSEvent("data", b)
+		}
+		if errors.Is(err, io.EOF) {
+			break
+		} else if err != nil {
+			c.JSON(500, Response{
+				Message: "error reading bufio",
+				Error:   err.Error(),
+			})
+			return
+		}
+	}
+
+	c.JSON(200, file)
 }
-
-// func (s *Server) GetFile(c *gin.Context) {
-
-// 	var req GetFileReq
-// 	if err := c.ShouldBindJSON(&req); err != nil {
-// 		c.JSON(400, Response{
-// 			Message: "could not marshal all data to json",
-// 			Error:   err.Error(),
-// 		})
-// 		return
-// 	}
-// 	file, err := s.persist.GetFileByID(req.ID)
-// 	if err != nil {
-// 		c.JSON(500, Response{
-// 			Message: "could not get file",
-// 			Error:   err.Error(),
-// 		})
-// 		return
-// 	}
-
-// 	c.Header("Content-Type", "text/event-stream")
-// 	c.Header("Cache-Control", "no-cache")
-// 	c.Header("Connection", "keep-alive")
-// 	c.Header("Transfer-Encoding", "chunked")
-
-// 	filePath := fmt.Sprintf("%s/%s", file.Path, file.Name)
-// 	fileData, err := s.fs.Open(filePath)
-// 	if err != nil {
-// 		c.JSON(500, Response{
-// 			Message: "could not read file",
-// 			Error:   err.Error(),
-// 		})
-// 		return
-// 	}
-
-// f := bufio.NewReader(fileData)
-// f.ReadSlice()
-// 		c.JSON(200, file)
-// }

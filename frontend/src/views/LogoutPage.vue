@@ -1,0 +1,1 @@
+<template>Logout page</template>

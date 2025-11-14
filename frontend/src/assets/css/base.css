@@ -1,0 +1,53 @@
+@import url("@/assets/css/text.css");
+@import url("@/assets/css/colors.css");
+@import url("@/assets/css/components.css");
+@import "tailwindcss";
+
+:root {
+  --page-padding: 10px;
+}
+
+body {
+  margin: 0;
+  background-color: var(--gray);
+}
+
+#app {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  padding: var(--page-padding);
+  min-height: 100vh !important;
+}
+
+#app {
+  height: 100%;
+}
+
+.full-width {
+  width: 100%;
+}
+.full-height {
+  height: 100%;
+}
+.center {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+@media (max-width: 700px) {
+  .page {
+    width: 100%;
+  }
+}
+
+@media (min-width: 700px) {
+  .page {
+    display: flex;
+    justify-content: center;
+    width: 100%;
+    max-width: 700px;
+  }
+}

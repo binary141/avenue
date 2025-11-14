@@ -98,6 +98,10 @@ func (s *Server) SetupRoutes() {
 	securedRouterV1.GET("/user/profile", s.GetProfile)
 	securedRouterV1.PUT("/user/profile", s.UpdateProfile)
 	securedRouterV1.PATCH("/user/password", s.UpdatePassword)
+	s.router.GET("/ping", s.pingHandler)
+	// s.router.POST("/upload", s.Upload)
+	s.router.GET("/file/list", s.ListFiles)
+	s.router.GET("/file", s.GetFile)
 }
 
 func (s *Server) Run(address string) error {

@@ -55,13 +55,18 @@ export const useUsersStore = defineStore('users', () => {
         
         return response;
     }
+    async function updatePassword(password: string) {
+        // TODO: Implement password update logic
+    }
 
     return {
         userData,
+        loggedIn,
         logIn,
         logOut,
         signUp,
         pullUser,
         updateUser,
+        updatePassword
     }
 })

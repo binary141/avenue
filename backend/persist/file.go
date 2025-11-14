@@ -3,7 +3,7 @@ package persist
 import "time"
 
 type File struct {
-	ID        uint   `gorm:"primaryKey"`
+	ID        int    `gorm:"primaryKey"`
 	Name      string `gorm:"not null"`
 	Extension string `gorm:"not null"`
 	Path      string `gorm:"not null"`
@@ -16,7 +16,7 @@ func (p *Persist) CreateFile(file *File) error {
 }
 
 // GetFileByID retrieves a file by its ID.
-func (p *Persist) GetFileByID(id uint) (*File, error) {
+func (p *Persist) GetFileByID(id int) (*File, error) {
 	var file File
 	err := p.db.First(&file, id).Error
 	if err != nil {

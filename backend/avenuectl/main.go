@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+
 	"avenue/backend/handlers"
 	"avenue/backend/persist"
 )
@@ -19,4 +21,14 @@ func main() {
 
 	// Start the server
 	_ = server.Run(":8080")
+}
+
+func getEnv(key string, defaultVal string) string {
+	envKey := os.Getenv(key)
+
+	if envKey == "" {
+		return defaultVal
+	}
+
+	return envKey
 }

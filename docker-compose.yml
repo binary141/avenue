@@ -1,7 +1,7 @@
 services:
   backend:
     build:
-      target: "${BACKEND_TARGET:-final}"
+      target: "${BACKEND_TARGET:-live-dev}"
       context: ./backend
       dockerfile: Dockerfile
     volumes:

@@ -9,7 +9,7 @@
 
   <template v-else>
     <div class="page">
-      <div class="card flex flex-col align-center gap-16">
+      <div class="card flex flex-col align-center gap-6">
         <p>An unexpected error occured. Please check your connection and try again later.</p>
 
         <AppButton>Try Again</AppButton>

@@ -35,7 +35,7 @@ func (s *Server) Upload(c *gin.Context) {
 	}
 	fs := afero.NewOsFs()
 
-	filePath := fmt.Sprintf("temp/")
+	filePath := fmt.Sprintf("/")
 	fileName := fmt.Sprintf("%s.%s", req.Name, req.Extension)
 	f, err := fs.Create(filePath + fileName)
 	if err != nil {
@@ -139,4 +139,38 @@ func (s *Server) GetFile(c *gin.Context) {
 	}
 
 	c.JSON(200, file)
+}
+
+func (s *Server) DeleteFile(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("fileID"))
+	if err != nil {
+		c.JSON(400, Response{
+			Message: "could not convert ascii to int",
+			Error:   err.Error(),
+		})
+	}
+	f, err := s.persist.GetFileByID(id)
+	if err != nil {
+		c.JSON(500, Response{
+			Message: "error getting file",
+			Error:   err.Error(),
+		})
+		return
+	}
+	if err = s.fs.Remove(fmt.Sprintf("%s%s.%s", f.Path, f.Name, f.Extension)); err != nil {
+		c.JSON(500, Response{
+			Message: "error deleting file from file system",
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	if err = s.persist.DeleteFile(id); err != nil {
+		c.JSON(500, Response{
+			Message: "error deleting file from db",
+			Error:   err.Error(),
+		})
+		return
+	}
+	c.JSON(200, "ok")
 }

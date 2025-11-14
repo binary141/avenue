@@ -18,18 +18,19 @@ type Server struct {
 // setupRouter creates and configures the Gin router.
 func SetupServer(p *persist.Persist) Server {
 	r := gin.Default()
-
+	fs := afero.NewOsFs()
 	return Server{
-		fs:      afero.NewOsFs(),
+		fs:      afero.NewBasePathFs(fs, "temp"),
 		router:  r,
 		persist: p,
 	}
 }
 func (s *Server) SetupRoutes() {
 	s.router.GET("/ping", s.pingHandler)
-	s.router.POST("/upload", s.Upload)
+	s.router.POST("/file/upload", s.Upload)
 	s.router.GET("/file/list", s.ListFiles)
-	s.router.GET("/file", s.GetFile)
+	s.router.GET("/file/:fileID", s.GetFile)
+	s.router.DELETE("/file/:fileID", s.DeleteFile)
 }
 
 func (s *Server) Run(address string) error {

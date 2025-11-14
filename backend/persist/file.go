@@ -33,6 +33,6 @@ func (p *Persist) ListFiles() ([]File, error) {
 }
 
 // DeleteFile deletes a file by its ID.
-func (p *Persist) DeleteFile(id uint) error {
+func (p *Persist) DeleteFile(id int) error {
 	return p.db.Delete(&File{}, id).Error
 }

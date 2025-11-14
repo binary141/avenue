@@ -29,6 +29,7 @@ func (s *Server) SetupRoutes() {
 	s.router.GET("/ping", s.pingHandler)
 	s.router.POST("/upload", s.Upload)
 	s.router.GET("/file/list", s.ListFiles)
+	s.router.GET("/file", s.GetFile)
 }
 
 func (s *Server) Run(address string) error {

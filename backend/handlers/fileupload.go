@@ -3,8 +3,10 @@ package handlers
 import (
 	"avenue/backend/persist"
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
+	"log"
 
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/afero"
@@ -111,7 +113,8 @@ func (s *Server) GetFile(c *gin.Context) {
 	c.Header("Connection", "keep-alive")
 	c.Header("Transfer-Encoding", "chunked")
 
-	filePath := fmt.Sprintf("%s/%s", file.Path, file.Name)
+	filePath := fmt.Sprintf("%s%s.%s", file.Path, file.Name, file.Extension)
+	log.Printf("getting file: %v", filePath)
 	fileData, err := s.fs.Open(filePath)
 	if err != nil {
 		c.JSON(500, Response{
@@ -122,10 +125,13 @@ func (s *Server) GetFile(c *gin.Context) {
 	}
 
 	f := bufio.NewReader(fileData)
+	b := make([]byte, 4096)
 	for {
-		var b []byte
-		_, err = f.Read(b)
-		if err == io.EOF {
+		n, err := f.Read(b)
+		if n > 0 {
+			c.SSEvent("data", b)
+		}
+		if errors.Is(err, io.EOF) {
 			break
 		} else if err != nil {
 			c.JSON(500, Response{
@@ -134,7 +140,6 @@ func (s *Server) GetFile(c *gin.Context) {
 			})
 			return
 		}
-		c.SSEvent("data", b)
 	}
 
 	c.JSON(200, file)

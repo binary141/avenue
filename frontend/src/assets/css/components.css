@@ -18,3 +18,10 @@ button {
     background-color: transparent;
     border: none;
 }
+
+/* Custom */
+.card {
+  padding: 16px;
+  width: 100%;
+  background-color: var(--gray-2);
+}

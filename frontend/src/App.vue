@@ -1,11 +1,34 @@
 <template>
-  <h1>You did it!</h1>
-  <p>
-    Visit <a href="https://vuejs.org/" target="_blank" rel="noopener">vuejs.org</a> to read the
-    documentation
-  </p>
+  <template v-if="siteStore.appLaunchDataStatus === 'loaded'">
+    <RouterView></RouterView>
+  </template>
+
+  <template v-else-if="siteStore.appLaunchDataStatus === 'loading'">
+    <SpinnerView />
+  </template>
+
+  <template v-else>
+    <div class="card flex flex-column align-center content-center gap-16">
+      <p>An unexpected error occured. Please check your connection and try again later.</p>
+
+      <AppButton>Try Again</AppButton>
+    </div>
+  </template>
 </template>
 
-<script setup lang="ts"></script>
+<script setup lang="ts">
+import { onMounted } from 'vue';
+import { useSiteStore } from './stores/site';
+import AppButton from './views/components/AppButton.vue';
+import SpinnerView from './views/components/SpinnerView.vue';
 
-<style scoped></style>
+const siteStore = useSiteStore();
+
+onMounted(async () => {
+  await siteStore.loadAppLaunchData();
+})
+</script>
+
+<style scoped>
+
+</style>

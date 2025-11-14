@@ -1,0 +1,27 @@
+/* Inputs */
+input[type="text"], input[type="number"], input[type="email"], input[type="password"] {
+    height: 53px;
+    width: 100%;
+    background-color: var(--gray-4);
+    color: var(--text);
+
+    font-family: "Inter";
+    font-size: 16px;
+    color: var(--text);
+}
+input[type="text"]:focus, input[type="number"]:focus, input[type="email"]:focus, input[type="password"]:focus {
+    border: 1px solid var(--primary-active);
+}
+
+/* Buttons */
+button {
+    background-color: transparent;
+    border: none;
+}
+
+/* Custom */
+.card {
+  padding: 16px;
+  width: 100%;
+  background-color: var(--gray-2);
+}

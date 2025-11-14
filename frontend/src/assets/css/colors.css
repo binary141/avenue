@@ -1,0 +1,16 @@
+:root {
+    --primary: #3A3F78;
+    --primary-active: #4b5198;
+    --primary-hover: #5f67c4;
+    --primary-disabled: #51536d;
+
+    --text: #FFFFFF;
+    --text-secondary: #A8A8A8;
+    --text-tertiary: #8C8C8C;
+
+    --gray: #2C2B2B;
+    --gray-2: #3C3C3C;
+    --gray-3: #333333;
+    --gray-4: #565656;
+    --gray-5: #848484;
+}

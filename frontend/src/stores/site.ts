@@ -10,7 +10,7 @@ export const useSiteStore = defineStore("site", () => {
   async function loadAppLaunchData() {
     appLaunchDataStatus.value = "loading";
 
-    const responseData = await api({ url: "app-launch/" });
+    const responseData = await api({ url: "v1/user/profile/" });
 
     if (responseData.status === 200) {
       if (responseData.body.user_data !== undefined) {

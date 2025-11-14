@@ -204,6 +204,7 @@ export default async function api(
     urlToFetch = url;
   }
 
+
   if (params) {
     urlToFetch += `?${objectToQueryString(params)}`;
   }
@@ -211,6 +212,8 @@ export default async function api(
   let response: Response;
 
   try {
+      console.log('url', urlToFetch)
+
     response = await fetch(urlToFetch, init);
   } catch (e) {
     return {

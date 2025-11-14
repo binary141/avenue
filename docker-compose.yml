@@ -5,7 +5,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     volumes:
-      - ./backend:/app
+      - ./backend:/app:rw 
     ports:
       - "8080:8080"
     depends_on:

@@ -1,4 +1,4 @@
-target: up-d
+target: up-d-build
 
 up-d:
 	docker compose up -d

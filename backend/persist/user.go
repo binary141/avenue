@@ -1,13 +1,22 @@
 package persist
 
-import "log"
+import (
+	"log"
+	"time"
 
+	"gorm.io/gorm"
+)
+
+// TODO set up indexes on the username and email fields
 type User struct {
-	ID       int    `gorm:"primaryKey"`
-	Username string `gorm:"not null"`
-	Email    string `gorm:"not null"`
-	Password string `gorm:"not null"`
-	CanLogin bool   `gorm:"not null"`
+	ID        uint   `gorm:"primarykey"`
+	Username  string `gorm:"not null"`
+	Email     string `gorm:"not null"`
+	Password  string `gorm:"not null"`
+	CanLogin  bool   `gorm:"not null"`
+	CreatedAt time.Time
+	UpdatedAt time.Time
+	DeletedAt gorm.DeletedAt `gorm:"index"`
 }
 
 // CreateFile creates a new file record in the database.

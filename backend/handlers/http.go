@@ -1,24 +1,34 @@
 package handlers
 
-import "github.com/gin-gonic/gin"
+import (
+	"avenue/backend/persist"
+
+	"github.com/gin-gonic/gin"
+	"github.com/spf13/afero"
+)
 
 // Server holds dependencies for the HTTP server.
 type Server struct {
 	// Add dependencies here, e.g., a database connection
-	router *gin.Engine
+	router  *gin.Engine
+	persist *persist.Persist
+	fs      afero.Fs
 }
 
 // setupRouter creates and configures the Gin router.
-func SetupServer() Server {
+func SetupServer(p *persist.Persist) Server {
 	r := gin.Default()
 
 	return Server{
-		router: r,
+		fs:      afero.NewOsFs(),
+		router:  r,
+		persist: p,
 	}
 }
 func (s *Server) SetupRoutes() {
 	s.router.GET("/ping", s.pingHandler)
 	s.router.POST("/upload", s.Upload)
+	s.router.GET("/file/list", s.ListFiles)
 }
 
 func (s *Server) Run(address string) error {

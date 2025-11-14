@@ -1,15 +1,21 @@
-FROM golang:1.25.1
+FROM golang:1.25.1 as dev
 
-WORKDIR /usr/src/app
+WORKDIR /app
 
 COPY go.mod go.sum ./
-
-RUN mkdir ./temp
 
 RUN go mod download
 
 COPY . .
 
-RUN CGO_ENABLED=0 GOOS=linux go build  -o /usr/local/bin/app ./avenuectl
+from dev as live-dev
 
-CMD ["app"]
+RUN curl -sSfL https://raw.githubusercontent.com/air-verse/air/master/install.sh | sh -s -- -b $(go env GOPATH)/bin
+
+CMD ["air", "-c", "/app/.air.toml"]
+
+FROM dev as final
+
+RUN CGO_ENABLED=0 GOOS=linux go build  -o ./app ./avenuectl
+
+CMD ["./app"]

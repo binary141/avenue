@@ -1,18 +1,17 @@
 package main
 
 import (
-	"os"
-
 	"avenue/backend/handlers"
 	"avenue/backend/persist"
+	"avenue/backend/shared"
 )
 
 func main() {
 	persist := persist.NewPersist(
-		getEnv("DB_HOST", "localhost"),
-		getEnv("DB_USER", "user"),
-		getEnv("DB_PASSWORD", "secret"),
-		getEnv("DB_DATABASE", "avenue"),
+		shared.GetEnv("DB_HOST", "localhost"),
+		shared.GetEnv("DB_USER", "user"),
+		shared.GetEnv("DB_PASSWORD", "secret"),
+		shared.GetEnv("DB_DATABASE", "avenue"),
 	)
 
 	server := handlers.SetupServer(persist)
@@ -21,14 +20,4 @@ func main() {
 
 	// Start the server
 	_ = server.Run(":8080")
-}
-
-func getEnv(key string, defaultVal string) string {
-	envKey := os.Getenv(key)
-
-	if envKey == "" {
-		return defaultVal
-	}
-
-	return envKey
 }

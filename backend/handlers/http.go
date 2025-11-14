@@ -1,7 +1,10 @@
 package handlers
 
 import (
+	"net/http"
+
 	"avenue/backend/persist"
+	"avenue/backend/shared"
 
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/afero"
@@ -26,18 +29,60 @@ func SetupServer(p *persist.Persist) Server {
 	}
 }
 
+var (
+	AUTHHEADER   = shared.GetEnv("AUTH_HEADER", "my-auth-header")
+	AUTHKEY      = shared.GetEnv("AUTH_KEY", "MY-AUTH-VAL")
+	USERIDHEADER = shared.GetEnv("USER_HEADER", "user-id")
+)
+
+func UserIDExists(userID string) bool {
+	// todo do a lookup in the db and see if the user exists
+	return true
+}
+
+func sessionCheck(c *gin.Context) {
+	// if the auth header is present with the needed fields, we can allow them to bypass the cookie check :)
+	if h := c.GetHeader(AUTHHEADER); h != "" {
+		if u := c.GetHeader(USERIDHEADER); u != "" {
+			if h == AUTHKEY && UserIDExists(u) {
+				c.Next()
+			}
+		}
+	}
+
+	cookie, err := c.Cookie(COOKIENAME)
+	if err != nil {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+
+	if cookie == "" {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+
+	c.Next()
+}
+
 func (s *Server) SetupRoutes() {
-	s.router.GET("/ping", s.pingHandler)
-	s.router.POST("/upload", s.Upload)
-	s.router.GET("/file/list", s.ListFiles)
+	unsecuredRouter := s.router.Group("")
+
+	unsecuredRouter.GET("/ping", s.pingHandler)
+	unsecuredRouter.POST("/login", s.Login)
+	s.router.POST("/register", s.Register)
+
+	securedRouterV1 := s.router.Group("/v1")
+	securedRouterV1.Use(sessionCheck)
+
+	securedRouterV1.POST("/upload", s.Upload)
+	securedRouterV1.GET("/file/list", s.ListFiles)
+	securedRouterV1.GET("/ping", s.pingHandler)
 
 	// --- users routes --- //
-	s.router.POST("/login", s.Login)
-	s.router.POST("/logout", s.Logout)
-	s.router.POST("/register", s.Register)
-	s.router.GET("/user/profile", s.GetProfile)
-	s.router.PUT("/user/profile", s.UpdateProfile)
-	s.router.PATCH("/user/password", s.UpdatePassword)
+	securedRouterV1.POST("/logout", s.Logout)
+	securedRouterV1.GET("/user/profile", s.GetProfile)
+	securedRouterV1.PUT("/user/profile", s.UpdateProfile)
+	securedRouterV1.PATCH("/user/password", s.UpdatePassword)
 }
 
 func (s *Server) Run(address string) error {

@@ -18,6 +18,7 @@ func SetupServer() Server {
 }
 func (s *Server) SetupRoutes() {
 	s.router.GET("/ping", s.pingHandler)
+	s.router.POST("/upload", s.Upload)
 }
 
 func (s *Server) Run(address string) error {

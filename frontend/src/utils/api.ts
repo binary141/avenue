@@ -117,7 +117,7 @@ function getFilenameFromContentDispositionHeader(header: string): string {
     const utf8FilenameResult = utf8FilenameRegex.exec(header);
 
     if (utf8FilenameResult) {
-      filename = decodeURIComponent(utf8FilenameResult[1]);
+      filename = decodeURIComponent(utf8FilenameResult[1] ?? '');
     }
   } else {
     const filenameStart = header.toLowerCase().indexOf("filename=");
@@ -256,7 +256,7 @@ export default async function api(
   }
 
   if (RESPONSE_HANDLERS[response.status]) {
-    RESPONSE_HANDLERS[response.status].forEach((handler) =>
+    RESPONSE_HANDLERS[response.status]?.forEach((handler) =>
       handler({
         url,
         method,

@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"avenue/backend/persist"
+	"avenue/backend/shared"
 	"net/http"
 	"strconv"
 
@@ -24,7 +25,14 @@ type CreateFolderReq struct {
 }
 
 func (s *Server) CreateFolder(c *gin.Context) {
-	userId := c.Request.Context().Value(COOKIENAME).(string)
+	userId, err := shared.GetUserIdFromContext(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Message: "could not get user id",
+			Error:   err.Error(),
+		})
+		return
+	}
 	var req CreateFolderReq
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, Response{

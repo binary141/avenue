@@ -5,7 +5,7 @@
     <form @submit.prevent="handleLogin" class="login-form card flex flex-col w-full gap-4">
       <div class="flex flex-col gap-3">
         <label>Email</label>
-        <input v-model="email" type="text" required />
+        <input v-model="email" type="email" required />
       </div>
 
       <div class="flex flex-col gap-3">

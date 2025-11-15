@@ -1,6 +1,11 @@
 <template>
   <template v-if="status === 'loaded'">
-    <RouterView></RouterView>
+    <div class="content flex flex-col gap-6">
+      <div class="header flex flex-row justify-end">
+
+      </div>
+      <RouterView></RouterView>
+    </div>
   </template>
 
   <template v-else-if="status === 'loading'">
@@ -49,5 +54,14 @@ async function getUserAndLogin() {
 </script>
 
 <style scoped>
-
+.header {
+  width: 100%;
+  height: 69px;
+  padding-left: -12px;
+  background-color: var(--primary);
+}
+.content {
+  width: 100%;
+  align-items: center;
+}
 </style>

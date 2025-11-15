@@ -8,8 +8,9 @@ import (
 )
 
 const (
-	USERCOOKIENAME  = "user-id"
-	USERCOOKIEVALUE = "test"
+	SESSIONCOOKIENAME = "session-id"
+	USERCOOKIENAME    = "user-id"
+	USERCOOKIEVALUE   = "test"
 )
 
 func GetEnv(key string, defaultVal string) string {

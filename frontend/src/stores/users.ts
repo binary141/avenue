@@ -34,6 +34,16 @@ export const useUsersStore = defineStore('users', () => {
         loggedIn.value = true;
     }
 
+    async function logInAPI(userData: { username: string; password: string }) {
+        const response = await api({
+            url: "login",
+            method: "POST",
+            json: userData,
+        });
+
+        return response;
+    }
+
     async function logOut() {
         // TODO: Implement logout logic
         loggedIn.value = false;
@@ -81,10 +91,12 @@ export const useUsersStore = defineStore('users', () => {
         loggedIn,
         token,
         logIn,
+        logInAPI,
         logOut,
         signUp,
         pullMe,
         updateUser,
-        updatePassword
+        updatePassword,
+        setToken,
     }
 })

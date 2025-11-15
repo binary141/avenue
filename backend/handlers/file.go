@@ -19,7 +19,7 @@ type UploadReq struct {
 	Name      string `json:"name" binding:"required"`
 	Extension string `json:"extension"  binding:"required"`
 	Data      string `json:"data" binding:"required"`
-	// Path      string `json:"path" binding:"required"`
+	Parent    string `json:"parent"`
 }
 type Response struct {
 	Message string `json:"message"`
@@ -49,6 +49,7 @@ func (s *Server) Upload(c *gin.Context) {
 	fileId, err := s.persist.CreateFile(&persist.File{
 		Name:      req.Name,
 		Extension: req.Extension,
+		Parent:    req.Parent,
 		// Path:      filePath,
 	})
 	if err != nil {
@@ -87,10 +88,22 @@ func (s *Server) Upload(c *gin.Context) {
 		return
 	}
 	defer f.Close()
-	_, err = f.Write([]byte(req.Data))
+	size, err := f.Write([]byte(req.Data))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, Response{
 			Message: "could not write to file",
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	err = s.persist.UpdateFile(persist.File{
+		ID:       fileId,
+		FileSize: size,
+	}, []string{"file_size"})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Message: "could not update file size",
 			Error:   err.Error(),
 		})
 		return

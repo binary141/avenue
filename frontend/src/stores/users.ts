@@ -1,6 +1,6 @@
 import type { LoadableData } from "@/types/base";
 import type { User } from "@/types/users";
-import api from "@/utils/api";
+import api, { setGlobalRequestHeader } from "@/utils/api";
 import { defineStore } from "pinia";
 import { ref } from "vue";
 
@@ -14,26 +14,41 @@ export const useUsersStore = defineStore('users', () => {
         loading: false,
     })
     const loggedIn = ref(false);
+    const token = ref<string | null>(
+        JSON.parse(localStorage.getItem("token") || "null"),
+    );
 
+    function setToken(value: string | null) {
+        token.value = value;
+        localStorage.setItem("token", JSON.stringify(value));
 
-    async function logIn() {
-        // TODO: Implement login logic
+        if (value !== null) {
+            setGlobalRequestHeader("Authorization", `Token ${value}`);
+        } else {
+            setGlobalRequestHeader("Authorization", undefined);
+        }
+    }
+
+    async function logIn(data: User) {
+        userData.value.data = data;
+        loggedIn.value = true;
     }
 
     async function logOut() {
         // TODO: Implement logout logic
         loggedIn.value = false;
         userData.value.data = structuredClone(userDataDefault);
+        setToken(null);
     }
 
     async function signUp() {
         // TODO: Implement sign-up logic
     }
 
-    async function pullUser(id: number) {
+    async function pullMe() {
         userData.value.loading = true;
         // TODO: Update url based on API endpoint
-        const response = await api({ url: `users/${id}/` })
+        const response = await api({ url: `v1/user/${userData.value.data.id}/` })
         userData.value.loading = false;
 
         if (response.ok) {
@@ -41,10 +56,12 @@ export const useUsersStore = defineStore('users', () => {
         } else {
             userData.value.error = response.body;
         }
+
+        return response;
     }
     async function updateUser(json: Partial<User>) {
         userData.value.loading = true;
-        const response = await api({ url: '', method: 'PATCH', json})
+        const response = await api({ url: `v1/user/${userData.value.data.id}`, method: 'PATCH', json})
         userData.value.loading = false;
 
         if (response.ok) {
@@ -62,10 +79,11 @@ export const useUsersStore = defineStore('users', () => {
     return {
         userData,
         loggedIn,
+        token,
         logIn,
         logOut,
         signUp,
-        pullUser,
+        pullMe,
         updateUser,
         updatePassword
     }

@@ -159,8 +159,12 @@ func (s *Server) SetupRoutes() {
 	// -- file routes -- //
 	securedRouterV1.POST("/file", s.Upload)
 	securedRouterV1.GET("/file/list", s.ListFiles)
-	securedRouterV1.GET("/file", s.GetFile)
+	securedRouterV1.GET("/file/:fileID", s.GetFile)
 	securedRouterV1.DELETE("/file/:fileID", s.DeleteFile)
+
+	// -- folder routes -- //
+	securedRouterV1.POST("/folder", s.CreateFolder)
+	securedRouterV1.GET("/folder/list/:folderID", s.ListFolderContents)
 
 	// --- users routes --- //
 	securedRouterV1.POST("/logout", s.Logout)
@@ -180,4 +184,5 @@ func (s *Server) pingHandler(c *gin.Context) {
 	c.JSON(200, gin.H{
 		"message": "pong",
 	})
+
 }

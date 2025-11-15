@@ -2,15 +2,17 @@ package handlers
 
 import (
 	"avenue/backend/persist"
+	"avenue/backend/shared"
 	"bufio"
 	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
-	"strconv"
+	"os"
 
 	"github.com/gin-gonic/gin"
+	"github.com/spf13/afero"
 )
 
 type UploadReq struct {
@@ -25,6 +27,17 @@ type Response struct {
 }
 
 func (s *Server) Upload(c *gin.Context) {
+
+	// TODO: stream file uploads
+	// TODO: file size
+	userId, err := shared.GetUserIdFromContext(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Message: "could not get user id",
+			Error:   err.Error(),
+		})
+		return
+	}
 	var req UploadReq
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, Response{
@@ -33,10 +46,39 @@ func (s *Server) Upload(c *gin.Context) {
 		})
 		return
 	}
+	fileId, err := s.persist.CreateFile(&persist.File{
+		Name:      req.Name,
+		Extension: req.Extension,
+		// Path:      filePath,
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Message: "could not create file record",
+			Error:   err.Error(),
+		})
+		return
+	}
+	exists, err := afero.DirExists(s.fs, fmt.Sprint("/%s", userId))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Message: "error ",
+			Error:   err.Error(),
+		})
+		return
+	}
+	if !exists {
+		err := s.fs.Mkdir(fmt.Sprintf("/%s", userId), os.ModePerm)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, Response{
+				Message: "error could not make dir",
+				Error:   err.Error(),
+			})
+			return
+		}
+	}
 
-	filePath := fmt.Sprintf("/")
-	fileName := fmt.Sprintf("%s.%s", req.Name, req.Extension)
-	f, err := s.fs.Create(filePath + fileName)
+	filepath := fmt.Sprintf("/%s/%s", userId, fileId)
+	f, err := s.fs.Create(filepath)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, Response{
 			Message: "could not create file",
@@ -53,20 +95,7 @@ func (s *Server) Upload(c *gin.Context) {
 		})
 		return
 	}
-	err = s.persist.CreateFile(&persist.File{
-		Name:      req.Name,
-		Extension: req.Extension,
-		Path:      filePath,
-	})
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, Response{
-			Message: "could not create file record",
-			Error:   err.Error(),
-		})
-		// we failed to create the file in the db may as well delete the file from the filesystem
-		s.fs.Remove(filePath + fileName)
-		return
-	}
+
 	c.Status(http.StatusCreated)
 }
 
@@ -83,15 +112,16 @@ func (s *Server) ListFiles(c *gin.Context) {
 }
 
 func (s *Server) GetFile(c *gin.Context) {
-	id, err := strconv.Atoi(c.Param("fileID"))
+	userId, err := shared.GetUserIdFromContext(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusBadRequest, Response{
-			Message: "could not convert ascii to int",
+		c.JSON(http.StatusInternalServerError, Response{
+			Message: "could not get user id",
 			Error:   err.Error(),
 		})
 		return
 	}
-	file, err := s.persist.GetFileByID(id)
+	log.Printf("user id: %s", c.Param("fileID"))
+	file, err := s.persist.GetFileByID(c.Param("fileID"))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, Response{
 			Message: "could not get file",
@@ -105,7 +135,7 @@ func (s *Server) GetFile(c *gin.Context) {
 	c.Header("Connection", "keep-alive")
 	c.Header("Transfer-Encoding", "chunked")
 
-	filePath := fmt.Sprintf("%s%s.%s", file.Path, file.Name, file.Extension)
+	filePath := fmt.Sprintf("/%s/%s", userId, file.ID)
 	log.Printf("getting file: %v", filePath)
 	fileData, err := s.fs.Open(filePath)
 	if err != nil {
@@ -139,15 +169,15 @@ func (s *Server) GetFile(c *gin.Context) {
 }
 
 func (s *Server) DeleteFile(c *gin.Context) {
-	id, err := strconv.Atoi(c.Param("fileID"))
+	userId, err := shared.GetUserIdFromContext(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusBadRequest, Response{
-			Message: "could not convert ascii to int",
+		c.JSON(http.StatusInternalServerError, Response{
+			Message: "could not get user id",
 			Error:   err.Error(),
 		})
 		return
 	}
-	f, err := s.persist.GetFileByID(id)
+	f, err := s.persist.GetFileByID(c.Param("fileID"))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, Response{
 			Message: "error getting file",
@@ -155,7 +185,7 @@ func (s *Server) DeleteFile(c *gin.Context) {
 		})
 		return
 	}
-	if err = s.fs.Remove(fmt.Sprintf("%s%s.%s", f.Path, f.Name, f.Extension)); err != nil {
+	if err = s.fs.Remove(fmt.Sprintf("/%s/%s", userId, f.ID)); err != nil {
 		c.JSON(http.StatusInternalServerError, Response{
 			Message: "error deleting file from file system",
 			Error:   err.Error(),
@@ -163,7 +193,7 @@ func (s *Server) DeleteFile(c *gin.Context) {
 		return
 	}
 
-	if err = s.persist.DeleteFile(id); err != nil {
+	if err = s.persist.DeleteFile(c.Param("fileID")); err != nil {
 		c.JSON(http.StatusInternalServerError, Response{
 			Message: "error deleting file from db",
 			Error:   err.Error(),

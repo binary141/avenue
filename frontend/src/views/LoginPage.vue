@@ -48,7 +48,7 @@ async function handleLogin() {
   console.log(response)
 
   if (response.status === 200) {
-    usersStore.setToken(response.body.token);
+    usersStore.setToken(response.body.session_id);
     usersStore.logIn(response.body.user_data);
     router.replace({ name: "home" });
   } else {

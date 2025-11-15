@@ -7,13 +7,13 @@ import (
 )
 
 type File struct {
-	ID         string `gorm:"primaryKey, type:uuid"`
-	Name       string `gorm:"not null"`
-	Extension  string `gorm:"not null"`
-	FileSize   int    `gorm:"column:file_size"`
-	Parent     string
-	CreatedAt  time.Time
-	DeleteTime time.Time
+	ID         string    `gorm:"primaryKey, type:uuid" json:"id"`
+	Name       string    `gorm:"not null" json:"name"`
+	Extension  string    `gorm:"not null" json:"extension"`
+	FileSize   int       `gorm:"column:file_size" json:"file_size"`
+	Parent     string    `json:"parent"`
+	CreatedAt  time.Time `json:"created_at"`
+	DeleteTime time.Time `json:"delete_time"`
 }
 
 // CreateFile creates a new file record in the database.
@@ -48,7 +48,13 @@ func (p *Persist) DeleteFile(id string) error {
 
 func (p *Persist) ListChildFile(parentId string) ([]File, error) {
 	var f []File
-	err := p.db.Where("parent = ?").Find(f).Error
+	db := p.db
+	if parentId != "-1" {
+		db = db.Where("parent = ?", parentId)
+	} else {
+		db = db.Where("parent = ''")
+	}
+	err := db.Find(&f).Error
 	return f, err
 }
 

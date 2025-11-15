@@ -3,10 +3,10 @@ package persist
 import "github.com/google/uuid"
 
 type Folder struct {
-	FolderID string `gorm:"primaryKey, type:uuid, column:folder_id"`
-	Name     string `gorm:"not null"`
-	Parent   string
-	OwnerId  int `gorm:"not null, column:owner_id"`
+	FolderID string `gorm:"primaryKey, type:uuid, column:folder_id" json:"folder_id"`
+	Name     string `gorm:"not null" json:"name"`
+	Parent   string `json:"parent"`
+	OwnerId  int    `gorm:"not null, column:owner_id" json:"owner_id"`
 }
 
 func (p *Persist) CreateFolder(f *Folder) (string, error) {
@@ -27,6 +27,12 @@ func (p *Persist) GetFolder(id string) (*Folder, error) {
 
 func (p *Persist) ListChildFolder(parentId string) ([]Folder, error) {
 	var f []Folder
-	err := p.db.Where("parent = ?").Find(f).Error
+	db := p.db
+	if parentId != "-1" {
+		db = db.Where("parent = ?", parentId)
+	} else {
+		db = db.Where("parent = ''")
+	}
+	err := db.Find(&f).Error
 	return f, err
 }

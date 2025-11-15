@@ -7,7 +7,6 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
-	"github.com/tidwall/sjson"
 )
 
 // all files live in a per user file system
@@ -74,7 +73,8 @@ func (s *Server) CreateFolder(c *gin.Context) {
 }
 
 func (s *Server) ListFolderContents(c *gin.Context) {
-	folds, err := s.persist.ListChildFolder(c.Param("fileID"))
+	folderID := c.Param("folderID")
+	folds, err := s.persist.ListChildFolder(folderID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, Response{
 			Message: "Internal server error",
@@ -82,7 +82,7 @@ func (s *Server) ListFolderContents(c *gin.Context) {
 		})
 		return
 	}
-	files, err := s.persist.ListChildFile(c.Param("fileID"))
+	files, err := s.persist.ListChildFile(folderID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, Response{
 			Message: "Internal server error",
@@ -90,16 +90,21 @@ func (s *Server) ListFolderContents(c *gin.Context) {
 		})
 		return
 	}
-
-	ret := mustSet("", "folders", folds)
-	ret = mustSet(ret, "files", files)
-	c.JSON(http.StatusOK, ret)
-}
-
-func mustSet(json, key string, val interface{}) string {
-	ret, err := sjson.Set(json, key, val)
-	if err != nil {
-		panic("this is not possible")
+	var x struct {
+		Files    []persist.File   `json:"files"`
+		Foleders []persist.Folder `json:"folders"`
 	}
-	return ret
+	// ret := mustSet("", "folders", folds)
+	// ret = mustSet(ret, "files", files)
+	x.Foleders = folds
+	x.Files = files
+	c.JSON(http.StatusOK, x)
 }
+
+// func mustSet(json, key string, val interface{}) string {
+// 	ret, err := sjson.Set(json, key, val)
+// 	if err != nil {
+// 		panic("this is not possible")
+// 	}
+// 	return ret
+// }

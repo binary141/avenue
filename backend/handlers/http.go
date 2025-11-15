@@ -48,13 +48,12 @@ func (s *Server) UserIDExists(userID string) bool {
 		return false
 	}
 
-	u, err := s.persist.GetUserById(i)
+	_, err = s.persist.GetUserById(i)
 	if err != nil {
 		log.Print(err)
 		return false
 	}
 
-	log.Print(u)
 	return true
 }
 
@@ -67,7 +66,7 @@ func (s *Server) sessionCheck(c *gin.Context) {
 				rc := c.Request.Context()
 
 				// Add a new value to the context
-				newCtx := context.WithValue(rc, COOKIENAME, u)
+				newCtx := context.WithValue(rc, shared.USERCOOKIENAME, u)
 
 				// Update the request with the new context
 				c.Request = c.Request.WithContext(newCtx)
@@ -77,7 +76,7 @@ func (s *Server) sessionCheck(c *gin.Context) {
 		}
 	}
 
-	userId, err := c.Cookie(COOKIENAME)
+	userId, err := c.Cookie(shared.USERCOOKIENAME)
 	if err != nil {
 		c.AbortWithStatus(http.StatusUnauthorized)
 		return
@@ -96,7 +95,7 @@ func (s *Server) sessionCheck(c *gin.Context) {
 	rc := c.Request.Context()
 
 	// Add a new value to the context
-	newCtx := context.WithValue(rc, COOKIENAME, userId)
+	newCtx := context.WithValue(rc, shared.USERCOOKIENAME, userId)
 
 	// Update the request with the new context
 	c.Request = c.Request.WithContext(newCtx)
@@ -140,7 +139,7 @@ func (s *Server) Run(address string) error {
 // pingHandler is a simple handler to check if the server is running.
 func (s *Server) pingHandler(c *gin.Context) {
 	ctx := c.Request.Context()
-	log.Printf("ctx val: %s", ctx.Value(COOKIENAME))
+	log.Printf("ctx val: %s", ctx.Value(shared.USERCOOKIENAME))
 	c.JSON(200, gin.H{
 		"message": "pong",
 	})

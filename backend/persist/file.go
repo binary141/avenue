@@ -10,8 +10,7 @@ type File struct {
 	ID         string `gorm:"primaryKey, type:uuid"`
 	Name       string `gorm:"not null"`
 	Extension  string `gorm:"not null"`
-	Path       string `gorm:"not null"`
-	FileSize   int64  `gorm:"column:file_size"`
+	FileSize   int    `gorm:"column:file_size"`
 	Parent     string
 	CreatedAt  time.Time
 	DeleteTime time.Time
@@ -51,4 +50,8 @@ func (p *Persist) ListChildFile(parentId string) ([]File, error) {
 	var f []File
 	err := p.db.Where("parent = ?").Find(f).Error
 	return f, err
+}
+
+func (p *Persist) UpdateFile(f File, mask []string) error {
+	return p.db.Model(&File{}).Where("id = ?", f.ID).Select(mask).Updates(f).Error
 }

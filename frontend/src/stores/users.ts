@@ -34,7 +34,7 @@ export const useUsersStore = defineStore('users', () => {
         loggedIn.value = true;
     }
 
-    async function logInAPI(userData: { username: string; password: string }) {
+    async function logInAPI(userData: { email: string; password: string }) {
         const response = await api({
             url: "login",
             method: "POST",

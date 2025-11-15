@@ -5,7 +5,7 @@
     <form @submit.prevent="handleSignUp" class="signup-form card flex flex-col w-full gap-4">
       <div class="flex flex-col gap-3">
         <label>Email</label>
-        <input v-model="email" type="text" required />
+        <input v-model="email" type="email" required />
       </div>
 
         <div>
@@ -85,9 +85,9 @@ async function handleSignUp() {
   console.log(response);
 
   if (response.status === 201 || response.status === 200) {
-    usersStore.setToken(response.body.session_id);
-    usersStore.logIn(response.body.user_data);
-    router.replace({ name: "home" });
+    // usersStore.setToken(response.body.session_id);
+    // usersStore.logIn(response.body.user_data);
+    router.replace({ name: "login" });
   } else {
     error.value = response.body.error || "Sign up failed!";
   }

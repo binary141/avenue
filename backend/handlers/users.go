@@ -64,7 +64,7 @@ func (s *Server) Login(c *gin.Context) {
 
 	c.SetCookie(shared.USERCOOKIENAME, fmt.Sprintf("%d", u.ID), 600, "/", "localhost", false, true)
 	c.SetCookie(shared.SESSIONCOOKIENAME, uuidStr, 600, "/", "localhost", false, true)
-	c.JSON(http.StatusOK, gin.H{"Message": "OK", "User-Id": u.ID})
+	c.JSON(http.StatusOK, gin.H{"Message": "OK", "User-Id": u.ID, shared.SESSIONCOOKIENAME: uuidStr})
 }
 
 func (s *Server) authorize(username, password string) (persist.User, error) {

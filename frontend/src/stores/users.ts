@@ -51,7 +51,7 @@ export const useUsersStore = defineStore('users', () => {
         setToken(null);
     }
 
-    async function signUp(userData: {username: string; password:string }) {
+    async function signUp(userData: {email: string; password:string }) {
         const response = await signUpAPI(userData);
 
         if (response.ok || response.status === 201) {
@@ -62,9 +62,9 @@ export const useUsersStore = defineStore('users', () => {
     return response;
     }
 
-    async function signUpAPI(userData: { username: string; password: string }) {
+    async function signUpAPI(userData: { email: string; password: string }) {
         const response = await api({
-            url: "signup",
+            url: "register",
             method: "POST",
             json: userData,
         });

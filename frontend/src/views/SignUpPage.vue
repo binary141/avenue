@@ -2,10 +2,10 @@
   <div class="page gap-5">
     <h1>SIGN UP</h1>
 
-    <form @submit.prevent="handleLogin" class="login-form card flex flex-col w-full gap-4">
+    <form @submit.prevent="handleSignUp" class="signup-form card flex flex-col w-full gap-4">
       <div class="flex flex-col gap-3">
-        <label>Username</label>
-        <input v-model="username" type="text" required />
+        <label>Email</label>
+        <input v-model="email" type="text" required />
       </div>
 
         <div>
@@ -59,7 +59,7 @@ import ErrorMessage from './components/ErrorMessage.vue';
 const usersStore = useUsersStore();
 const router = useRouter();
 
-const username = ref('')
+const email = ref('')
 const password = ref('')
 
 const error = ref<string | undefined>();
@@ -76,7 +76,7 @@ async function handleSignUp() {
   }
 
   const response = await usersStore.signUpAPI({
-    username: username.value,
+    email: email.value,
     password: password.value,
   });
 
@@ -102,7 +102,7 @@ function handleSubmit() {
     alert("Passwords do not match!")
     return
   }
-  alert(`Signed up with ${username.value}`)
+  alert(`Signed up with ${email.value}`)
 }
 </script>
 

@@ -123,6 +123,10 @@ func (s *Server) SetupRoutes() {
 	securedRouterV1.GET("/file/:fileID", s.GetFile)
 	securedRouterV1.DELETE("/file/:fileID", s.DeleteFile)
 
+	// -- folder routes -- //
+	securedRouterV1.POST("/folder", s.CreateFolder)
+	securedRouterV1.GET("/folder/list/:folderID", s.ListFolderContents)
+
 	// --- users routes --- //
 	securedRouterV1.POST("/logout", s.Logout)
 	securedRouterV1.GET("/user/profile", s.GetProfile)

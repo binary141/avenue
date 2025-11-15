@@ -12,6 +12,7 @@ type File struct {
 	Extension  string `gorm:"not null"`
 	Path       string `gorm:"not null"`
 	FileSize   int64  `gorm:"column:file_size"`
+	Parent     string
 	CreatedAt  time.Time
 	DeleteTime time.Time
 }
@@ -44,4 +45,10 @@ func (p *Persist) ListFiles() ([]File, error) {
 // DeleteFile deletes a file by its ID.
 func (p *Persist) DeleteFile(id string) error {
 	return p.db.Where("id = ?", id).Delete(&File{}).Error
+}
+
+func (p *Persist) ListChildFile(parentId string) ([]File, error) {
+	var f []File
+	err := p.db.Where("parent = ?").Find(f).Error
+	return f, err
 }

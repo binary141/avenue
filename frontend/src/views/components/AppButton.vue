@@ -1,5 +1,5 @@
 <template>
-    <button class="app-button flex flex-row content-center align-center p-8">
+    <button class="app-button flex flex-row content-center align-center self-center p-5">
         <slot></slot>
     </button>
 </template>

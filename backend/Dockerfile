@@ -16,6 +16,6 @@ CMD ["air", "-c", "/app/.air.toml"]
 
 FROM dev as final
 
-RUN CGO_ENABLED=0 GOOS=linux go build  -o ./app ./avenuectl
+RUN CGO_ENABLED=0 GOOS=linux go build  -o /app/api ./avenuectl
 
-CMD ["./app"]
+CMD ["/app/api"]

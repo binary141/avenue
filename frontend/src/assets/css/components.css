@@ -18,10 +18,13 @@ button {
     background-color: transparent;
     border: none;
 }
+button:hover {
+    cursor: pointer;
+}
 
 /* Custom */
 .card {
-  padding: 16px;
+  padding: 24px;
   width: 100%;
   background-color: var(--gray-2);
 }

@@ -9,6 +9,7 @@ import (
 	"avenue/backend/persist"
 	"avenue/backend/shared"
 
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/afero"
 )
@@ -24,9 +25,10 @@ type Server struct {
 // setupRouter creates and configures the Gin router.
 func SetupServer(p *persist.Persist) Server {
 	r := gin.Default()
-
+	fs := afero.NewOsFs()
+	jailedFs := afero.NewBasePathFs(fs, "./avenuectl/temp/")
 	return Server{
-		fs:      afero.NewOsFs(),
+		fs:      jailedFs,
 		router:  r,
 		persist: p,
 	}
@@ -103,6 +105,7 @@ func (s *Server) sessionCheck(c *gin.Context) {
 }
 
 func (s *Server) SetupRoutes() {
+
 	unsecuredRouter := s.router.Group("")
 
 	unsecuredRouter.GET("/ping", s.pingHandler)
@@ -115,15 +118,18 @@ func (s *Server) SetupRoutes() {
 	securedRouterV1.GET("/ping", s.pingHandler)
 
 	// -- file routes -- //
-	securedRouterV1.POST("/upload", s.Upload)
+	securedRouterV1.POST("/file", s.Upload)
 	securedRouterV1.GET("/file/list", s.ListFiles)
 	securedRouterV1.GET("/file", s.GetFile)
+	securedRouterV1.DELETE("/file/:fileID", s.DeleteFile)
 
 	// --- users routes --- //
 	securedRouterV1.POST("/logout", s.Logout)
 	securedRouterV1.GET("/user/profile", s.GetProfile)
 	securedRouterV1.PUT("/user/profile", s.UpdateProfile)
 	securedRouterV1.PATCH("/user/password", s.UpdatePassword)
+
+	s.router.Use(cors.Default())
 }
 
 func (s *Server) Run(address string) error {

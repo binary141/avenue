@@ -1,7 +1,6 @@
 import type { LoadableData } from "@/types/base";
 import type { User } from "@/types/users";
 import api, { setGlobalRequestHeader } from "@/utils/api";
-import LoginPage from "@/views/LoginPage.vue";
 import { defineStore } from "pinia";
 import { ref } from "vue";
 
@@ -35,9 +34,9 @@ export const useUsersStore = defineStore('users', () => {
         loggedIn.value = true;
     }
 
-    async function logInAPI(userData: { email: string; password: string }) {
+    async function logInAPI(userData: { username: string; password: string }) {
         const response = await api({
-            url: "login/",
+            url: "login",
             method: "POST",
             json: userData,
         });

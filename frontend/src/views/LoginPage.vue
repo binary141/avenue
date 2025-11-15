@@ -4,8 +4,8 @@
 
     <form @submit.prevent="handleLogin" class="login-form card flex flex-col w-full gap-4">
       <div class="flex flex-col gap-3">
-        <label>Email</label>
-        <input v-model="email" type="Email" required />
+        <label>Username</label>
+        <input v-model="username" type="text" required />
       </div>
 
       <div class="flex flex-col gap-3">
@@ -29,7 +29,7 @@ import { useRouter } from 'vue-router';
 const usersStore = useUsersStore();
 const router = useRouter();
 
-const email = ref('')
+const username = ref('')
 const password = ref('')
 
 const errors = ref<Record<string, string[]>>({});
@@ -39,7 +39,7 @@ async function handleLogin() {
   errors.value = {};
   submitting.value = true;
 
-  const response = await usersStore.logInAPI({ email: email.value, password: password.value });
+  const response = await usersStore.logInAPI({ username: username.value, password: password.value });
   submitting.value = false;
 
   console.log(response)

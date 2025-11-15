@@ -112,7 +112,7 @@ func (s *Server) Register(c *gin.Context) {
 		return
 	}
 
-	err := s.persist.CreateUser(req.Username, req.Email, req.Password)
+	u, err := s.persist.CreateUser(req.Username, req.Email, req.Password)
 	if err != nil {
 		log.Print(err)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{
@@ -121,15 +121,85 @@ func (s *Server) Register(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, Response{Message: "OK"})
+	c.JSON(http.StatusCreated, u)
 }
 
 func (s *Server) GetProfile(c *gin.Context) {
 	c.JSON(http.StatusOK, Response{Message: "OK"})
 }
 
+type UpdateProfileRequest struct {
+	Username string `json:"username" validate:"omitempty,min=8,max=128"`
+	Email    string `json:"email" validate:"omitempty,email"`
+}
+
 func (s *Server) UpdateProfile(c *gin.Context) {
-	c.JSON(http.StatusOK, Response{Message: "OK"})
+	ctx := c.Request.Context()
+	userId, err := shared.GetUserIdFromContext(ctx)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, Response{
+			Error: "User Id not found",
+		})
+		return
+	}
+
+	var req UpdateProfileRequest
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		log.Print(err)
+		c.Status(http.StatusBadRequest)
+		return
+	}
+
+	if err := validate.Struct(req); err != nil {
+		log.Print(err)
+		c.AbortWithStatusJSON(http.StatusBadRequest, Response{
+			Error: err.Error(),
+		})
+		return
+	}
+
+	log.Print(req)
+
+	u, err := s.persist.GetUserByIdStr(userId)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{
+			Error: err.Error(),
+		})
+		return
+	}
+
+	if req.Email != "" && req.Email != u.Email {
+		if !s.persist.IsUniqueEmail(req.Email) {
+			c.AbortWithStatusJSON(http.StatusConflict, Response{
+				Error: "Email already exists",
+			})
+			return
+		}
+
+		u.Email = req.Email
+	}
+
+	if req.Username != "" && req.Username != u.Username {
+		if !s.persist.IsUniqueUsername(req.Username) {
+			c.AbortWithStatusJSON(http.StatusConflict, Response{
+				Error: "Username already exists",
+			})
+			return
+		}
+
+		u.Username = req.Username
+	}
+
+	u, err = s.persist.UpdateUser(u)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{
+			Error: err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, u)
 }
 
 type UpdatePasswordRequest struct {
@@ -142,14 +212,6 @@ func (s *Server) UpdatePassword(c *gin.Context) {
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, Response{
 			Error: "User Id not found",
-		})
-		return
-	}
-
-	u, err := s.persist.GetUserByIdStr(userId)
-	if err != nil {
-		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{
-			Error: err.Error(),
 		})
 		return
 	}
@@ -170,10 +232,7 @@ func (s *Server) UpdatePassword(c *gin.Context) {
 		return
 	}
 
-	u.Password = req.Password
-	log.Printf("user: %+v", u)
-
-	_, err = s.persist.UpdateUser(u)
+	u, err := s.persist.GetUserByIdStr(userId)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{
 			Error: err.Error(),
@@ -181,5 +240,15 @@ func (s *Server) UpdatePassword(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, Response{Message: "OK"})
+	u.Password = req.Password
+
+	u, err = s.persist.UpdateUser(u)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{
+			Error: err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, u)
 }

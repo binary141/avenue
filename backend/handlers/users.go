@@ -57,7 +57,7 @@ func (s *Server) Login(c *gin.Context) {
 	uuidStr := uuid.NewString()
 
 	Sessions[uuidStr] = SessionData{
-		ExpiresAt: time.Now().Add(10 * time.Minute),
+		ExpiresAt: time.Now().Add(12 * time.Hour),
 		IsValid:   true,
 		UserId:    u.ID,
 	}

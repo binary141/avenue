@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"time"
 
 	"avenue/backend/persist"
 	"avenue/backend/shared"
@@ -105,7 +106,6 @@ func (s *Server) sessionCheck(c *gin.Context) {
 }
 
 func (s *Server) SetupRoutes() {
-
 	unsecuredRouter := s.router.Group("")
 
 	unsecuredRouter.GET("/ping", s.pingHandler)
@@ -129,7 +129,14 @@ func (s *Server) SetupRoutes() {
 	securedRouterV1.PUT("/user/profile", s.UpdateProfile)
 	securedRouterV1.PATCH("/user/password", s.UpdatePassword)
 
-	s.router.Use(cors.Default())
+	s.router.Use(cors.New(cors.Config{
+		AllowOrigins:     []string{shared.GetEnv("ALLOW_ORIGIN", "http://localhost:8080"), "*"},
+		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Accept"},
+		AllowCredentials: true,
+		ExposeHeaders:    []string{"Content-Length"},
+		MaxAge:           12 * time.Hour,
+	}))
 }
 
 func (s *Server) Run(address string) error {

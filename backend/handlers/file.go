@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"avenue/backend/persist"
+	"avenue/backend/shared"
 	"bufio"
 	"errors"
 	"fmt"
@@ -29,7 +30,14 @@ func (s *Server) Upload(c *gin.Context) {
 
 	// TODO: stream file uploads
 	// TODO: file size
-	userId := c.Request.Context().Value(COOKIENAME).(string)
+	userId, err := shared.GetUserIdFromContext(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Message: "could not get user id",
+			Error:   err.Error(),
+		})
+		return
+	}
 	var req UploadReq
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, Response{
@@ -59,7 +67,14 @@ func (s *Server) Upload(c *gin.Context) {
 		return
 	}
 	if !exists {
-		s.fs.Mkdir(fmt.Sprintf("/%s", userId), os.ModePerm)
+		err := s.fs.Mkdir(fmt.Sprintf("/%s", userId), os.ModePerm)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, Response{
+				Message: "error could not make dir",
+				Error:   err.Error(),
+			})
+			return
+		}
 	}
 
 	filepath := fmt.Sprintf("/%s/%s", userId, fileId)
@@ -97,7 +112,14 @@ func (s *Server) ListFiles(c *gin.Context) {
 }
 
 func (s *Server) GetFile(c *gin.Context) {
-	userId := c.Request.Context().Value(COOKIENAME).(string)
+	userId, err := shared.GetUserIdFromContext(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Message: "could not get user id",
+			Error:   err.Error(),
+		})
+		return
+	}
 	log.Printf("user id: %s", c.Param("fileID"))
 	file, err := s.persist.GetFileByID(c.Param("fileID"))
 	if err != nil {
@@ -147,7 +169,14 @@ func (s *Server) GetFile(c *gin.Context) {
 }
 
 func (s *Server) DeleteFile(c *gin.Context) {
-	userId := c.Request.Context().Value(COOKIENAME).(string)
+	userId, err := shared.GetUserIdFromContext(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Message: "could not get user id",
+			Error:   err.Error(),
+		})
+		return
+	}
 	f, err := s.persist.GetFileByID(c.Param("fileID"))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, Response{

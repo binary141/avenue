@@ -1,9 +1,11 @@
 package handlers
 
 import (
-	"avenue/backend/persist"
 	"net/http"
 	"strconv"
+
+	"avenue/backend/persist"
+	"avenue/backend/shared"
 
 	"github.com/gin-gonic/gin"
 	"github.com/tidwall/sjson"
@@ -24,7 +26,7 @@ type CreateFolderReq struct {
 }
 
 func (s *Server) CreateFolder(c *gin.Context) {
-	userId := c.Request.Context().Value(COOKIENAME).(string)
+	userId := c.Request.Context().Value(shared.USERCOOKIENAME).(string)
 	var req CreateFolderReq
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, Response{

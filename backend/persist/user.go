@@ -11,16 +11,15 @@ import (
 	"gorm.io/gorm"
 )
 
-// TODO set up indexes on the username and email fields
 type User struct {
-	ID        uint   `gorm:"primarykey"`
-	Username  string `gorm:"not null;uniqueIndex"`
-	Email     string `gorm:"not null;uniqueIndex"`
-	Password  string `gorm:"not null"`
-	CanLogin  bool   `gorm:"not null"`
-	CreatedAt time.Time
-	UpdatedAt time.Time
-	DeletedAt gorm.DeletedAt `gorm:"index"`
+	ID        uint           `gorm:"primarykey" json:"id"`
+	Username  string         `gorm:"not null;uniqueIndex" json:"username"`
+	Email     string         `gorm:"not null;uniqueIndex" json:"email"`
+	Password  string         `gorm:"not null" json:"-"`
+	CanLogin  bool           `gorm:"not null" json:"canLogin"`
+	CreatedAt time.Time      `json:"createdAt"`
+	UpdatedAt time.Time      `json:"updatedAt"`
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"deletedAt"`
 }
 
 // CreateFile creates a new file record in the database.
@@ -89,7 +88,7 @@ func (p *Persist) GetUserByEmail(email string) (User, error) {
 	return u, nil
 }
 
-func (p *Persist) CreateUser(username, email, password string) error {
+func (p *Persist) CreateUser(username, email, password string) (User, error) {
 	u := User{
 		Username:  username,
 		Email:     email,
@@ -98,7 +97,10 @@ func (p *Persist) CreateUser(username, email, password string) error {
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 	}
-	return p.db.Create(&u).Error
+
+	res := p.db.Create(&u)
+
+	return u, res.Error
 }
 
 func (p *Persist) IsUniqueEmail(email string) bool {

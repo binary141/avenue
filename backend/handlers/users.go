@@ -5,17 +5,27 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"time"
 
 	"avenue/backend/persist"
 	"avenue/backend/shared"
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
+	"github.com/google/uuid"
 )
 
 type LoginRequest struct {
 	Username string `json:"username" validate:"required,min=4,max=64"`
 	Password string `json:"password" validate:"required,min=4,max=64"`
+}
+
+var Sessions map[string]SessionData
+
+type SessionData struct {
+	ExpiresAt time.Time
+	IsValid   bool
+	UserId    uint
 }
 
 var validate = validator.New()
@@ -44,8 +54,17 @@ func (s *Server) Login(c *gin.Context) {
 		return
 	}
 
-	c.SetCookie(shared.USERCOOKIENAME, fmt.Sprintf("%d", u.ID), 3600, "/", "localhost", false, true)
-	c.JSON(http.StatusOK, Response{Message: "OK"})
+	uuidStr := uuid.NewString()
+
+	Sessions[uuidStr] = SessionData{
+		ExpiresAt: time.Now().Add(10 * time.Minute),
+		IsValid:   true,
+		UserId:    u.ID,
+	}
+
+	c.SetCookie(shared.USERCOOKIENAME, fmt.Sprintf("%d", u.ID), 600, "/", "localhost", false, true)
+	c.SetCookie(shared.SESSIONCOOKIENAME, uuidStr, 600, "/", "localhost", false, true)
+	c.JSON(http.StatusOK, gin.H{"Message": "OK", "User-Id": u.ID})
 }
 
 func (s *Server) authorize(username, password string) (persist.User, error) {
@@ -64,6 +83,28 @@ func (s *Server) authorize(username, password string) (persist.User, error) {
 func (s *Server) Logout(c *gin.Context) {
 	// expire the cookie
 	c.SetCookie(shared.USERCOOKIENAME, "", -1, "/", "localhost", false, true)
+
+	// TODO delete the session from map
+	ctx := c.Request.Context()
+
+	sessID := ctx.Value(shared.SESSIONCOOKIENAME)
+
+	sessIDStr, ok := sessID.(string)
+	if !ok {
+		c.Status(http.StatusBadRequest)
+		return
+	}
+
+	v, ok := Sessions[sessIDStr]
+	if !ok {
+		c.Status(http.StatusBadRequest)
+		return
+	}
+
+	v.IsValid = false
+	v.ExpiresAt = time.Now()
+
+	Sessions[sessIDStr] = v
 
 	c.JSON(http.StatusOK, Response{Message: "OK"})
 }
@@ -112,7 +153,7 @@ func (s *Server) Register(c *gin.Context) {
 		return
 	}
 
-	err := s.persist.CreateUser(req.Username, req.Email, req.Password)
+	u, err := s.persist.CreateUser(req.Username, req.Email, req.Password)
 	if err != nil {
 		log.Print(err)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{
@@ -121,22 +162,10 @@ func (s *Server) Register(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, Response{Message: "OK"})
+	c.JSON(http.StatusCreated, u)
 }
 
 func (s *Server) GetProfile(c *gin.Context) {
-	c.JSON(http.StatusOK, Response{Message: "OK"})
-}
-
-func (s *Server) UpdateProfile(c *gin.Context) {
-	c.JSON(http.StatusOK, Response{Message: "OK"})
-}
-
-type UpdatePasswordRequest struct {
-	Password string `json:"password" validate:"required,min=8,max=128"`
-}
-
-func (s *Server) UpdatePassword(c *gin.Context) {
 	ctx := c.Request.Context()
 	userId, err := shared.GetUserIdFromContext(ctx)
 	if err != nil {
@@ -150,6 +179,97 @@ func (s *Server) UpdatePassword(c *gin.Context) {
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{
 			Error: err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, u)
+}
+
+type UpdateProfileRequest struct {
+	Username string `json:"username" validate:"omitempty,min=8,max=128"`
+	Email    string `json:"email" validate:"omitempty,email"`
+}
+
+func (s *Server) UpdateProfile(c *gin.Context) {
+	ctx := c.Request.Context()
+	userId, err := shared.GetUserIdFromContext(ctx)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, Response{
+			Error: "User Id not found",
+		})
+		return
+	}
+
+	var req UpdateProfileRequest
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		log.Print(err)
+		c.Status(http.StatusBadRequest)
+		return
+	}
+
+	if err := validate.Struct(req); err != nil {
+		log.Print(err)
+		c.AbortWithStatusJSON(http.StatusBadRequest, Response{
+			Error: err.Error(),
+		})
+		return
+	}
+
+	log.Print(req)
+
+	u, err := s.persist.GetUserByIdStr(userId)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{
+			Error: err.Error(),
+		})
+		return
+	}
+
+	if req.Email != "" && req.Email != u.Email {
+		if !s.persist.IsUniqueEmail(req.Email) {
+			c.AbortWithStatusJSON(http.StatusConflict, Response{
+				Error: "Email already exists",
+			})
+			return
+		}
+
+		u.Email = req.Email
+	}
+
+	if req.Username != "" && req.Username != u.Username {
+		if !s.persist.IsUniqueUsername(req.Username) {
+			c.AbortWithStatusJSON(http.StatusConflict, Response{
+				Error: "Username already exists",
+			})
+			return
+		}
+
+		u.Username = req.Username
+	}
+
+	u, err = s.persist.UpdateUser(u)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{
+			Error: err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, u)
+}
+
+type UpdatePasswordRequest struct {
+	Password string `json:"password" validate:"required,min=8,max=128"`
+}
+
+func (s *Server) UpdatePassword(c *gin.Context) {
+	ctx := c.Request.Context()
+	userId, err := shared.GetUserIdFromContext(ctx)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, Response{
+			Error: "User Id not found",
 		})
 		return
 	}
@@ -170,10 +290,7 @@ func (s *Server) UpdatePassword(c *gin.Context) {
 		return
 	}
 
-	u.Password = req.Password
-	log.Printf("user: %+v", u)
-
-	_, err = s.persist.UpdateUser(u)
+	u, err := s.persist.GetUserByIdStr(userId)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{
 			Error: err.Error(),
@@ -181,5 +298,15 @@ func (s *Server) UpdatePassword(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, Response{Message: "OK"})
+	u.Password = req.Password
+
+	u, err = s.persist.UpdateUser(u)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{
+			Error: err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, u)
 }

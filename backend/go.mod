@@ -6,6 +6,7 @@ require (
 	github.com/gin-contrib/cors v1.7.6
 	github.com/gin-gonic/gin v1.11.0
 	github.com/go-playground/validator/v10 v10.28.0
+	github.com/google/uuid v1.6.0
 	github.com/spf13/afero v1.15.0
 	gorm.io/driver/postgres v1.6.0
 	gorm.io/gorm v1.31.1

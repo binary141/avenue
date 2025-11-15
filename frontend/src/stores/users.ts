@@ -57,10 +57,9 @@ export const useUsersStore = defineStore('users', () => {
         if (response.ok || response.status === 201) {
             setToken(response.body.session_id);
             await logIn(response.body.user_data);
-    }
+        }
 
     return response;
-        // TODO: Implement sign-up logic
     }
 
     async function signUpAPI(userData: { username: string; password: string }) {

@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"avenue/backend/persist"
@@ -85,7 +86,15 @@ func (s *Server) sessionCheck(c *gin.Context) {
 		return
 	}
 
-	v, exists := Sessions[h]
+	parts := strings.Split(h, "token ")
+
+	if len(parts) != 2 {
+		log.Print("Not enough parts")
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+
+	v, exists := Sessions[parts[1]]
 	if !exists {
 		c.AbortWithStatus(http.StatusUnauthorized)
 		return

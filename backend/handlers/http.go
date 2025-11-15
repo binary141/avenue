@@ -86,7 +86,7 @@ func (s *Server) sessionCheck(c *gin.Context) {
 		return
 	}
 
-	parts := strings.Split(h, "token ")
+	parts := strings.Split(h, "Token ")
 
 	if len(parts) != 2 {
 		log.Print("Not enough parts")
@@ -135,7 +135,7 @@ func (s *Server) SetupRoutes() {
 	c := cors.Config{
 		AllowOrigins:     []string{shared.GetEnv("ALLOW_ORIGIN", "http://localhost:5173"), "http://localhost:8080"},
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowHeaders:     []string{"Origin", "Content-Type", "content-type", "Accept"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "content-type", "Accept", "Authorization", "authorization"},
 		AllowCredentials: false,
 		ExposeHeaders:    []string{"Content-Length"},
 		MaxAge:           12 * time.Hour,

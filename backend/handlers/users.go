@@ -20,11 +20,6 @@ type LoginRequest struct {
 
 var validate = validator.New()
 
-const (
-	COOKIENAME  = "user-id"
-	COOKIEVALUE = "test"
-)
-
 func (s *Server) Login(c *gin.Context) {
 	var req LoginRequest
 
@@ -49,7 +44,7 @@ func (s *Server) Login(c *gin.Context) {
 		return
 	}
 
-	c.SetCookie(COOKIENAME, fmt.Sprintf("%d", u.ID), 3600, "/", "localhost", false, true)
+	c.SetCookie(shared.USERCOOKIENAME, fmt.Sprintf("%d", u.ID), 3600, "/", "localhost", false, true)
 	c.JSON(http.StatusOK, Response{Message: "OK"})
 }
 
@@ -68,7 +63,7 @@ func (s *Server) authorize(username, password string) (persist.User, error) {
 
 func (s *Server) Logout(c *gin.Context) {
 	// expire the cookie
-	c.SetCookie(COOKIENAME, "", -1, "/", "localhost", false, true)
+	c.SetCookie(shared.USERCOOKIENAME, "", -1, "/", "localhost", false, true)
 
 	c.JSON(http.StatusOK, Response{Message: "OK"})
 }
@@ -137,6 +132,54 @@ func (s *Server) UpdateProfile(c *gin.Context) {
 	c.JSON(http.StatusOK, Response{Message: "OK"})
 }
 
+type UpdatePasswordRequest struct {
+	Password string `json:"password" validate:"required,min=8,max=128"`
+}
+
 func (s *Server) UpdatePassword(c *gin.Context) {
+	ctx := c.Request.Context()
+	userId, err := shared.GetUserIdFromContext(ctx)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, Response{
+			Error: "User Id not found",
+		})
+		return
+	}
+
+	u, err := s.persist.GetUserByIdStr(userId)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{
+			Error: err.Error(),
+		})
+		return
+	}
+
+	var req UpdatePasswordRequest
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		log.Print(err)
+		c.Status(http.StatusBadRequest)
+		return
+	}
+
+	if err := validate.Struct(req); err != nil {
+		log.Print(err)
+		c.AbortWithStatusJSON(http.StatusBadRequest, Response{
+			Error: err.Error(),
+		})
+		return
+	}
+
+	u.Password = req.Password
+	log.Printf("user: %+v", u)
+
+	_, err = s.persist.UpdateUser(u)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{
+			Error: err.Error(),
+		})
+		return
+	}
+
 	c.JSON(http.StatusOK, Response{Message: "OK"})
 }

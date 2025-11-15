@@ -3,6 +3,7 @@ package persist
 import (
 	"errors"
 	"log"
+	"strconv"
 	"time"
 
 	"avenue/backend/shared"
@@ -23,6 +24,17 @@ type User struct {
 }
 
 // CreateFile creates a new file record in the database.
+func (p *Persist) GetUserByIdStr(idStr string) (User, error) {
+	var u User
+
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		return u, err
+	}
+
+	return p.GetUserById(id)
+}
+
 func (p *Persist) GetUserById(id int) (User, error) {
 	var u User
 
@@ -31,6 +43,12 @@ func (p *Persist) GetUserById(id int) (User, error) {
 		return u, err
 	}
 	return u, nil
+}
+
+func (p *Persist) UpdateUser(user User) (User, error) {
+	res := p.db.Model(&User{}).Where("id = ?", user.ID).Updates(user)
+
+	return user, res.Error
 }
 
 func (p *Persist) UpsertRootUser() error {

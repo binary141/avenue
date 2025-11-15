@@ -2,9 +2,11 @@ package handlers
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"avenue/backend/persist"
@@ -36,9 +38,10 @@ func SetupServer(p *persist.Persist) Server {
 }
 
 var (
-	AUTHHEADER   = shared.GetEnv("AUTH_HEADER", "my-auth-header")
-	AUTHKEY      = shared.GetEnv("AUTH_KEY", "MY-AUTH-VAL")
-	USERIDHEADER = shared.GetEnv("USER_HEADER", "user-id")
+	MASTERAUTHHEADER = shared.GetEnv("AUTH_HEADER", "my-auth-header")
+	AUTHHEADER       = "Authorization"
+	AUTHKEY          = shared.GetEnv("AUTH_KEY", "MY-AUTH-VAL")
+	USERIDHEADER     = shared.GetEnv("USER_HEADER", "user-id")
 )
 
 func (s *Server) UserIDExists(userID string) bool {
@@ -60,7 +63,7 @@ func (s *Server) UserIDExists(userID string) bool {
 
 func (s *Server) sessionCheck(c *gin.Context) {
 	// if the auth header is present with the needed fields, we can allow them to bypass the cookie check :)
-	if h := c.GetHeader(AUTHHEADER); h != "" {
+	if h := c.GetHeader(MASTERAUTHHEADER); h != "" {
 		if u := c.GetHeader(USERIDHEADER); u != "" {
 			if h == AUTHKEY && s.UserIDExists(u) {
 
@@ -77,18 +80,39 @@ func (s *Server) sessionCheck(c *gin.Context) {
 		}
 	}
 
-	userId, err := c.Cookie(shared.USERCOOKIENAME)
-	if err != nil {
+	h := c.GetHeader(AUTHHEADER)
+	if h == "" {
 		c.AbortWithStatus(http.StatusUnauthorized)
 		return
 	}
 
-	if userId == "" {
+	parts := strings.Split(h, "Token ")
+
+	if len(parts) != 2 {
+		log.Print("Not enough parts")
 		c.AbortWithStatus(http.StatusUnauthorized)
 		return
 	}
 
-	if !s.UserIDExists(userId) {
+	v, exists := Sessions[parts[1]]
+	if !exists {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+
+	if v.ExpiresAt.Unix() < time.Now().Unix() {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+
+	if !v.IsValid {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+
+	userIdStr := fmt.Sprint(v.UserId)
+
+	if !s.UserIDExists(userIdStr) {
 		c.AbortWithStatus(http.StatusUnauthorized)
 		return
 	}
@@ -96,7 +120,9 @@ func (s *Server) sessionCheck(c *gin.Context) {
 	rc := c.Request.Context()
 
 	// Add a new value to the context
-	newCtx := context.WithValue(rc, shared.USERCOOKIENAME, userId)
+	newCtx := context.WithValue(rc, shared.USERCOOKIENAME, userIdStr)
+	// put the session data into the context
+	newCtx = context.WithValue(newCtx, shared.SESSIONCOOKIENAME, h)
 
 	// Update the request with the new context
 	c.Request = c.Request.WithContext(newCtx)
@@ -109,7 +135,7 @@ func (s *Server) SetupRoutes() {
 	c := cors.Config{
 		AllowOrigins:     []string{shared.GetEnv("ALLOW_ORIGIN", "http://localhost:5173"), "http://localhost:8080"},
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowHeaders:     []string{"Origin", "Content-Type", "content-type", "Accept"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "content-type", "Accept", "Authorization", "authorization"},
 		AllowCredentials: false,
 		ExposeHeaders:    []string{"Content-Length"},
 		MaxAge:           12 * time.Hour,

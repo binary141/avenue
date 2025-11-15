@@ -13,7 +13,6 @@ import (
 
 type User struct {
 	ID        uint           `gorm:"primarykey" json:"id"`
-	Username  string         `gorm:"not null;uniqueIndex" json:"username"`
 	Email     string         `gorm:"not null;uniqueIndex" json:"email"`
 	Password  string         `gorm:"not null" json:"-"`
 	CanLogin  bool           `gorm:"not null" json:"canLogin"`
@@ -53,7 +52,6 @@ func (p *Persist) UpdateUser(user User) (User, error) {
 func (p *Persist) UpsertRootUser() error {
 	user := User{
 		ID:        1,
-		Username:  shared.GetEnv("ROOT_USERNAME", "root"),
 		Email:     shared.GetEnv("ROOT_USER_EMAIL", "root@gmail.com"),
 		Password:  shared.GetEnv("ROOT_USER_PASSWORD", "password"),
 		CanLogin:  true,
@@ -64,17 +62,6 @@ func (p *Persist) UpsertRootUser() error {
 
 	res := p.db.Save(&user)
 	return res.Error
-}
-
-func (p *Persist) GetUserByUsername(username string) (User, error) {
-	var u User
-	res := p.db.First(&u, "username = ?", username)
-
-	if res.Error != nil {
-		return u, res.Error
-	}
-
-	return u, nil
 }
 
 func (p *Persist) GetUserByEmail(email string) (User, error) {
@@ -88,9 +75,8 @@ func (p *Persist) GetUserByEmail(email string) (User, error) {
 	return u, nil
 }
 
-func (p *Persist) CreateUser(username, email, password string) (User, error) {
+func (p *Persist) CreateUser(email, password string) (User, error) {
 	u := User{
-		Username:  username,
 		Email:     email,
 		Password:  password,
 		CanLogin:  true,
@@ -110,20 +96,6 @@ func (p *Persist) IsUniqueEmail(email string) bool {
 	}
 
 	log.Printf("unique email user: %+v", u)
-	// 0 would mean it is the default value, so nothing was found?
-	if u.ID == 0 {
-		return true
-	}
-
-	return false
-}
-
-func (p *Persist) IsUniqueUsername(username string) bool {
-	u, err := p.GetUserByUsername(username)
-	if err != nil {
-		return errors.Is(err, gorm.ErrRecordNotFound)
-	}
-
 	// 0 would mean it is the default value, so nothing was found?
 	if u.ID == 0 {
 		return true

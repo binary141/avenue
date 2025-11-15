@@ -1,6 +1,11 @@
 <template>
   <template v-if="status === 'loaded'">
-    <RouterView></RouterView>
+    <div class="content flex flex-col gap-6">
+      <div class="header flex flex-row justify-end">
+
+      </div>
+      <RouterView></RouterView>
+    </div>
   </template>
 
   <template v-else-if="status === 'loading'">
@@ -23,11 +28,15 @@ import { onMounted, ref } from 'vue';
 import AppButton from './views/components/AppButton.vue';
 import SpinnerView from './views/components/SpinnerView.vue';
 import { useUsersStore } from './stores/users';
+import { setGlobalRequestHeader } from './utils/api';
 
 const usersStore = useUsersStore();
 const status = ref<"loading" | "loaded" | "error">("loading");
 
 onMounted(() => {
+  if (usersStore.token !== null) {
+    setGlobalRequestHeader("Authorization", `Token ${usersStore.token}`);
+  }
   getUserAndLogin();
 })
 
@@ -49,5 +58,14 @@ async function getUserAndLogin() {
 </script>
 
 <style scoped>
-
+.header {
+  width: 100%;
+  height: 69px;
+  padding-left: -12px;
+  background-color: var(--primary);
+}
+.content {
+  width: 100%;
+  align-items: center;
+}
 </style>

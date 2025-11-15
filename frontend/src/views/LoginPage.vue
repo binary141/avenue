@@ -13,6 +13,8 @@
         <input v-model="password" type="password" required />
       </div>
 
+      <ErrorMessage v-if="error">{{ error }}</ErrorMessage>
+
       <AppButton type="submit">LOGIN</AppButton>
     </form>
 
@@ -25,6 +27,7 @@ import { ref } from 'vue'
 import AppButton from './components/AppButton.vue'
 import { useUsersStore } from '@/stores/users';
 import { useRouter } from 'vue-router';
+import ErrorMessage from './components/ErrorMessage.vue';
 
 const usersStore = useUsersStore();
 const router = useRouter();
@@ -32,11 +35,11 @@ const router = useRouter();
 const username = ref('')
 const password = ref('')
 
-const errors = ref<Record<string, string[]>>({});
+const error = ref<string | undefined>();
 const submitting = ref(false);
 
 async function handleLogin() {
-  errors.value = {};
+  error.value = undefined;
   submitting.value = true;
 
   const response = await usersStore.logInAPI({ username: username.value, password: password.value });
@@ -45,9 +48,11 @@ async function handleLogin() {
   console.log(response)
 
   if (response.status === 200) {
-    usersStore.setToken(response.body.token);
+    usersStore.setToken(response.body.session_id);
     usersStore.logIn(response.body.user_data);
     router.replace({ name: "home" });
+  } else {
+    error.value = response.body.error;
   }
 }
 </script>

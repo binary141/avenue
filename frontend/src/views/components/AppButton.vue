@@ -1,11 +1,23 @@
 <template>
-    <button class="app-button flex flex-row content-center align-center self-center p-5">
+    <button :type="type" class="app-button flex flex-row content-center align-center self-center p-5">
         <slot></slot>
     </button>
 </template>
 
+<script setup lang="ts">
+import type { PropType } from 'vue';
+
+defineProps({
+    type: {
+        type: String as PropType<"button" | "submit" | "reset" | undefined>,
+        default: 'button'
+    }
+})
+</script>
+
 <style scoped>
 .app-button {
+    width: auto;
     background-color: var(--primary);
     color: var(--text);
     border-radius: 8px;

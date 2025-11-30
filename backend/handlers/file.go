@@ -1,8 +1,6 @@
 package handlers
 
 import (
-	"avenue/backend/persist"
-	"avenue/backend/shared"
 	"bufio"
 	"errors"
 	"fmt"
@@ -12,6 +10,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"avenue/backend/persist"
+	"avenue/backend/shared"
 
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/afero"
@@ -29,7 +30,6 @@ type Response struct {
 }
 
 func (s *Server) Upload(c *gin.Context) {
-
 	// TODO: stream file uploads
 	// TODO: file size
 	userId, err := shared.GetUserIdFromContext(c.Request.Context())
@@ -42,7 +42,7 @@ func (s *Server) Upload(c *gin.Context) {
 	}
 
 	// Get uploaded file from multipart form
-	file, err := c.FormFile("file")
+	f, err := c.FormFile("file")
 	if err != nil {
 		log.Printf("error gettting file from form: %v", err)
 		c.JSON(http.StatusTeapot, Response{
@@ -56,11 +56,11 @@ func (s *Server) Upload(c *gin.Context) {
 	parent := c.PostForm("parent")
 
 	// Extract filename and extension
-	filename := file.Filename
+	filename := f.Filename
 	ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(filename), "."))
 
 	// Open uploaded file
-	src, err := file.Open()
+	src, err := f.Open()
 	if err != nil {
 		log.Printf("it was the other one: %v", err)
 		c.JSON(http.StatusBadRequest, Response{
@@ -71,10 +71,32 @@ func (s *Server) Upload(c *gin.Context) {
 	}
 	defer src.Close()
 
+	extBuffer := make([]byte, 512)
+	_, err = src.Read(extBuffer)
+	if err != nil && err != io.EOF {
+		c.JSON(http.StatusInternalServerError, Response{
+			Message: "could not read file",
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	_, err = src.Seek(0, io.SeekStart)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Message: "could not seek to start of file",
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	contentType := http.DetectContentType(extBuffer)
+
 	// Create file record in database
 	fileId, err := s.persist.CreateFile(&persist.File{
 		Name:      filename,
 		Extension: ext,
+		MimeType:  contentType,
 		Parent:    parent,
 	})
 	if err != nil {

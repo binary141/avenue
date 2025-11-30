@@ -236,6 +236,7 @@ func (s *Server) GetFile(c *gin.Context) {
 	}
 }
 
+// todo only let users delete files they have access to
 func (s *Server) DeleteFile(c *gin.Context) {
 	userId, err := shared.GetUserIdFromContext(c.Request.Context())
 	if err != nil {

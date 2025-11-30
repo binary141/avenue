@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/afero"
+	"gorm.io/gorm"
 )
 
 type UploadReq struct {
@@ -60,7 +62,6 @@ func (s *Server) Upload(c *gin.Context) {
 	// Open uploaded file
 	src, err := f.Open()
 	if err != nil {
-		log.Printf("it was the other one: %v", err)
 		c.JSON(http.StatusBadRequest, Response{
 			Message: "could not open uploaded file",
 			Error:   err.Error(),
@@ -187,6 +188,14 @@ func (s *Server) GetFile(c *gin.Context) {
 
 	file, err := s.persist.GetFileByID(c.Param("fileID"))
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, Response{
+				Message: "file not found in db",
+				Error:   err.Error(),
+			})
+			return
+		}
+
 		c.JSON(http.StatusInternalServerError, Response{
 			Message: "could not get file",
 			Error:   err.Error(),
@@ -197,6 +206,14 @@ func (s *Server) GetFile(c *gin.Context) {
 	path := fmt.Sprintf("/%s/%s", userId, file.ID)
 	fileData, err := s.fs.Open(path)
 	if err != nil {
+		if errors.Is(err, afero.ErrFileNotFound) {
+			c.JSON(http.StatusNotFound, Response{
+				Message: "could not find file in fs",
+				Error:   err.Error(),
+			})
+			return
+		}
+
 		c.JSON(http.StatusInternalServerError, Response{
 			Message: "could not open file",
 			Error:   err.Error(),

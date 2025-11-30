@@ -2,7 +2,6 @@ package persist
 
 import (
 	"errors"
-	"log"
 	"strconv"
 	"time"
 
@@ -95,7 +94,6 @@ func (p *Persist) IsUniqueEmail(email string) bool {
 		return errors.Is(err, gorm.ErrRecordNotFound)
 	}
 
-	log.Printf("unique email user: %+v", u)
 	// 0 would mean it is the default value, so nothing was found?
 	if u.ID == 0 {
 		return true

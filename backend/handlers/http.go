@@ -138,8 +138,6 @@ func (s *Server) SetupRoutes() {
 		MaxAge:           12 * time.Hour,
 	}
 
-	log.Printf("cors: %+v", c)
-
 	s.router.Use(cors.New(c))
 
 	unsecuredRouter := s.router.Group("")

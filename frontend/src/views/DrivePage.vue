@@ -74,6 +74,14 @@ async function download(fileId: string): null{
         responseType: "blob",
     });
 
+    if (response.status == 404) {
+      console.log("file not found... not downloading");
+      return
+    } else if (response.status == 500) {
+      console.log("Error downloading file: ", response)
+      return
+    }
+
     // Convert the stream to a Blob URL
     const blob = new Blob([response.body.blob]);
     const url = window.URL.createObjectURL(blob);
@@ -137,7 +145,7 @@ async function loadFolderContents(folderId: string = '') {
   }
 }
 
-function handleFileUpload(files: File[]) {
+function handleFileUpload() {
   // Reload folder contents after successful upload
   loadFolderContents(currentFolderId.value);
 }

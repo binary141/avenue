@@ -205,8 +205,6 @@ func (s *Server) UpdateProfile(c *gin.Context) {
 		return
 	}
 
-	log.Print(req)
-
 	u, err := s.persist.GetUserByIdStr(userId)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{

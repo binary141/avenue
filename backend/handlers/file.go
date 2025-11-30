@@ -1,8 +1,6 @@
 package handlers
 
 import (
-	"bufio"
-	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -186,7 +184,7 @@ func (s *Server) GetFile(c *gin.Context) {
 		})
 		return
 	}
-	log.Printf("user id: %s", c.Param("fileID"))
+
 	file, err := s.persist.GetFileByID(c.Param("fileID"))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, Response{
@@ -196,42 +194,29 @@ func (s *Server) GetFile(c *gin.Context) {
 		return
 	}
 
-	c.Header("Content-Type", "text/event-stream")
-	c.Header("Cache-Control", "no-cache")
-	c.Header("Connection", "keep-alive")
-	c.Header("Transfer-Encoding", "chunked")
-
-	filePath := fmt.Sprintf("/%s/%s", userId, file.ID)
-	log.Printf("getting file: %v", filePath)
-	fileData, err := s.fs.Open(filePath)
+	path := fmt.Sprintf("/%s/%s", userId, file.ID)
+	fileData, err := s.fs.Open(path)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, Response{
-			Message: "could not read file",
+			Message: "could not open file",
 			Error:   err.Error(),
 		})
 		return
 	}
 	defer fileData.Close()
 
-	f := bufio.NewReader(fileData)
-	b := make([]byte, 4096)
-	for {
-		n, err := f.Read(b)
-		if n > 0 {
-			c.SSEvent("data", b)
-		}
-		if errors.Is(err, io.EOF) {
-			break
-		} else if err != nil {
-			c.JSON(http.StatusInternalServerError, Response{
-				Message: "error reading bufio",
-				Error:   err.Error(),
-			})
-			return
-		}
-	}
+	// ----- Streaming Download Headers -----
+	c.Header("Content-Type", "application/octet-stream")
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", file.Name))
 
-	c.JSON(http.StatusOK, file)
+	c.Header("Cache-Control", "no-cache")
+	c.Header("Access-Control-Expose-Headers", "Content-Disposition")
+
+	// ----- Stream file to client -----
+	if _, err := io.Copy(c.Writer, fileData); err != nil {
+		c.Status(http.StatusInternalServerError)
+		return
+	}
 }
 
 func (s *Server) DeleteFile(c *gin.Context) {

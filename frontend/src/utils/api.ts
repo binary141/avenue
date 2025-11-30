@@ -297,5 +297,6 @@ export default async function api(
     status: response.status,
     body: responseBody,
     ok: response.status >= 200 && response.status < 300,
+    headers: Object.fromEntries(response.headers.entries()),
   };
 }

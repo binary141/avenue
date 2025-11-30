@@ -125,7 +125,6 @@ func (s *Server) sessionCheck(c *gin.Context) {
 	// Update the request with the new context
 	c.Request = c.Request.WithContext(newCtx)
 
-	log.Printf("set new ctx: %s", c.Request.Context())
 	c.Next()
 }
 

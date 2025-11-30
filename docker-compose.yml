@@ -1,5 +1,6 @@
 services:
   backend:
+    tty: true
     build:
       target: "${BACKEND_TARGET:-live-dev}"
       context: ./backend

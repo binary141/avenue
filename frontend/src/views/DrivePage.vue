@@ -1,7 +1,7 @@
 <template>
   <div class="page gap-5">
     <h1>Drive</h1>
-    <FileUploader :parent="currentFolderId" @upload="handleFileUpload" @error="handleUploadError" multiple="true" />
+    <FileUploader :parent="currentFolderId" @upload="handleFileUpload" @error="handleUploadError" multiple=true />
 
     <div v-if="loading" class="flex flex-col align-center content-center gap-3">
       <SpinnerView />
@@ -34,7 +34,7 @@
             class="file-item card flex flex-row align-center gap-3 p-3"
           >
             <span class="file-icon">📄</span>
-            <span class="file-name">{{ file.name }}</span>
+            <span class="file-name" @click.prevent="download(file.id)">{{ file.name }}</span>
             <span class="file-size">{{ formatFileSize(file.file_size) }}</span>
             <span class="file-extension">{{ file.extension }}</span>
           </div>
@@ -66,6 +66,41 @@ const error = ref<string | undefined>();
 const folders = ref<Folder[]>([]);
 const files = ref<File[]>([]);
 const currentFolderId = ref<string>('');
+
+async function download(fileId: string): null{
+    const response = await api({
+        url: "v1/file/" + fileId,
+        method: "GET",
+        responseType: "blob",
+    });
+
+    // Convert the stream to a Blob URL
+    const blob = new Blob([response.body.blob]);
+    const url = window.URL.createObjectURL(blob);
+
+    // Trigger download
+    const a = document.createElement("a");
+    a.href = url;
+
+    // Optional: use the filename from headers:
+    const disposition = response.headers["content-disposition"];
+    let filename = "download.bin";
+
+    if (disposition) {
+      console.log("disposition: ", disposition)
+        const match = disposition.match(/filename="?([^"]+)"?/);
+        console.log(match)
+        if (match) {
+            filename = match[1];
+        }
+    }
+
+    a.download = filename;
+    a.click();
+
+    // Cleanup
+    window.URL.revokeObjectURL(url);
+}
 
 function formatFileSize(bytes: number): string {
   if (bytes === 0) return '0 B';

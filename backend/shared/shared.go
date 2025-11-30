@@ -2,7 +2,6 @@ package shared
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/mail"
 	"os"
@@ -33,7 +32,7 @@ func GetUserIdFromContext(ctx context.Context) (string, error) {
 	val := ctx.Value(USERCOOKIENAME)
 
 	if val == nil {
-		return "", errors.New(fmt.Sprintf("Unable to cast cookie val: '%v' to string", val))
+		return "", fmt.Errorf("Unable to cast cookie val: '%v' to string", val)
 	}
 
 	return fmt.Sprint(val), nil

@@ -36,6 +36,7 @@
             :key="file.id"
             class="file-item card flex flex-row align-center gap-3 p-3"
           >
+          <a :href="getDownloadURL(file.id)" :download="file.name">Download</a>
             <span class="file-icon">📄</span>
             <span class="file-name" @click.prevent="download(file.id)" :title="file.name">
               {{ formatFileName(file.name) }}
@@ -94,6 +95,7 @@ import type { Folder, File, FolderContents } from '@/types/folder';
 import SpinnerView from './components/SpinnerView.vue';
 import ErrorMessage from './components/ErrorMessage.vue';
 import FileUploader from '@/components/FileUploader.vue';
+import { useUsersStore } from '../stores/users';
 
 const route = useRoute();
 const loading = ref(false);
@@ -101,10 +103,15 @@ const error = ref<string | undefined>();
 const folders = ref<Folder[]>([]);
 const files = ref<File[]>([]);
 const currentFolderId = ref<string>('');
+const usersStore = useUsersStore();
 
 // ----- Modal State -----
 const editingFile = ref<File | null>(null)
 const newFileName = ref('')
+
+function getDownloadURL(fileId: string): string {
+  return `http://localhost:8080/v1/file/${fileId}?token=${usersStore.token}`
+}
 
 function log() {
 console.log("Hello")

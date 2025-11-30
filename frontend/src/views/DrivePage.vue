@@ -1,7 +1,7 @@
 <template>
   <div class="page gap-5">
     <h1>Drive</h1>
-    <FileUploader :parent="currentFolderId" @upload="handleFileUpload" @error="handleUploadError" />
+    <FileUploader :parent="currentFolderId" @upload="handleFileUpload" @error="handleUploadError" multiple="true" />
 
     <div v-if="loading" class="flex flex-col align-center content-center gap-3">
       <SpinnerView />

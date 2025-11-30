@@ -36,16 +36,17 @@
             :key="file.id"
             class="file-item card flex flex-row align-center gap-3 p-3"
           >
-          <a :href="getDownloadURL(file.id)" :download="file.name">Download</a>
             <span class="file-icon">📄</span>
-            <span class="file-name" @click.prevent="download(file.id)" :title="file.name">
-              {{ formatFileName(file.name) }}
-            </span>
+            <span class="file-name" :title="file.name">{{ formatFileName(file.name) }}</span>
             <span class="file-size">{{ formatFileSize(file.file_size) }}</span>
             <span class="file-extension">{{ file.extension }}</span>
             <span class="file-delete" @click="deleteFile(file.id)">🗑️</span>
-            <!-- Pencil / edit icon -->
+
+            <!-- action buttons -->
             <span class="file-edit cursor-pointer" @click="openEditModal(file)">✏️</span>
+            <span class="file-download">
+              <a :href="getDownloadURL(file.id)" :download="file.name">⬇️</a>
+            </span>
           </div>
         </div>
       </div>
@@ -110,11 +111,9 @@ const editingFile = ref<File | null>(null)
 const newFileName = ref('')
 
 function getDownloadURL(fileId: string): string {
-  return `http://localhost:8080/v1/file/${fileId}?token=${usersStore.token}`
-}
+  let baseURL = import.meta.env.VITE_APP_API_URL
 
-function log() {
-console.log("Hello")
+  return `${baseURL}v1/file/${fileId}?token=${usersStore.token}`
 }
 
 // ----- File Operations -----

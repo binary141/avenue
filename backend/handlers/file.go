@@ -176,6 +176,46 @@ func (s *Server) ListFiles(c *gin.Context) {
 	c.JSON(http.StatusOK, files)
 }
 
+func (s *Server) UpdateFileName(c *gin.Context) {
+	newName := c.Param("fileName")
+	if newName == "" {
+		c.JSON(http.StatusBadRequest, Response{
+			Message: "filename can't be empty",
+		})
+		return
+	}
+
+	file, err := s.persist.GetFileByID(c.Param("fileID"))
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, Response{
+				Message: "file not found in db",
+				Error:   err.Error(),
+			})
+			return
+		}
+
+		c.JSON(http.StatusInternalServerError, Response{
+			Message: "could not get file",
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	file.Name = newName
+
+	err = s.persist.UpdateFile(*file, []string{"name"})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Message: "could not update file",
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	c.Status(200)
+}
+
 func (s *Server) GetFile(c *gin.Context) {
 	userId, err := shared.GetUserIdFromContext(c.Request.Context())
 	if err != nil {

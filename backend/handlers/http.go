@@ -155,6 +155,7 @@ func (s *Server) SetupRoutes() {
 	securedRouterV1.POST("/file", s.Upload)
 	securedRouterV1.GET("/file/list", s.ListFiles)
 	securedRouterV1.GET("/file/:fileID", s.GetFile)
+	securedRouterV1.PATCH("/file/:fileID/:fileName", s.UpdateFileName)
 	securedRouterV1.DELETE("/file/:fileID", s.DeleteFile)
 
 	// -- folder routes -- //

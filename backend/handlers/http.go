@@ -82,8 +82,15 @@ func (s *Server) sessionCheck(c *gin.Context) {
 
 	h := c.GetHeader(AUTHHEADER)
 	if h == "" {
-		c.AbortWithStatus(http.StatusUnauthorized)
-		return
+		// use a query param as a default
+		// this is used in places where we can't send a cookie value (such as browser downloads)
+		q := c.Query("token")
+		if q == "" {
+			c.AbortWithStatus(http.StatusUnauthorized)
+			return
+		}
+
+		h = fmt.Sprintf("Token %s", q)
 	}
 
 	parts := strings.Split(h, "Token ")

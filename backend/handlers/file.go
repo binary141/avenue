@@ -264,10 +264,13 @@ func (s *Server) GetFile(c *gin.Context) {
 
 	// ----- Streaming Download Headers -----
 	c.Header("Content-Type", "application/octet-stream")
-	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", file.Name))
+	c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, file.Name))
 
 	c.Header("Cache-Control", "no-cache")
 	c.Header("Access-Control-Expose-Headers", "Content-Disposition")
+	c.Header("Content-Length", fmt.Sprintf("%d", file.FileSize))
+
+	c.Writer.Flush()
 
 	// ----- Stream file to client -----
 	if _, err := io.Copy(c.Writer, fileData); err != nil {

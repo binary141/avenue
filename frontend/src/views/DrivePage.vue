@@ -34,7 +34,9 @@
             class="file-item card flex flex-row align-center gap-3 p-3"
           >
             <span class="file-icon">📄</span>
-            <span class="file-name" @click.prevent="download(file.id)">{{ file.name }}</span>
+            <span class="file-name" @click.prevent="download(file.id)" :title="file.name">
+              {{ formatFileName(file.name) }}
+            </span>
             <span class="file-size">{{ formatFileSize(file.file_size) }}</span>
             <span class="file-extension">{{ file.extension }}</span>
           </div>
@@ -66,6 +68,16 @@ const error = ref<string | undefined>();
 const folders = ref<Folder[]>([]);
 const files = ref<File[]>([]);
 const currentFolderId = ref<string>('');
+
+function formatFileName(fileName: string): string{
+  const maxNameLength = 35;
+
+  if (fileName.length > maxNameLength) {
+    return fileName.substring(0, maxNameLength) + "..."
+  }
+
+  return fileName
+}
 
 async function download(fileId: string): null{
     const response = await api({

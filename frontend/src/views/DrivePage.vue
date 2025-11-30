@@ -41,7 +41,7 @@
             </span>
             <span class="file-size">{{ formatFileSize(file.file_size) }}</span>
             <span class="file-extension">{{ file.extension }}</span>
-            <span class="file-delete" @click="deleteFile(file.id)">X</span>
+            <span class="file-delete" @click="deleteFile(file.id)">🗑️</span>
             <!-- Pencil / edit icon -->
             <span class="file-edit cursor-pointer" @click="openEditModal(file)">✏️</span>
           </div>

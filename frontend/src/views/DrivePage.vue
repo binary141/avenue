@@ -39,6 +39,7 @@
             </span>
             <span class="file-size">{{ formatFileSize(file.file_size) }}</span>
             <span class="file-extension">{{ file.extension }}</span>
+            <span class="file-delete" @click="deleteFile(file.id)">X</span>
           </div>
         </div>
       </div>
@@ -68,6 +69,15 @@ const error = ref<string | undefined>();
 const folders = ref<Folder[]>([]);
 const files = ref<File[]>([]);
 const currentFolderId = ref<string>('');
+
+async function deleteFile(fileId: string): null{
+  const response = await api({
+    url: "v1/file/" + fileId,
+    method: "DELETE",
+  });
+
+  refreshCurrentList();
+}
 
 function formatFileName(fileName: string): string{
   const maxNameLength = 35;
@@ -166,11 +176,15 @@ function handleUploadError(message: string) {
   error.value = message;
 }
 
-onMounted(() => {
+function refreshCurrentList() {
   // Get folderId from route params or query, default to empty string for root
   const folderId = (route.params.folderId as string) || (route.query.folderId as string) || '';
   currentFolderId.value = folderId;
   loadFolderContents(folderId);
+}
+
+onMounted(() => {
+  refreshCurrentList();
 });
 </script>
 

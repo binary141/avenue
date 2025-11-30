@@ -7,14 +7,14 @@ import (
 )
 
 type File struct {
-	ID         string    `gorm:"primaryKey, type:uuid" json:"id"`
-	Name       string    `gorm:"not null" json:"name"`
-	Extension  string    `gorm:"not null" json:"extension"`
-	MimeType   string    `gorm:"not null" json:"mimeType"`
-	FileSize   int       `gorm:"column:file_size" json:"file_size"`
-	Parent     string    `json:"parent"`
-	CreatedAt  time.Time `json:"created_at"`
-	DeleteTime time.Time `json:"delete_time"`
+	ID        string    `gorm:"primaryKey, type:uuid" json:"id"`
+	Name      string    `gorm:"not null" json:"name"`
+	Extension string    `gorm:"not null" json:"extension"`
+	MimeType  string    `gorm:"not null" json:"mimeType"`
+	FileSize  int       `gorm:"column:file_size" json:"file_size"`
+	Parent    string    `json:"parent"`
+	CreatedAt time.Time `json:"created_at"`
+	DeletedAt time.Time `json:"deleted_at"`
 }
 
 // CreateFile creates a new file record in the database.

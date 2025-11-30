@@ -253,12 +253,17 @@ func (s *Server) DeleteFile(c *gin.Context) {
 		})
 		return
 	}
+
 	if err = s.fs.Remove(fmt.Sprintf("/%s/%s", userId, f.ID)); err != nil {
-		c.JSON(http.StatusInternalServerError, Response{
-			Message: "error deleting file from file system",
-			Error:   err.Error(),
-		})
-		return
+		// only error if the file was found
+		// if the file wasn't found, we still want to delete from the system
+		if !errors.Is(err, afero.ErrFileNotFound) {
+			c.JSON(http.StatusInternalServerError, Response{
+				Message: "error deleting file from file system",
+				Error:   err.Error(),
+			})
+			return
+		}
 	}
 
 	if err = s.persist.DeleteFile(c.Param("fileID")); err != nil {

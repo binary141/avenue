@@ -3,6 +3,7 @@ package shared
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/mail"
 	"os"
 )
@@ -31,10 +32,9 @@ func IsValidEmail(email string) bool {
 func GetUserIdFromContext(ctx context.Context) (string, error) {
 	val := ctx.Value(USERCOOKIENAME)
 
-	str, ok := val.(string)
-	if !ok {
-		return "", errors.New("Unable to cast cookie val to string")
+	if val == nil {
+		return "", errors.New(fmt.Sprintf("Unable to cast cookie val: '%v' to string", val))
 	}
 
-	return str, nil
+	return fmt.Sprint(val), nil
 }

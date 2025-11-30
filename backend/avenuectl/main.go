@@ -18,7 +18,6 @@ func main() {
 
 	server := handlers.SetupServer(persist)
 
-	handlers.Sessions = make(map[string]handlers.SessionData, 0)
 	server.SetupRoutes()
 
 	// Start the server

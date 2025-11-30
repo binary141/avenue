@@ -94,25 +94,22 @@ func (s *Server) sessionCheck(c *gin.Context) {
 		return
 	}
 
-	v, exists := Sessions[parts[1]]
-	if !exists {
+	// see if the session is valid
+	session, valid := s.persist.IsValidSession(parts[1])
+	if !valid {
 		c.AbortWithStatus(http.StatusUnauthorized)
 		return
 	}
 
-	if v.ExpiresAt.Unix() < time.Now().Unix() {
-		c.AbortWithStatus(http.StatusUnauthorized)
-		return
-	}
+	// log.Println("SESSION: ", session.UserId)
 
-	if !v.IsValid {
-		c.AbortWithStatus(http.StatusUnauthorized)
-		return
-	}
+	// v, exists := Sessions[parts[1]]
+	// if !exists {
+	// 	c.AbortWithStatus(http.StatusUnauthorized)
+	// 	return
+	// }
 
-	userIdStr := fmt.Sprint(v.UserId)
-
-	if !s.UserIDExists(userIdStr) {
+	if !s.UserIDExists(fmt.Sprint(session.UserId)) {
 		c.AbortWithStatus(http.StatusUnauthorized)
 		return
 	}
@@ -120,7 +117,7 @@ func (s *Server) sessionCheck(c *gin.Context) {
 	rc := c.Request.Context()
 
 	// Add a new value to the context
-	newCtx := context.WithValue(rc, shared.USERCOOKIENAME, userIdStr)
+	newCtx := context.WithValue(rc, shared.USERCOOKIENAME, session.UserId)
 	// put the session data into the context
 	newCtx = context.WithValue(newCtx, shared.SESSIONCOOKIENAME, h)
 
@@ -184,5 +181,4 @@ func (s *Server) pingHandler(c *gin.Context) {
 	c.JSON(200, gin.H{
 		"message": "pong",
 	})
-
 }

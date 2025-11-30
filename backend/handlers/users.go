@@ -5,27 +5,17 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"time"
 
 	"avenue/backend/persist"
 	"avenue/backend/shared"
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
-	"github.com/google/uuid"
 )
 
 type LoginRequest struct {
 	Email    string `json:"email" validate:"required,min=4,max=64"`
 	Password string `json:"password" validate:"required,min=4,max=64"`
-}
-
-var Sessions map[string]SessionData
-
-type SessionData struct {
-	ExpiresAt time.Time
-	IsValid   bool
-	UserId    uint
 }
 
 var validate = validator.New()
@@ -54,17 +44,18 @@ func (s *Server) Login(c *gin.Context) {
 		return
 	}
 
-	uuidStr := uuid.NewString()
-
-	Sessions[uuidStr] = SessionData{
-		ExpiresAt: time.Now().Add(12 * time.Hour),
-		IsValid:   true,
-		UserId:    u.ID,
+	session, err := s.persist.CreateSession(int(u.ID))
+	if err != nil {
+		// for now send the error in the response 🤔
+		c.AbortWithStatusJSON(http.StatusUnauthorized, Response{
+			Error: err.Error(),
+		})
+		return
 	}
 
 	c.SetCookie(shared.USERCOOKIENAME, fmt.Sprintf("%d", u.ID), 600, "/", "localhost", false, true)
-	c.SetCookie(shared.SESSIONCOOKIENAME, uuidStr, 600, "/", "localhost", false, true)
-	c.JSON(http.StatusOK, gin.H{"Message": "OK", "User-Id": u.ID, shared.SESSIONCOOKIENAME: uuidStr})
+	c.SetCookie(shared.SESSIONCOOKIENAME, session.SessionID, 600, "/", "localhost", false, true)
+	c.JSON(http.StatusOK, gin.H{"Message": "OK", "User-Id": u.ID, shared.SESSIONCOOKIENAME: session.SessionID})
 }
 
 func (s *Server) authorize(email, password string) (persist.User, error) {
@@ -95,16 +86,22 @@ func (s *Server) Logout(c *gin.Context) {
 		return
 	}
 
-	v, ok := Sessions[sessIDStr]
-	if !ok {
-		c.Status(http.StatusBadRequest)
+	err := s.persist.DeleteSession(sessIDStr)
+	if err != nil {
+		c.Status(http.StatusInternalServerError)
 		return
 	}
 
-	v.IsValid = false
-	v.ExpiresAt = time.Now()
+	// v, ok := Sessions[sessIDStr]
+	// if !ok {
+	// 	c.Status(http.StatusBadRequest)
+	// 	return
+	// }
 
-	Sessions[sessIDStr] = v
+	// v.IsValid = false
+	// v.ExpiresAt = time.Now()
+
+	// Sessions[sessIDStr] = v
 
 	c.JSON(http.StatusOK, Response{Message: "OK"})
 }
@@ -162,7 +159,7 @@ func (s *Server) GetProfile(c *gin.Context) {
 	userId, err := shared.GetUserIdFromContext(ctx)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, Response{
-			Error: "User Id not found",
+			Error: fmt.Sprintf("User Id not found: %s", err.Error()),
 		})
 		return
 	}

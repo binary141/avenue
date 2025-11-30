@@ -101,16 +101,17 @@ func (s *Server) sessionCheck(c *gin.Context) {
 		return
 	}
 
-	// log.Println("SESSION: ", session.UserId)
-
-	// v, exists := Sessions[parts[1]]
-	// if !exists {
-	// 	c.AbortWithStatus(http.StatusUnauthorized)
-	// 	return
-	// }
-
 	if !s.UserIDExists(fmt.Sprint(session.UserId)) {
 		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+
+	session.ExpiresAt = time.Now().Add(15 * time.Minute).Unix()
+
+	// update the session to be a rolling timeout
+	_, err := s.persist.UpdateSession(session)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 

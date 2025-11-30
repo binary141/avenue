@@ -29,6 +29,7 @@ func (p *Persist) DeleteSession(idStr string) error {
 }
 
 func (p *Persist) UpdateSession(session Session) (Session, error) {
+	// todo check if the session expires soon. Might reduce db usage
 	res := p.db.Model(&Session{}).Where("id = ?", session.ID).Updates(session)
 
 	return session, res.Error

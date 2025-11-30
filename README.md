@@ -1,0 +1,14 @@
+# TODO
+- [] Get logout working
+- [] Only let the user interact with files that they have ownership of
+- [] File permissions
+- [] File sharing
+- [] Have an admin page to create and alter existing users
+- [] Allow files of any file size. Maybe make it env driven?
+- [] Folder creation in the ui
+- [] Breadcrumb the folder tree in the ui for easier navigation
+- [] Bulk delete of files (maybe have a multi-select in the list)
+- [] Add way to move files around
+- [] Fileviewer in ui? How would this be implemented?
+- [] Password resets
+- [] Add file search

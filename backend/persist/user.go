@@ -13,7 +13,9 @@ import (
 type User struct {
 	ID        uint           `gorm:"primarykey" json:"id"`
 	Email     string         `gorm:"not null;uniqueIndex" json:"email"`
-	Password  string         `gorm:"not null" json:"-"`
+	FirstName string         `gorm:"not null" json:"firstName"`
+	LastName  string         `gorm:"not null" json:"lastName"`
+	Password  string         `gorm:"not null" json:"-"` // omit password from json output
 	CanLogin  bool           `gorm:"not null" json:"canLogin"`
 	CreatedAt time.Time      `json:"createdAt"`
 	UpdatedAt time.Time      `json:"updatedAt"`

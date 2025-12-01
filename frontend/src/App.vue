@@ -52,7 +52,11 @@ async function getUserAndLogin() {
     if (response.ok) {
       status.value = "loaded";
       usersStore.logIn(response.body);
+    } else if (response.status == 401) {
+      usersStore.logOut();
+      status.value = "loaded";
     } else {
+      console.log(response.body)
       status.value = "error";
     }
   } else {

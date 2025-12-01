@@ -6,7 +6,11 @@ const scrollPositions = Object(null);
 const router = createRouter({
     history: createWebHistory(),
     routes: [
-        { path: '/', name: 'home', component: () => import('@/views/DrivePage.vue') },
+        {
+          path: '/',
+          name: 'home',
+          component: () => import('@/views/DrivePage.vue')
+        },
         {
             path: '/login',
             name: 'login',
@@ -28,6 +32,11 @@ const router = createRouter({
             path: '/logout',
             name: 'logout',
             component: () => import('@/views/LogoutPage.vue')
+        },
+        {
+            path: '/profile',
+            name: 'profile',
+            component: () => import('@/views/ProfilePage.vue'),
         },
     ],
     scrollBehavior(to, from, savedPosition) {

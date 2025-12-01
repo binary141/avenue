@@ -3,20 +3,24 @@
     <h1>Profile</h1>
 
     <form @submit.prevent="updateProfile" class="login-form card flex flex-col w-full gap-4">
+
       <div class="flex flex-col gap-3">
         <label>First Name</label>
-        <input v-model="fName" type="text" />
+        <input v-model="fName" type="text" autocomplete="off" />
       </div>
 
       <div class="flex flex-col gap-3">
         <label>Last Name</label>
-        <input v-model="lName" type="text" />
+        <input v-model="lName" type="text" autocomplete="off" />
       </div>
 
       <div class="flex flex-col gap-3">
         <label>Email</label>
         <input v-model="email" type="email" />
       </div>
+
+      <!-- Hidden fake password field to disable autofill -->
+      <input type="password" style="display:none" autocomplete="new-password" />
 
       <div class="flex flex-col gap-3">
         <label>Password</label>
@@ -45,27 +49,37 @@ import ErrorMessage from './components/ErrorMessage.vue'
 const usersStore = useUsersStore()
 const router = useRouter()
 
-// --- Pre-populate from user store ---
-const originalEmail = ref(usersStore.userData.data.email)  // ← existing email from backend
+const originalEmail = ref(usersStore.userData.data.email)
+const originalFName = ref(usersStore.userData.data.firstName)
+const originalLName = ref(usersStore.userData.data.lastName)
 
-// Form state
 const email = ref(originalEmail.value)
-const fName = ref('')
-const lName = ref('')
+const fName = ref(originalFName.value)
+const lName = ref(originalLName.value)
+
 const password = ref('')
 const passwordConfirmation = ref('')
 
 const error = ref<string | undefined>()
 const submitting = ref(false)
 
-// Track dirty state
 const isEmailDirty = computed(() => email.value !== originalEmail.value)
+const isFNameDirty = computed(() => fName.value !== originalFName.value)
+const isLNameDirty = computed(() => lName.value !== originalLName.value)
 
 function updateProfile() {
   submitting.value = true
   error.value = undefined
 
   const payload: Record<string, any> = {}
+
+  if (isFNameDirty.value) {
+    payload.fname = fName.value
+  }
+
+  if (isLNameDirty.value) {
+    payload.lname = lName.value
+  }
 
   if (isEmailDirty.value) {
     payload.email = email.value
@@ -89,7 +103,7 @@ function updateProfile() {
   }
 
   if (Object.keys(payload).length === 0) {
-    console.log("nothing to send to server: ", payload)
+    console.log("nothing to send to server")
     submitting.value = false
     return
   }
@@ -103,13 +117,6 @@ function updateProfile() {
 <style scoped>
 .login-form {
   max-width: 500px;
-}
-
-.text-link {
-  font-weight: bold;
-}
-.text-link:hover {
-  color: rgb(141, 141, 255);
 }
 </style>
 

@@ -44,6 +44,26 @@ export const useUsersStore = defineStore('users', () => {
         return response;
     }
 
+    async function createUser(userData: { email: string; firstName: string; lastName: string }) {
+        const response = await api({
+            url: "v1/user",
+            method: "POST",
+            json: userData,
+        });
+
+        return response;
+    }
+
+    async function logInAPI(userData: { email: string; password: string }) {
+        const response = await api({
+            url: "login",
+            method: "POST",
+            json: userData,
+        });
+
+        return response;
+    }
+
     async function logOut() {
         const response = await api({
             url: "v1/logout",
@@ -83,6 +103,15 @@ export const useUsersStore = defineStore('users', () => {
     return response;
     }
 
+    async function getUsers() {
+        const response = await api({
+            url: "v1/users",
+            method: "GET",
+        });
+
+    return response;
+    }
+
     async function pullMe() {
         userData.value.loading = true;
         // TODO: Update url based on API endpoint
@@ -116,6 +145,8 @@ export const useUsersStore = defineStore('users', () => {
 
     return {
         userData,
+        getUsers,
+        createUser,
         loggedIn,
         token,
         logIn,

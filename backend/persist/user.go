@@ -17,12 +17,12 @@ type User struct {
 	LastName  string         `gorm:"nullable" json:"lastName"`
 	Password  string         `gorm:"not null" json:"-"` // omit password from json output
 	CanLogin  bool           `gorm:"not null" json:"canLogin"`
+	IsAdmin   bool           `gorm:"not null;default:false" json:"isAdmin"`
 	CreatedAt time.Time      `json:"createdAt"`
 	UpdatedAt time.Time      `json:"updatedAt"`
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"deletedAt"`
 }
 
-// CreateFile creates a new file record in the database.
 func (p *Persist) GetUserByIdStr(idStr string) (User, error) {
 	var u User
 
@@ -32,6 +32,17 @@ func (p *Persist) GetUserByIdStr(idStr string) (User, error) {
 	}
 
 	return p.GetUserById(id)
+}
+
+func (p *Persist) GetUsers() ([]User, error) {
+	var users []User
+
+	result := p.db.Find(&users)
+	if result.Error != nil {
+		return users, result.Error
+	}
+
+	return users, nil
 }
 
 func (p *Persist) GetUserById(id int) (User, error) {
@@ -56,6 +67,7 @@ func (p *Persist) UpsertRootUser() error {
 		Email:     shared.GetEnv("ROOT_USER_EMAIL", "root@gmail.com"),
 		Password:  shared.GetEnv("ROOT_USER_PASSWORD", "password"),
 		CanLogin:  true,
+		IsAdmin:   true,
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 		DeletedAt: gorm.DeletedAt{},
@@ -76,9 +88,11 @@ func (p *Persist) GetUserByEmail(email string) (User, error) {
 	return u, nil
 }
 
-func (p *Persist) CreateUser(email, password string) (User, error) {
+func (p *Persist) CreateUser(email, password, firstName, lastName string) (User, error) {
 	u := User{
 		Email:     email,
+		FirstName: firstName,
+		LastName:  lastName,
 		Password:  password,
 		CanLogin:  true,
 		CreatedAt: time.Now(),

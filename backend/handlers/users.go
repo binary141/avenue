@@ -107,8 +107,10 @@ func (s *Server) Logout(c *gin.Context) {
 }
 
 type RegisterRequest struct {
-	Password string `json:"password" validate:"required,min=4,max=64"`
-	Email    string `json:"email" validate:"required,min=4,max=512"`
+	Password  string `json:"password" validate:"required,min=4,max=64"`
+	FirstName string `json:"firstName" validate:"optional,min=1,max=64"`
+	LastName  string `json:"lastName" validate:"optional,min=1,max=64"`
+	Email     string `json:"email" validate:"required,min=4,max=512"`
 }
 
 func (s *Server) Register(c *gin.Context) {
@@ -142,7 +144,7 @@ func (s *Server) Register(c *gin.Context) {
 		return
 	}
 
-	u, err := s.persist.CreateUser(req.Email, req.Password)
+	u, err := s.persist.CreateUser(req.Email, req.Password, req.FirstName, req.LastName)
 	if err != nil {
 		log.Print(err)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{
@@ -152,6 +154,99 @@ func (s *Server) Register(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusCreated, u)
+}
+
+type CreateUserRequest struct {
+	Email     string `json:"email"`
+	Password  string `json:"password"`
+	FirstName string `json:"firstName"`
+	LastName  string `json:"lastName"`
+}
+
+func (s *Server) CreateUser(c *gin.Context) {
+	ctx := c.Request.Context()
+	userId, err := shared.GetUserIdFromContext(ctx)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, Response{
+			Error: fmt.Sprintf("User Id not found: %s", err.Error()),
+		})
+		return
+	}
+
+	u, err := s.persist.GetUserByIdStr(userId)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{
+			Error: err.Error(),
+		})
+		return
+	}
+
+	if !u.IsAdmin {
+		c.AbortWithStatusJSON(http.StatusUnauthorized, Response{})
+		return
+	}
+
+	var req CreateUserRequest
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		log.Print(err)
+		c.Status(http.StatusBadRequest)
+		return
+	}
+
+	_, err = s.persist.CreateUser(req.Email, req.Password, req.FirstName, req.LastName)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{
+			Error: err.Error(),
+		})
+		return
+	}
+
+	// todo allow pagination
+	us, err := s.persist.GetUsers()
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{
+			Error: err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, us)
+}
+
+func (s *Server) GetUsers(c *gin.Context) {
+	ctx := c.Request.Context()
+	userId, err := shared.GetUserIdFromContext(ctx)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, Response{
+			Error: fmt.Sprintf("User Id not found: %s", err.Error()),
+		})
+		return
+	}
+
+	u, err := s.persist.GetUserByIdStr(userId)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{
+			Error: err.Error(),
+		})
+		return
+	}
+
+	if !u.IsAdmin {
+		c.AbortWithStatusJSON(http.StatusUnauthorized, Response{})
+		return
+	}
+
+	// todo allow pagination
+	us, err := s.persist.GetUsers()
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{
+			Error: err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, us)
 }
 
 func (s *Server) GetProfile(c *gin.Context) {

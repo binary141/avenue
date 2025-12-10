@@ -38,6 +38,11 @@ const router = createRouter({
             name: 'profile',
             component: () => import('@/views/ProfilePage.vue'),
         },
+        {
+            path: '/admin',
+            name: 'admin',
+            component: () => import('@/views/AdminPage.vue'),
+        },
     ],
     scrollBehavior(to, from, savedPosition) {
         if (savedPosition && scrollPositions[to.path] !== undefined) {

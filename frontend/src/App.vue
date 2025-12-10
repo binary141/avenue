@@ -24,6 +24,10 @@
             class="absolute right-0 mt-2 w-40 bg-white shadow-lg rounded-xl p-2 flex flex-col z-50"
           >
             <button class="text-left px-3 py-2 hover:bg-gray-100 rounded-lg text-black"
+                    @click="goToAdmin">
+              Admin
+            </button>
+            <button class="text-left px-3 py-2 hover:bg-gray-100 rounded-lg text-black"
                     @click="goToProfile">
               Profile Settings
             </button>
@@ -75,6 +79,11 @@ onMounted(() => {
 
 function home() {
   router.push("/")
+  showMenu.value = false
+}
+
+function goToAdmin() {
+  router.push("/admin")
   showMenu.value = false
 }
 

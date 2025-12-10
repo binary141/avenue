@@ -1,57 +1,75 @@
 <template>
   <div class="page gap-5">
-    <h1>Admin</h1>
+    <div class="flex items-center justify-between mb-4 w-full">
+      <h1 class="text-center flex-1 text-2xl font-bold">Admin</h1>
 
-   <button @click="show = true" class="px-4 py-2 bg-blue-600 text-white rounded">
-      Create User
-    </button>
+      <AppButton
+        @click="show = true"
+        class="px-4 py-2 bg-blue-600 text-white rounded"
+      >
+        Create User
+      </AppButton>
+    </div>
+
 
     <div
       v-if="show"
-      class="fixed inset-0 bg-black/50 flex items-center justify-center"
+      class="fixed inset-0 flex items-center justify-center"
     >
-      <div class="bg-white p-6 rounded-lg shadow-xl w-96">
-        <h2 class="text-lg font-semibold mb-4">Create User</h2>
+      <div class="bg-white p-6 rounded-lg w-96">
+        <h2 class="text-lg font-semibold mb-4 text-gray-700 ">Create User</h2>
 
         <!-- your form -->
-        <form @submit.prevent="submitForm" class="space-y-4 w-80">
+        <form
+          @submit.prevent="submitForm"
+          class="space-y-4 w-80 bg-white text-gray-700 p-6 rounded-lg shadow"
+        >
           <div>
-            <label class="block text-sm font-medium mb-1">First Name</label>
+            <label class="block text-sm font-medium mb-1 text-gray-600">First Name</label>
             <input
               v-model="firstName"
               type="text"
-              class="w-full border border-gray-300 rounded px-3 py-2"
+              class="w-full border border-gray-300 rounded px-3 py-2 text-gray-700 bg-white"
             />
           </div>
 
           <div>
-            <label class="block text-sm font-medium mb-1">Last Name</label>
+            <label class="block text-sm font-medium mb-1 text-gray-600">Last Name</label>
             <input
               v-model="lastName"
               type="text"
-              class="w-full border border-gray-300 rounded px-3 py-2"
+              class="w-full border border-gray-300 rounded px-3 py-2 text-gray-700 bg-white"
             />
           </div>
 
           <div>
-            <label class="block text-sm font-medium mb-1">Email</label>
+            <label class="block text-sm font-medium mb-1 text-gray-600">Email</label>
             <input
               v-model="email"
               type="email"
-              class="w-full border border-gray-300 rounded px-3 py-2"
+              class="w-full border border-gray-300 rounded px-3 py-2 text-gray-700 bg-white"
               required
             />
           </div>
 
           <div class="flex justify-end gap-3 mt-6">
-            <AppButton @click="show = false" class="px-3 py-2 bg-gray-200 rounded">
+            <AppButton
+              @click="show = false"
+              class="px-3 py-2 bg-gray-200 text-gray-700 rounded"
+            >
               Cancel
             </AppButton>
-            <AppButton type='submit' @click="createUser" class="px-3 py-2 bg-blue-600 text-white rounded">
+
+            <AppButton
+              type="submit"
+              @click="createUser"
+              class="px-3 py-2 bg-blue-600 text-white rounded"
+            >
               Save
             </AppButton>
           </div>
         </form>
+
 
       </div>
     </div>

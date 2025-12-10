@@ -1,10 +1,11 @@
 package handlers
 
 import (
-	"avenue/backend/persist"
-	"avenue/backend/shared"
 	"net/http"
 	"strconv"
+
+	"avenue/backend/persist"
+	"avenue/backend/shared"
 
 	"github.com/gin-gonic/gin"
 )
@@ -48,13 +49,16 @@ func (s *Server) CreateFolder(c *gin.Context) {
 		})
 		return
 	}
-	_, err = s.persist.GetFolder(req.Parent)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, Response{
-			Message: "parent folder must exist",
-			Error:   err.Error(),
-		})
-		return
+
+	if req.Parent != "" {
+		_, err = s.persist.GetFolder(req.Parent)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, Response{
+				Message: "parent folder must exist",
+				Error:   err.Error(),
+			})
+			return
+		}
 	}
 
 	_, err = s.persist.CreateFolder(&persist.Folder{

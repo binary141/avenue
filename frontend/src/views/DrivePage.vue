@@ -1,6 +1,59 @@
 <template>
   <div class="page gap-5">
-    <h1>Drive</h1>
+    <div class="flex items-center justify-between mb-4 w-full">
+      <h1 class="text-center flex-1 text-2xl font-bold">Drive</h1>
+
+      <AppButton
+        @click="show = true"
+        class="px-4 py-2 bg-blue-600 text-white rounded"
+      >
+        Create Folder
+      </AppButton>
+    </div>
+
+    <!-- create folder dialog -->
+    <div
+      v-if="show"
+      class="fixed inset-0 flex items-center justify-center"
+    >
+      <div class="bg-white p-6 rounded-lg w-96">
+        <h2 class="text-lg font-semibold mb-4 text-gray-700 ">Create Folder</h2>
+
+        <form
+          @submit.prevent="submitForm"
+          class="space-y-4 w-80 bg-white text-gray-700 p-6 rounded-lg shadow"
+        >
+          <div>
+            <label class="block text-sm font-medium mb-1 text-gray-600">Folder Name</label>
+            <input
+              v-model="folderName"
+              type="text"
+              class="w-full border border-gray-300 rounded px-3 py-2 text-gray-700 bg-white"
+            />
+          </div>
+
+          <div class="flex justify-end gap-3 mt-6">
+            <AppButton
+              @click="show = false"
+              class="px-3 py-2 bg-gray-200 text-gray-700 rounded"
+            >
+              Cancel
+            </AppButton>
+
+            <AppButton
+              type="submit"
+              @click="createFolder"
+              class="px-3 py-2 bg-blue-600 text-white rounded"
+            >
+              Create
+            </AppButton>
+          </div>
+        </form>
+
+
+      </div>
+    </div>
+
     <FileUploader :parent="currentFolderId" @upload="handleFileUpload" @error="handleUploadError"
     multiple=true maxSize=10000 />
 
@@ -103,12 +156,33 @@ const loading = ref(false);
 const error = ref<string | undefined>();
 const folders = ref<Folder[]>([]);
 const files = ref<File[]>([]);
+const show = ref<boolean>(false);
 const currentFolderId = ref<string>('');
 const usersStore = useUsersStore();
 
 // ----- Modal State -----
-const editingFile = ref<File | null>(null)
-const newFileName = ref('')
+const editingFile = ref<File | null>(null);
+const newFileName = ref('');
+
+const folderName = ref('');
+
+async function createFolder() {
+  let folderId = currentFolderId.value
+
+  await api({
+    url: "v1/folder",
+    method: "POST",
+    json: {
+      name: folderName.value,
+      parent: folderId,
+    }
+  });
+
+  refreshCurrentList();
+
+  folderName.value = '';
+  show.value = false;
+}
 
 function getDownloadURL(fileId: string): string {
   let baseURL = import.meta.env.VITE_APP_API_URL

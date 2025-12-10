@@ -70,6 +70,7 @@ func (s *Server) authorize(email, password string) (persist.User, error) {
 		return user, err
 	}
 
+	// todo make this more smart
 	if user.Password != password {
 		return user, errors.New("Password incorrect")
 	}
@@ -197,6 +198,13 @@ func (s *Server) CreateUser(c *gin.Context) {
 	if err := c.ShouldBindJSON(&req); err != nil {
 		log.Print(err)
 		c.Status(http.StatusBadRequest)
+		return
+	}
+
+	if !s.persist.IsUniqueEmail(req.Email) {
+		c.AbortWithStatusJSON(http.StatusConflict, Response{
+			Error: "Email already exists",
+		})
 		return
 	}
 

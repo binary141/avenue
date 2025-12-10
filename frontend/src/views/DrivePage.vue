@@ -72,6 +72,7 @@
           <div
             v-for="folder in folders"
             :key="folder.folder_id"
+            @click="changeFolder(folder.folder_id)"
             class="folder-item card flex flex-row align-center gap-3 p-3"
           >
             <span class="folder-icon">📁</span>
@@ -143,7 +144,7 @@
 <script setup lang="ts">
 import AppButton from './components/AppButton.vue'
 import { ref, onMounted } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import api from '@/utils/api';
 import type { Folder, File, FolderContents } from '@/types/folder';
 import SpinnerView from './components/SpinnerView.vue';
@@ -152,6 +153,7 @@ import FileUploader from '@/components/FileUploader.vue';
 import { useUsersStore } from '../stores/users';
 
 const route = useRoute();
+const router = useRouter()
 const loading = ref(false);
 const error = ref<string | undefined>();
 const folders = ref<Folder[]>([]);
@@ -182,6 +184,12 @@ async function createFolder() {
 
   folderName.value = '';
   show.value = false;
+}
+
+function changeFolder(folderId: string) {
+  currentFolderId.value = folderId
+
+  refreshCurrentList();
 }
 
 function getDownloadURL(fileId: string): string {
@@ -296,9 +304,14 @@ function handleUploadError(message: string) {
 }
 
 function refreshCurrentList() {
-  const folderId = (route.params.folderId as string) || (route.query.folderId as string) || ''
-  currentFolderId.value = folderId
-  loadFolderContents(folderId)
+  // if we have a folderid in a redirect somewhere, then we need to override our current state
+  let folderId = (route.params.folderId as string) || (route.query.folderId as string) || ''
+
+  if (currentFolderId.value == '') {
+    currentFolderId.value = folderId
+  }
+
+  loadFolderContents(currentFolderId.value)
 }
 
 onMounted(() => {

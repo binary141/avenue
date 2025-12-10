@@ -83,8 +83,11 @@ function goToProfile() {
   showMenu.value = false
 }
 
-function logout() {
-  // your logout logic
+async function logout() {
+  const response = await usersStore.logOut();
+
+  router.push("/login")
+  showMenu.value = false
 }
 
 async function getUserAndLogin() {

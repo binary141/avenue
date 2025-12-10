@@ -127,7 +127,7 @@ func (s *Server) sessionCheck(c *gin.Context) {
 	// Add a new value to the context
 	newCtx := context.WithValue(rc, shared.USERCOOKIENAME, session.UserId)
 	// put the session data into the context
-	newCtx = context.WithValue(newCtx, shared.SESSIONCOOKIENAME, h)
+	newCtx = context.WithValue(newCtx, shared.SESSIONCOOKIENAME, parts[1])
 
 	// Update the request with the new context
 	c.Request = c.Request.WithContext(newCtx)

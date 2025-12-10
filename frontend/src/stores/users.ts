@@ -45,10 +45,21 @@ export const useUsersStore = defineStore('users', () => {
     }
 
     async function logOut() {
-        // TODO: Implement logout logic
+        const response = await api({
+            url: "v1/logout",
+            method: "POST",
+        });
+
+        if (!response.ok) {
+          console.log("error logging out: ", response)
+          return
+        }
+
         loggedIn.value = false;
         userData.value.data = structuredClone(userDataDefault);
         setToken(null);
+
+        return response;
     }
 
     async function signUp(userData: {email: string; password:string }) {
@@ -96,7 +107,7 @@ export const useUsersStore = defineStore('users', () => {
         } else {
             userData.value.error = response.body;
         }
-        
+
         return response;
     }
     async function updatePassword(password: string) {

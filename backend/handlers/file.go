@@ -117,6 +117,7 @@ func (s *Server) Upload(c *gin.Context) {
 		Extension: ext,
 		MimeType:  contentType,
 		Parent:    parent,
+		CreatedBy: userID,
 	})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, Response{
@@ -130,7 +131,7 @@ func (s *Server) Upload(c *gin.Context) {
 	dstPath := fmt.Sprintf("/%s/%s", userID, fileID)
 	dst, err := s.fs.Create(dstPath)
 	if err != nil {
-		deleteErr := s.persist.DeleteFile(fileID)
+		deleteErr := s.persist.DeleteFile(fileID, userID)
 		if deleteErr != nil {
 			c.JSON(http.StatusInternalServerError, Response{
 				Message: "could not delete file in db",
@@ -180,7 +181,18 @@ func (s *Server) Upload(c *gin.Context) {
 }
 
 func (s *Server) ListFiles(c *gin.Context) {
-	files, err := s.persist.ListFiles()
+	userID, err := shared.GetUserIDFromContext(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Message: "could not get user id",
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	fmt.Println("HELLO")
+
+	files, err := s.persist.ListFiles(userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, Response{
 			Message: "could not list files",
@@ -307,7 +319,7 @@ func (s *Server) DeleteFile(c *gin.Context) {
 		})
 		return
 	}
-	f, err := s.persist.GetFileByID(c.Param("fileID"))
+	f, err := s.persist.GetFileByID(c.Param("fileID"), userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, Response{
 			Message: "error getting file",
@@ -328,7 +340,7 @@ func (s *Server) DeleteFile(c *gin.Context) {
 		}
 	}
 
-	if err = s.persist.DeleteFile(c.Param("fileID")); err != nil {
+	if err = s.persist.DeleteFile(c.Param("fileID"), userID); err != nil {
 		c.JSON(http.StatusInternalServerError, Response{
 			Message: "error deleting file from db",
 			Error:   err.Error(),

@@ -14,7 +14,6 @@ type Session struct {
 	UserId    uint   `gorm:"not null" json:"userID"`
 }
 
-// CreateFile creates a new file record in the database.
 func (p *Persist) GetSessionByID(idStr string) (Session, error) {
 	var s Session
 	err := p.db.Where("session_id = ?", idStr).First(&s).Error

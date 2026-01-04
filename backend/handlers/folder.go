@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"net/http"
-	"strconv"
 
 	"avenue/backend/persist"
 	"avenue/backend/shared"
@@ -42,14 +41,6 @@ func (s *Server) CreateFolder(c *gin.Context) {
 		})
 		return
 	}
-	uid, err := strconv.Atoi(userID)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, Response{
-			Message: "user id not an int",
-			Error:   err.Error(),
-		})
-		return
-	}
 
 	if req.Parent != "" {
 		_, err = s.persist.GetFolder(req.Parent)
@@ -64,7 +55,7 @@ func (s *Server) CreateFolder(c *gin.Context) {
 
 	_, err = s.persist.CreateFolder(&persist.Folder{
 		Name:    req.Name,
-		OwnerId: uid,
+		OwnerID: userID,
 		Parent:  req.Parent,
 	})
 	if err != nil {
@@ -78,8 +69,17 @@ func (s *Server) CreateFolder(c *gin.Context) {
 }
 
 func (s *Server) ListFolderContents(c *gin.Context) {
+	userID, err := shared.GetUserIDFromContext(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Message: "could not get user id",
+			Error:   err.Error(),
+		})
+		return
+	}
+
 	folderID := c.Param("folderID")
-	folds, err := s.persist.ListChildFolder(folderID)
+	folds, err := s.persist.ListChildFolder(folderID, userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, Response{
 			Message: "Internal server error",
@@ -87,7 +87,7 @@ func (s *Server) ListFolderContents(c *gin.Context) {
 		})
 		return
 	}
-	files, err := s.persist.ListChildFile(folderID)
+	files, err := s.persist.ListChildFile(folderID, userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, Response{
 			Message: "Internal server error",

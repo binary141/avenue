@@ -13,6 +13,7 @@ type File struct {
 	MimeType  string    `gorm:"not null" json:"mimeType"`
 	FileSize  int       `gorm:"column:file_size" json:"file_size"`
 	Parent    string    `json:"parent"`
+	CreatedBy string    `gorm:"column:created_by;type:bigint" json:"created_by"`
 	CreatedAt time.Time `json:"created_at"`
 	DeletedAt time.Time `json:"deleted_at"`
 }
@@ -25,37 +26,34 @@ func (p *Persist) CreateFile(file *File) (string, error) {
 	return file.ID, p.db.Create(file).Error
 }
 
-// GetFileByID retrieves a file by its ID.
-func (p *Persist) GetFileByID(id string) (*File, error) {
+func (p *Persist) GetFileByID(id string, creatorID string) (*File, error) {
 	var file File
-	err := p.db.Where("id = ?", id).First(&file).Error
+	err := p.db.Where("id = ?", id).Where("created_by = ?", creatorID).First(&file).Error
 	if err != nil {
 		return nil, err
 	}
 	return &file, nil
 }
 
-// GetAllFiles retrieves all files from the database.
-func (p *Persist) ListFiles() ([]File, error) {
+func (p *Persist) ListFiles(creatorID string) ([]File, error) {
 	var files []File
-	err := p.db.Find(&files).Error
+	err := p.db.Where("created_by = ?", creatorID).Find(&files).Error
 	return files, err
 }
 
-// DeleteFile deletes a file by its ID.
-func (p *Persist) DeleteFile(id string) error {
-	return p.db.Where("id = ?", id).Delete(&File{}).Error
+func (p *Persist) DeleteFile(id string, creatorID string) error {
+	return p.db.Where("id = ?", id).Where("created_by = ?", creatorID).Delete(&File{}).Error
 }
 
-func (p *Persist) ListChildFile(parentId string) ([]File, error) {
+func (p *Persist) ListChildFile(parentID string, creatorID string) ([]File, error) {
 	var f []File
 	db := p.db
-	if parentId != "-1" {
-		db = db.Where("parent = ?", parentId)
+	if parentID != "-1" {
+		db = db.Where("parent = ?", parentID)
 	} else {
 		db = db.Where("parent = ''")
 	}
-	err := db.Find(&f).Error
+	err := db.Where("created_by = ?", creatorID).Find(&f).Error
 	return f, err
 }
 

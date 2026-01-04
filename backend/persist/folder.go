@@ -6,7 +6,7 @@ type Folder struct {
 	FolderID string `gorm:"primaryKey, type:uuid, column:folder_id" json:"folder_id"`
 	Name     string `gorm:"not null" json:"name"`
 	Parent   string `json:"parent"`
-	OwnerId  int    `gorm:"not null, column:owner_id" json:"owner_id"`
+	OwnerID  string `gorm:"not null, column:owner_id;type:bigint" json:"owner_id"`
 }
 
 func (p *Persist) CreateFolder(f *Folder) (string, error) {
@@ -25,14 +25,14 @@ func (p *Persist) GetFolder(id string) (*Folder, error) {
 	return &f, nil
 }
 
-func (p *Persist) ListChildFolder(parentId string) ([]Folder, error) {
+func (p *Persist) ListChildFolder(parentID string, ownerID string) ([]Folder, error) {
 	var f []Folder
 	db := p.db
-	if parentId != "-1" {
-		db = db.Where("parent = ?", parentId)
+	if parentID != "-1" {
+		db = db.Where("parent = ?", parentID)
 	} else {
 		db = db.Where("parent = ''")
 	}
-	err := db.Find(&f).Error
+	err := db.Where("owner_id = ?", ownerID).Find(&f).Error
 	return f, err
 }

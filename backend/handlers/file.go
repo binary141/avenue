@@ -32,13 +32,33 @@ type Response struct {
 func (s *Server) Upload(c *gin.Context) {
 	// TODO: stream file uploads
 	// TODO: file size
-	userId, err := shared.GetUserIdFromContext(c.Request.Context())
+	userID, err := shared.GetUserIDFromContext(c.Request.Context())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, Response{
 			Message: "could not get user id",
 			Error:   err.Error(),
 		})
 		return
+	}
+
+	// Ensure user directory exists
+	exists, err := afero.DirExists(s.fs, fmt.Sprintf("/%s", userID))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Message: "error checking user directory",
+			Error:   err.Error(),
+		})
+		return
+	}
+	if !exists {
+		err := s.fs.Mkdir(fmt.Sprintf("/%s", userID), os.ModePerm)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, Response{
+				Message: "error could not make dir",
+				Error:   err.Error(),
+			})
+			return
+		}
 	}
 
 	// Get uploaded file from multipart form
@@ -92,7 +112,7 @@ func (s *Server) Upload(c *gin.Context) {
 	contentType := http.DetectContentType(extBuffer)
 
 	// Create file record in database
-	fileId, err := s.persist.CreateFile(&persist.File{
+	fileID, err := s.persist.CreateFile(&persist.File{
 		Name:      filename,
 		Extension: ext,
 		MimeType:  contentType,
@@ -106,37 +126,31 @@ func (s *Server) Upload(c *gin.Context) {
 		return
 	}
 
-	// Ensure user directory exists
-	exists, err := afero.DirExists(s.fs, fmt.Sprintf("/%s", userId))
+	// Create destination file
+	dstPath := fmt.Sprintf("/%s/%s", userID, fileID)
+	dst, err := s.fs.Create(dstPath)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, Response{
-			Message: "error checking user directory",
-			Error:   err.Error(),
-		})
-		return
-	}
-	if !exists {
-		err := s.fs.Mkdir(fmt.Sprintf("/%s", userId), os.ModePerm)
-		if err != nil {
+		deleteErr := s.persist.DeleteFile(fileID)
+		if deleteErr != nil {
 			c.JSON(http.StatusInternalServerError, Response{
-				Message: "error could not make dir",
+				Message: "could not delete file in db",
 				Error:   err.Error(),
 			})
 			return
 		}
-	}
 
-	// Create destination file
-	dstPath := fmt.Sprintf("/%s/%s", userId, fileId)
-	dst, err := s.fs.Create(dstPath)
-	if err != nil {
 		c.JSON(http.StatusInternalServerError, Response{
 			Message: "could not create file",
 			Error:   err.Error(),
 		})
 		return
 	}
-	defer dst.Close()
+	defer func() {
+		err := dst.Close()
+		if err != nil {
+			log.Println(err.Error())
+		}
+	}()
 
 	// Copy file data
 	size, err := io.Copy(dst, src)
@@ -150,10 +164,11 @@ func (s *Server) Upload(c *gin.Context) {
 
 	// Update file size in database
 	err = s.persist.UpdateFile(persist.File{
-		ID:       fileId,
+		ID:       fileID,
 		FileSize: int(size),
 	}, []string{"file_size"})
 	if err != nil {
+		// what do we want to do if we cannot update the filesize?
 		c.JSON(http.StatusInternalServerError, Response{
 			Message: "could not update file size",
 			Error:   err.Error(),
@@ -217,7 +232,7 @@ func (s *Server) UpdateFileName(c *gin.Context) {
 }
 
 func (s *Server) GetFile(c *gin.Context) {
-	userId, err := shared.GetUserIdFromContext(c.Request.Context())
+	userID, err := shared.GetUserIDFromContext(c.Request.Context())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, Response{
 			Message: "could not get user id",
@@ -243,7 +258,7 @@ func (s *Server) GetFile(c *gin.Context) {
 		return
 	}
 
-	path := fmt.Sprintf("/%s/%s", userId, file.ID)
+	path := fmt.Sprintf("/%s/%s", userID, file.ID)
 	fileData, err := s.fs.Open(path)
 	if err != nil {
 		if errors.Is(err, afero.ErrFileNotFound) {
@@ -260,7 +275,9 @@ func (s *Server) GetFile(c *gin.Context) {
 		})
 		return
 	}
-	defer fileData.Close()
+	defer func() {
+		_ = fileData.Close()
+	}()
 
 	// ----- Streaming Download Headers -----
 	c.Header("Content-Type", "application/octet-stream")
@@ -280,8 +297,9 @@ func (s *Server) GetFile(c *gin.Context) {
 }
 
 // todo only let users delete files they have access to
+
 func (s *Server) DeleteFile(c *gin.Context) {
-	userId, err := shared.GetUserIdFromContext(c.Request.Context())
+	userID, err := shared.GetUserIDFromContext(c.Request.Context())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, Response{
 			Message: "could not get user id",
@@ -298,7 +316,7 @@ func (s *Server) DeleteFile(c *gin.Context) {
 		return
 	}
 
-	if err = s.fs.Remove(fmt.Sprintf("/%s/%s", userId, f.ID)); err != nil {
+	if err = s.fs.Remove(fmt.Sprintf("/%s/%s", userID, f.ID)); err != nil {
 		// only error if the file was found
 		// if the file wasn't found, we still want to delete from the system
 		if !errors.Is(err, afero.ErrFileNotFound) {

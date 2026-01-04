@@ -19,13 +19,14 @@ import (
 // folder will know its parent
 // top level folders will have a parent of null
 // files can be top level
+
 type CreateFolderReq struct {
 	Name   string `json:"name" binding:"required"`
 	Parent string `json:"parent"`
 }
 
 func (s *Server) CreateFolder(c *gin.Context) {
-	userId, err := shared.GetUserIdFromContext(c.Request.Context())
+	userID, err := shared.GetUserIDFromContext(c.Request.Context())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, Response{
 			Message: "could not get user id",
@@ -41,7 +42,7 @@ func (s *Server) CreateFolder(c *gin.Context) {
 		})
 		return
 	}
-	uid, err := strconv.Atoi(userId)
+	uid, err := strconv.Atoi(userID)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, Response{
 			Message: "user id not an int",

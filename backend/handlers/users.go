@@ -172,15 +172,15 @@ type CreateUserRequest struct {
 
 func (s *Server) CreateUser(c *gin.Context) {
 	ctx := c.Request.Context()
-	userId, err := shared.GetUserIdFromContext(ctx)
+	userID, err := shared.GetUserIDFromContext(ctx)
 	if err != nil {
-		c.AbortWithStatusJSON(http.StatusBadRequest, Response{
+		c.AbortWithStatusJSON(http.StatusForbidden, Response{
 			Error: fmt.Sprintf("User Id not found: %s", err.Error()),
 		})
 		return
 	}
 
-	u, err := s.persist.GetUserByIdStr(userId)
+	u, err := s.persist.GetUserByIdStr(userID)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{
 			Error: err.Error(),
@@ -198,6 +198,14 @@ func (s *Server) CreateUser(c *gin.Context) {
 	if err := c.ShouldBindJSON(&req); err != nil {
 		log.Print(err)
 		c.Status(http.StatusBadRequest)
+		return
+	}
+
+	if err := validate.Struct(req); err != nil {
+		log.Print(err)
+		c.AbortWithStatusJSON(http.StatusBadRequest, Response{
+			Error: err.Error(),
+		})
 		return
 	}
 
@@ -230,7 +238,7 @@ func (s *Server) CreateUser(c *gin.Context) {
 
 func (s *Server) GetUsers(c *gin.Context) {
 	ctx := c.Request.Context()
-	userId, err := shared.GetUserIdFromContext(ctx)
+	userID, err := shared.GetUserIDFromContext(ctx)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, Response{
 			Error: fmt.Sprintf("User Id not found: %s", err.Error()),
@@ -238,7 +246,7 @@ func (s *Server) GetUsers(c *gin.Context) {
 		return
 	}
 
-	u, err := s.persist.GetUserByIdStr(userId)
+	u, err := s.persist.GetUserByIdStr(userID)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{
 			Error: err.Error(),
@@ -265,7 +273,7 @@ func (s *Server) GetUsers(c *gin.Context) {
 
 func (s *Server) GetProfile(c *gin.Context) {
 	ctx := c.Request.Context()
-	userId, err := shared.GetUserIdFromContext(ctx)
+	userID, err := shared.GetUserIDFromContext(ctx)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, Response{
 			Error: fmt.Sprintf("User Id not found: %s", err.Error()),
@@ -273,7 +281,7 @@ func (s *Server) GetProfile(c *gin.Context) {
 		return
 	}
 
-	u, err := s.persist.GetUserByIdStr(userId)
+	u, err := s.persist.GetUserByIdStr(userID)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{
 			Error: err.Error(),
@@ -290,7 +298,7 @@ type UpdateProfileRequest struct {
 
 func (s *Server) UpdateProfile(c *gin.Context) {
 	ctx := c.Request.Context()
-	userId, err := shared.GetUserIdFromContext(ctx)
+	userID, err := shared.GetUserIDFromContext(ctx)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, Response{
 			Error: "User Id not found",
@@ -314,7 +322,7 @@ func (s *Server) UpdateProfile(c *gin.Context) {
 		return
 	}
 
-	u, err := s.persist.GetUserByIdStr(userId)
+	u, err := s.persist.GetUserByIdStr(userID)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{
 			Error: err.Error(),
@@ -350,7 +358,7 @@ type UpdatePasswordRequest struct {
 
 func (s *Server) UpdatePassword(c *gin.Context) {
 	ctx := c.Request.Context()
-	userId, err := shared.GetUserIdFromContext(ctx)
+	userID, err := shared.GetUserIDFromContext(ctx)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, Response{
 			Error: "User Id not found",
@@ -374,7 +382,7 @@ func (s *Server) UpdatePassword(c *gin.Context) {
 		return
 	}
 
-	u, err := s.persist.GetUserByIdStr(userId)
+	u, err := s.persist.GetUserByIdStr(userID)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{
 			Error: err.Error(),

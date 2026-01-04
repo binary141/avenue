@@ -28,11 +28,11 @@ func IsValidEmail(email string) bool {
 	return err == nil
 }
 
-func GetUserIdFromContext(ctx context.Context) (string, error) {
+func GetUserIDFromContext(ctx context.Context) (string, error) {
 	val := ctx.Value(USERCOOKIENAME)
 
 	if val == nil {
-		return "", fmt.Errorf("Unable to cast cookie val: '%v' to string", val)
+		return "", fmt.Errorf("unable to cast cookie val: '%v' to string", val)
 	}
 
 	return fmt.Sprint(val), nil

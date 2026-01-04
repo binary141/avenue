@@ -60,9 +60,9 @@ export const useUsersStore = defineStore('users', () => {
             method: "POST",
         });
 
-        if (!response.ok) {
+        if (!response.ok && response.status != 401) {
           console.log("error logging out: ", response)
-          return
+          return;
         }
 
         loggedIn.value = false;

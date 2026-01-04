@@ -23,7 +23,7 @@
             v-if="showMenu"
             class="absolute right-0 mt-2 w-40 bg-white shadow-lg rounded-xl p-2 flex flex-col z-50"
           >
-            <button class="text-left px-3 py-2 hover:bg-gray-100 rounded-lg text-black"
+            <button v-if="isAdmin" class="text-left px-3 py-2 hover:bg-gray-100 rounded-lg text-black"
                     @click="goToAdmin">
               Admin
             </button>
@@ -58,17 +58,29 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { onMounted, ref, watch } from 'vue';
 import AppButton from './views/components/AppButton.vue';
 import SpinnerView from './views/components/SpinnerView.vue';
 import { useUsersStore } from './stores/users';
 import { setGlobalRequestHeader } from './utils/api';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 
 const usersStore = useUsersStore();
 const status = ref<"loading" | "loaded" | "error">("loading");
-const showMenu = ref(false)
+const showMenu = ref(false);
+const isAdmin = ref(false);
 const router = useRouter();
+const route = useRoute();
+
+watch(
+  () => route.fullPath,
+  () => {
+    if (usersStore.token !== null) {
+      setGlobalRequestHeader("Authorization", `Token ${usersStore.token}`);
+    }
+    getUserAndLogin();
+  }
+)
 
 onMounted(() => {
   if (usersStore.token !== null) {
@@ -109,6 +121,13 @@ async function getUserAndLogin() {
     if (response.ok) {
       status.value = "loaded";
       usersStore.logIn(response.body);
+
+      let isAdminLocal = usersStore.userData.data.isAdmin;
+      console.log("Admin: ", isAdminLocal)
+      if (isAdminLocal !== undefined) {
+        isAdmin.value = isAdminLocal;
+        console.log("ADMIN: ", isAdmin.value)
+      }
     } else if (response.status == 401) {
       usersStore.logOut();
       status.value = "loaded";

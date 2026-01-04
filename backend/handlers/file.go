@@ -190,8 +190,6 @@ func (s *Server) ListFiles(c *gin.Context) {
 		return
 	}
 
-	fmt.Println("HELLO")
-
 	files, err := s.persist.ListFiles(userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, Response{
@@ -204,6 +202,15 @@ func (s *Server) ListFiles(c *gin.Context) {
 }
 
 func (s *Server) UpdateFileName(c *gin.Context) {
+	userID, err := shared.GetUserIDFromContext(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Message: "could not get user id",
+			Error:   err.Error(),
+		})
+		return
+	}
+
 	newName := c.Param("fileName")
 	if newName == "" {
 		c.JSON(http.StatusBadRequest, Response{
@@ -212,7 +219,7 @@ func (s *Server) UpdateFileName(c *gin.Context) {
 		return
 	}
 
-	file, err := s.persist.GetFileByID(c.Param("fileID"))
+	file, err := s.persist.GetFileByID(c.Param("fileID"), userID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			c.JSON(http.StatusNotFound, Response{
@@ -253,7 +260,7 @@ func (s *Server) GetFile(c *gin.Context) {
 		return
 	}
 
-	file, err := s.persist.GetFileByID(c.Param("fileID"))
+	file, err := s.persist.GetFileByID(c.Param("fileID"), userID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			c.JSON(http.StatusNotFound, Response{
@@ -307,8 +314,6 @@ func (s *Server) GetFile(c *gin.Context) {
 		return
 	}
 }
-
-// todo only let users delete files they have access to
 
 func (s *Server) DeleteFile(c *gin.Context) {
 	userID, err := shared.GetUserIDFromContext(c.Request.Context())

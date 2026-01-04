@@ -129,7 +129,7 @@ export const useUsersStore = defineStore('users', () => {
 
         return response;
     }
-    async function updatePassword(password: string) {
+    async function updatePassword() {
         // TODO: Implement password update logic
     }
 

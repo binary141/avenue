@@ -95,13 +95,6 @@ const confirmPassword = ref('')
 const showPassword = ref(false)
 const showConfirmPassword = ref(false)
 
-function handleSubmit() {
-  if (password.value !== confirmPassword.value) {
-    alert("Passwords do not match!")
-    return
-  }
-  alert(`Signed up with ${email.value}`)
-}
 </script>
 
 <style scoped>

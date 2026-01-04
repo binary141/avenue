@@ -15,7 +15,7 @@ type UrlParams = {
 interface HandlerParamsBase {
   url: string;
   method: Method;
-  json: any;
+  json: Json;
   params: UrlParams;
   headers: { [key: string]: string | undefined };
   options: { [key: string]: any };
@@ -171,7 +171,7 @@ export default async function api(
   };
 
   // add global headers if not assigned to something else
-  // eslint-disable-next-line array-callback-return
+
   Object.keys(GLOBAL_HEADERS)
     .filter((key) => !headers[key])
     .map((key) => {
@@ -194,7 +194,7 @@ export default async function api(
     init.body = JSON.stringify(json);
   }
 
-  // eslint-disable-next-line array-callback-return
+
   Object.keys(options)
     .filter((key) => !init[key])
     .map((key) => {
@@ -217,8 +217,6 @@ export default async function api(
   let response: Response;
 
   try {
-      console.log('url', urlToFetch)
-
     response = await fetch(urlToFetch, init);
   } catch (e) {
     return {
@@ -228,7 +226,7 @@ export default async function api(
     };
   }
 
-  let responseBody: any;
+  let responseBody: Blob;
 
   const contentType = response.headers.get("content-type");
   const contentDisposition = response.headers.get("content-disposition");
@@ -236,7 +234,9 @@ export default async function api(
   if (contentDisposition && contentDisposition.startsWith("attachment")) {
     try {
       responseBody = await response.blob();
-    } catch (e) {}
+    } catch (e) {
+      console.error(e)
+    }
 
     if (responseBody) {
       responseBody = {
@@ -248,7 +248,9 @@ export default async function api(
   } else {
     try {
       responseBody = await response.text();
-    } catch (e) {}
+    } catch (e) {
+      console.error(e)
+    }
 
     if (
       contentType &&
@@ -258,7 +260,7 @@ export default async function api(
       try {
         responseBody = JSON.parse(responseBody);
       } catch (ex) {
-        // pass
+        console.error(ex)
       }
     }
   }

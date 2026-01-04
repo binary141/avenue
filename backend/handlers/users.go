@@ -72,7 +72,7 @@ func (s *Server) authorize(email, password string) (persist.User, error) {
 
 	// todo make this more smart
 	if user.Password != password {
-		return user, errors.New("Password incorrect")
+		return user, errors.New("password incorrect")
 	}
 
 	return user, nil
@@ -82,7 +82,6 @@ func (s *Server) Logout(c *gin.Context) {
 	// expire the cookie
 	c.SetCookie(shared.USERCOOKIENAME, "", -1, "/", "localhost", false, true)
 
-	// TODO delete the session from map
 	ctx := c.Request.Context()
 
 	sessID := ctx.Value(shared.SESSIONCOOKIENAME)
@@ -98,17 +97,6 @@ func (s *Server) Logout(c *gin.Context) {
 		c.Status(http.StatusInternalServerError)
 		return
 	}
-
-	// v, ok := Sessions[sessIDStr]
-	// if !ok {
-	// 	c.Status(http.StatusBadRequest)
-	// 	return
-	// }
-
-	// v.IsValid = false
-	// v.ExpiresAt = time.Now()
-
-	// Sessions[sessIDStr] = v
 
 	c.JSON(http.StatusOK, Response{Message: "OK"})
 }

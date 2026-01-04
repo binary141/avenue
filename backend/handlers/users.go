@@ -115,8 +115,8 @@ func (s *Server) Logout(c *gin.Context) {
 
 type RegisterRequest struct {
 	Password  string `json:"password" validate:"required,min=4,max=64"`
-	FirstName string `json:"firstName" validate:"optional,min=1,max=64"`
-	LastName  string `json:"lastName" validate:"optional,min=1,max=64"`
+	FirstName string `json:"firstName" validate:"min=1,max=64"`
+	LastName  string `json:"lastName" validate:"min=1,max=64"`
 	Email     string `json:"email" validate:"required,min=4,max=512"`
 }
 
@@ -164,10 +164,10 @@ func (s *Server) Register(c *gin.Context) {
 }
 
 type CreateUserRequest struct {
-	Email     string `json:"email"`
-	Password  string `json:"password"`
-	FirstName string `json:"firstName"`
-	LastName  string `json:"lastName"`
+	Email     string `json:"email" validate:"required,min=4,max=512"`
+	Password  string `json:"password" validate:"required,min=4,max=64"`
+	FirstName string `json:"firstName" validate:"min=1,max=64"`
+	LastName  string `json:"lastName" validate:"min=1,max=64"`
 }
 
 func (s *Server) CreateUser(c *gin.Context) {

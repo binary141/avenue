@@ -19,7 +19,6 @@
       <div class="bg-white p-6 rounded-lg w-96">
         <h2 class="text-lg font-semibold mb-4 text-gray-700 ">Create User</h2>
 
-        <!-- your form -->
         <form
           @submit.prevent="submitForm"
           class="space-y-4 w-80 bg-white text-gray-700 p-6 rounded-lg shadow"
@@ -29,6 +28,7 @@
             <input
               v-model="firstName"
               type="text"
+              autocomplete="off"
               class="w-full border border-gray-300 rounded px-3 py-2 text-gray-700 bg-white"
             />
           </div>
@@ -38,6 +38,7 @@
             <input
               v-model="lastName"
               type="text"
+              autocomplete="off"
               class="w-full border border-gray-300 rounded px-3 py-2 text-gray-700 bg-white"
             />
           </div>
@@ -47,8 +48,19 @@
             <input
               v-model="email"
               type="email"
+              autocomplete="new-email"
               class="w-full border border-gray-300 rounded px-3 py-2 text-gray-700 bg-white"
               required
+            />
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium mb-1 text-gray-600">Password</label>
+            <input
+              v-model="password"
+              type="password"
+              autocomplete="new-password"
+              class="w-full border border-gray-300 rounded px-3 py-2 text-gray-700 bg-white"
             />
           </div>
 
@@ -119,6 +131,7 @@ const show = ref(false);
 const firstName = ref('');
 const lastName = ref('');
 const email = ref('');
+const password = ref('');
 
 async function createUser() {
   if (email.value == '') {
@@ -126,8 +139,14 @@ async function createUser() {
     return;
   }
 
+  if (password.value == '') {
+    console.log('password is empty');
+    return;
+  }
+
   const response = await usersStore.createUser({
     email: email.value,
+    password: password.value,
     firstName: firstName.value,
     lastName: lastName.value,
   });

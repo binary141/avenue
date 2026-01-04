@@ -95,15 +95,49 @@ func (s *Server) ListFolderContents(c *gin.Context) {
 		})
 		return
 	}
-	var x struct {
-		Files       []persist.File   `json:"files"`
-		Foleders    []persist.Folder `json:"folders"`
-		BreadCrumbs []string         `json:"breadcrumbs"`
+
+	type Breadcrumb struct {
+		Label    string `json:"label"`
+		FolderID string `json:"folder_id"`
 	}
 
-	x.Foleders = folds
+	var x struct {
+		Files       []persist.File   `json:"files"`
+		Folders     []persist.Folder `json:"folders"`
+		BreadCrumbs []Breadcrumb     `json:"breadcrumbs"`
+	}
+
+	folderParents, err := s.persist.ListFolderParents(folderID, userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Message: "Internal server error",
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	x.Folders = folds
 	x.Files = files
-	x.BreadCrumbs = []string{"test", "testing"}
+
+	for i, f := range folderParents {
+		// skip the first folder as that is the one that is being queried
+		if i == 0 {
+			continue
+		}
+
+		x.BreadCrumbs = append(x.BreadCrumbs, Breadcrumb{
+			Label:    f.Name,
+			FolderID: f.FolderID,
+		})
+	}
+
+	if folderID != shared.ROOTFOLDERID {
+		x.BreadCrumbs = append(x.BreadCrumbs, Breadcrumb{
+			Label:    "/",
+			FolderID: shared.ROOTFOLDERID,
+		})
+	}
+
 	c.JSON(http.StatusOK, x)
 }
 

@@ -11,6 +11,7 @@ const (
 	SESSIONCOOKIENAME = "session_id"
 	USERCOOKIENAME    = "user_id"
 	USERCOOKIEVALUE   = "test"
+	ROOTFOLDERID      = "c32af1cc-aba9-4878-a305-5006dc7a5b76"
 )
 
 func GetEnv(key string, defaultVal string) string {

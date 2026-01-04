@@ -39,7 +39,7 @@
         </div>
       </div>
 
-      <RouterView />
+      <RouterView @close-menu="showMenu = false"/>
     </div>
   </template>
 
@@ -79,7 +79,6 @@ onMounted(() => {
 
 function home() {
   router.push({ path: '/', query: { folderId: '' }})
-  console.log("Pushed home")
   showMenu.value = false
 }
 

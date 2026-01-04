@@ -4,7 +4,7 @@
       <h1 class="text-center flex-1 text-2xl font-bold">Drive</h1>
 
       <AppButton
-        @click="show = true"
+        @click="() => { show = true; $emit('close-menu')}"
         class="px-4 py-2 bg-blue-600 text-white rounded"
       >
         Create Folder
@@ -156,6 +156,7 @@ import FileUploader from '@/components/FileUploader.vue';
 import { useUsersStore } from '../stores/users';
 
 const route = useRoute();
+const emit = defineEmits(['close-menu']);
 const router = useRouter();
 const loading = ref(false);
 const error = ref<string | undefined>();
@@ -259,7 +260,7 @@ async function loadFolderContents(folderId: string = '') {
 
   try {
     const response = await api({
-      url: folderId ? `v1/folder/list/${folderId}` : `v1/folder/list/-1`,
+      url: `v1/folder/list/${folderId}`,
       method: 'GET'
     })
 
@@ -288,6 +289,7 @@ function handleUploadError(message: string) {
 }
 
 function refreshCurrentList() {
+  emit("close-menu")
   // if we have a folderid in a redirect somewhere, then we need to override our current state
   const folderId = (route.params.folderId as string) || (route.query.folderId as string) || ''
 

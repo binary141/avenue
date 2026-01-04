@@ -1,13 +1,22 @@
 <template>
-  <li v-for="x in props.breadcrumbs"><a :href=x>My Text</a></li>
+  <li v-for="breadcrumb in props.breadcrumbs">
+    <button @click="handleClick(breadcrumb)">{{ breadcrumb.label }}</button>
+  </li>
 </template>
 
 <script setup lang="ts">
 import type { PropType } from 'vue';
+import { useRouter } from 'vue-router';
+
+const router = useRouter();
 
 const props = defineProps({
 breadcrumbs: Array,
 })
+
+function handleClick(breadcrumb: string) {
+  router.push({ path: '/', query: { folderId: breadcrumb.folder_id }})
+}
 </script>
 
 <style scoped>

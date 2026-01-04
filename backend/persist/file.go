@@ -1,6 +1,7 @@
 package persist
 
 import (
+	"avenue/backend/shared"
 	"time"
 
 	"github.com/google/uuid"
@@ -48,7 +49,7 @@ func (p *Persist) DeleteFile(id string, creatorID string) error {
 func (p *Persist) ListChildFile(parentID string, creatorID string) ([]File, error) {
 	var f []File
 	db := p.db
-	if parentID != "-1" {
+	if parentID != shared.ROOTFOLDERID {
 		db = db.Where("parent = ?", parentID)
 	} else {
 		db = db.Where("parent = ''")

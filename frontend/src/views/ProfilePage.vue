@@ -43,11 +43,9 @@
 import { ref, computed } from 'vue'
 import AppButton from './components/AppButton.vue'
 import { useUsersStore } from '@/stores/users'
-import { useRouter } from 'vue-router'
 import ErrorMessage from './components/ErrorMessage.vue'
 
 const usersStore = useUsersStore()
-const router = useRouter()
 
 const originalEmail = ref(usersStore.userData.data.email)
 const originalFName = ref(usersStore.userData.data.firstName)
@@ -71,7 +69,7 @@ function updateProfile() {
   submitting.value = true
   error.value = undefined
 
-  const payload: Record<string, any> = {}
+  const payload: Record<string, string> = {}
 
   if (isFNameDirty.value) {
     payload.fname = fName.value

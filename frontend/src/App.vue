@@ -78,7 +78,8 @@ onMounted(() => {
 })
 
 function home() {
-  router.push("/")
+  router.push({ path: '/', query: { folderId: '' }})
+  console.log("Pushed home")
   showMenu.value = false
 }
 
@@ -94,6 +95,9 @@ function goToProfile() {
 
 async function logout() {
   const response = await usersStore.logOut();
+  if (!response.ok) {
+    console.error(response)
+  }
 
   router.push("/login")
   showMenu.value = false

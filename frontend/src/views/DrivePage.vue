@@ -64,6 +64,8 @@
 
     <ErrorMessage v-if="error">{{ error }}</ErrorMessage>
 
+    <BreadCrumbs :breadcrumbs=breadcrumbs>A</BreadCrumbs>
+
     <div v-if="!loading && !error" class="folder-contents flex flex-col gap-4">
       <!-- Folders Section -->
       <div v-if="folders.length > 0" class="folders-section">
@@ -143,7 +145,8 @@
 
 <script setup lang="ts">
 import AppButton from './components/AppButton.vue'
-import { ref, onMounted } from 'vue';
+import BreadCrumbs from './components/BreadCrumbs.vue'
+import { ref, onMounted, watchEffect } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import api from '@/utils/api';
 import type { Folder, File, FolderContents } from '@/types/folder';
@@ -153,11 +156,12 @@ import FileUploader from '@/components/FileUploader.vue';
 import { useUsersStore } from '../stores/users';
 
 const route = useRoute();
-const router = useRouter()
+const router = useRouter();
 const loading = ref(false);
 const error = ref<string | undefined>();
 const folders = ref<Folder[]>([]);
 const files = ref<File[]>([]);
+const breadcrumbs = ref<string[]>([]);
 const show = ref<boolean>(false);
 const currentFolderId = ref<string>('');
 const usersStore = useUsersStore();
@@ -169,7 +173,7 @@ const newFileName = ref('');
 const folderName = ref('');
 
 async function createFolder() {
-  let folderId = currentFolderId.value
+  const folderId = currentFolderId.value
 
   await api({
     url: "v1/folder",
@@ -189,11 +193,13 @@ async function createFolder() {
 function changeFolder(folderId: string) {
   currentFolderId.value = folderId
 
+  router.push({ path: '/', query: { folderId: folderId }})
+
   refreshCurrentList();
 }
 
 function getDownloadURL(fileId: string): string {
-  let baseURL = import.meta.env.VITE_APP_API_URL
+  const baseURL = import.meta.env.VITE_APP_API_URL
 
   return `${baseURL}v1/file/${fileId}?token=${usersStore.token}`
 }
@@ -236,31 +242,6 @@ function formatFileName(fileName: string): string {
   return fileName.length > maxNameLength ? fileName.substring(0, maxNameLength) + "..." : fileName
 }
 
-async function download(fileId: string) {
-  const response = await api({ url: "v1/file/" + fileId, method: "GET", responseType: "blob" })
-
-  if (response.status === 404 || response.status === 500) {
-    console.error("Error downloading file", response)
-    return
-  }
-
-  const blob = new Blob([response.body.blob])
-  const url = window.URL.createObjectURL(blob)
-  const a = document.createElement("a")
-  a.href = url
-
-  let filename = "download.bin"
-  const disposition = response.headers["content-disposition"]
-  if (disposition) {
-    const match = disposition.match(/filename="?([^"]+)"?/)
-    if (match) filename = match[1]
-  }
-
-  a.download = filename
-  a.click()
-  window.URL.revokeObjectURL(url)
-}
-
 function formatFileSize(bytes: number): string {
   if (bytes === 0) return '0 B'
   const k = 1024
@@ -274,6 +255,8 @@ async function loadFolderContents(folderId: string = '') {
   loading.value = true
   error.value = undefined
 
+  console.log("folderId: ", folderId)
+
   try {
     const response = await api({
       url: folderId ? `v1/folder/list/${folderId}` : `v1/folder/list/-1`,
@@ -284,6 +267,7 @@ async function loadFolderContents(folderId: string = '') {
       const contents = response.body as FolderContents
       folders.value = contents.folders || []
       files.value = contents.files || []
+      breadcrumbs.value = contents.breadcrumbs || []
     } else {
       error.value = response.body?.error || response.body?.message || 'Failed to load folder contents'
     }
@@ -305,14 +289,18 @@ function handleUploadError(message: string) {
 
 function refreshCurrentList() {
   // if we have a folderid in a redirect somewhere, then we need to override our current state
-  let folderId = (route.params.folderId as string) || (route.query.folderId as string) || ''
+  const folderId = (route.params.folderId as string) || (route.query.folderId as string) || ''
 
-  if (currentFolderId.value == '') {
-    currentFolderId.value = folderId
-  }
+  currentFolderId.value = folderId
+
+  route.params.folderId = currentFolderId.value
 
   loadFolderContents(currentFolderId.value)
 }
+
+watchEffect(() => {
+  refreshCurrentList()
+})
 
 onMounted(() => {
   refreshCurrentList();

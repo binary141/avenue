@@ -96,13 +96,14 @@ func (s *Server) ListFolderContents(c *gin.Context) {
 		return
 	}
 	var x struct {
-		Files    []persist.File   `json:"files"`
-		Foleders []persist.Folder `json:"folders"`
+		Files       []persist.File   `json:"files"`
+		Foleders    []persist.Folder `json:"folders"`
+		BreadCrumbs []string         `json:"breadcrumbs"`
 	}
-	// ret := mustSet("", "folders", folds)
-	// ret = mustSet(ret, "files", files)
+
 	x.Foleders = folds
 	x.Files = files
+	x.BreadCrumbs = []string{"test", "testing"}
 	c.JSON(http.StatusOK, x)
 }
 

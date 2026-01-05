@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -29,9 +30,22 @@ type Response struct {
 	Error   string `json:"error"`
 }
 
+func ensureDir(fs afero.Fs, path string) error {
+	exists, err := afero.DirExists(fs, path)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		err := fs.Mkdir(path, os.ModePerm)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func (s *Server) Upload(c *gin.Context) {
-	// TODO: stream file uploads
-	// TODO: file size
 	userID, err := shared.GetUserIDFromContext(c.Request.Context())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, Response{
@@ -41,80 +55,43 @@ func (s *Server) Upload(c *gin.Context) {
 		return
 	}
 
-	// Ensure user directory exists
-	exists, err := afero.DirExists(s.fs, fmt.Sprintf("/%s", userID))
+	// default 200MiB
+	maxFileSize := shared.GetEnvInt64("MAX_FILE_BYTE_SIZE", 209715200)
+
+	c.Request.Body = http.MaxBytesReader(
+		c.Writer,
+		c.Request.Body,
+		maxFileSize,
+	)
+
+	err = ensureDir(s.fs, fmt.Sprintf("/%s", userID))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, Response{
-			Message: "error checking user directory",
-			Error:   err.Error(),
-		})
-		return
-	}
-	if !exists {
-		err := s.fs.Mkdir(fmt.Sprintf("/%s", userID), os.ModePerm)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, Response{
-				Message: "error could not make dir",
-				Error:   err.Error(),
-			})
-			return
-		}
-	}
-
-	// Get uploaded file from multipart form
-	f, err := c.FormFile("file")
-	if err != nil {
-		log.Printf("error gettting file from form: %v", err)
-		c.JSON(http.StatusTeapot, Response{
-			Message: "could not get file from form",
+			Message: "could not ensure dir exists",
 			Error:   err.Error(),
 		})
 		return
 	}
 
-	// Get parent folder ID from form (optional)
-	parent := c.PostForm("parent")
-
-	// Extract filename and extension
-	filename := f.Filename
-	ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(filename), "."))
-
-	// Open uploaded file
-	src, err := f.Open()
+	mr, err := c.Request.MultipartReader()
 	if err != nil {
 		c.JSON(http.StatusBadRequest, Response{
-			Message: "could not open uploaded file",
-			Error:   err.Error(),
-		})
-		return
-	}
-	defer src.Close()
-
-	extBuffer := make([]byte, 512)
-	_, err = src.Read(extBuffer)
-	if err != nil && err != io.EOF {
-		c.JSON(http.StatusInternalServerError, Response{
-			Message: "could not read file",
+			Message: "invalid multipart request",
 			Error:   err.Error(),
 		})
 		return
 	}
 
-	_, err = src.Seek(0, io.SeekStart)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, Response{
-			Message: "could not seek to start of file",
-			Error:   err.Error(),
-		})
-		return
-	}
+	var parent string
+	var filename string
+	var extension string
 
-	contentType := http.DetectContentType(extBuffer)
+	contentType := "application/octet-stream" // will be overwritten with the actual content type once we start streaming the file data
 
 	// Create file record in database
 	fileID, err := s.persist.CreateFile(&persist.File{
 		Name:      filename,
-		Extension: ext,
+		Extension: extension,
 		MimeType:  contentType,
 		Parent:    parent,
 		CreatedBy: userID,
@@ -135,7 +112,7 @@ func (s *Server) Upload(c *gin.Context) {
 		if deleteErr != nil {
 			c.JSON(http.StatusInternalServerError, Response{
 				Message: "could not delete file in db",
-				Error:   err.Error(),
+				Error:   deleteErr.Error(),
 			})
 			return
 		}
@@ -153,21 +130,139 @@ func (s *Server) Upload(c *gin.Context) {
 		}
 	}()
 
-	// Copy file data
-	size, err := io.Copy(dst, src)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, Response{
-			Message: "could not write to file",
-			Error:   err.Error(),
-		})
+	var total int64
+	for {
+		part, err := mr.NextPart()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			deleteErr := s.persist.DeleteFile(fileID, userID)
+			if deleteErr != nil {
+				c.JSON(http.StatusInternalServerError, Response{
+					Message: "could not delete file in db",
+					Error:   deleteErr.Error(),
+				})
+				return
+			}
+			c.JSON(http.StatusBadRequest, Response{
+				Message: "multipart read error",
+				Error:   err.Error(),
+			})
+			return
+		}
+
+		switch part.FormName() {
+		case "parent":
+			buf, err := io.ReadAll(io.LimitReader(part, 1024))
+			if err != nil {
+				deleteErr := s.persist.DeleteFile(fileID, userID)
+				if deleteErr != nil {
+					c.JSON(http.StatusInternalServerError, Response{
+						Message: "could not delete file in db",
+						Error:   deleteErr.Error(),
+					})
+					return
+				}
+				c.JSON(http.StatusInternalServerError, Response{
+					Message: "Unable to read multi part bytes for parent",
+					Error:   err.Error(),
+				})
+				return
+			}
+			parent = string(buf)
+		case "file":
+			filename = filepath.Base(part.FileName())
+			extension = strings.ToLower(strings.TrimPrefix(filepath.Ext(filename), "."))
+
+			// Detect content type (read first 512 bytes) only if this is the first part
+			buf := make([]byte, 512)
+			n, err := io.ReadFull(part, buf)
+			if err != nil && err != io.ErrUnexpectedEOF {
+				deleteErr := s.persist.DeleteFile(fileID, userID)
+				if deleteErr != nil {
+					c.JSON(http.StatusInternalServerError, Response{
+						Message: "could not delete file in db",
+						Error:   deleteErr.Error(),
+					})
+					return
+				}
+				c.JSON(http.StatusInternalServerError, Response{
+					Message: "Unable to read multi part bytes",
+					Error:   err.Error(),
+				})
+				return
+			}
+			contentType = http.DetectContentType(buf[:n])
+			fmt.Printf("DETECTED CONTENT TYPE: %s", contentType)
+
+			r := bytes.NewReader(buf)
+			written, err := io.Copy(dst, r)
+			if err != nil {
+				deleteErr := s.persist.DeleteFile(fileID, userID)
+				if deleteErr != nil {
+					c.JSON(http.StatusInternalServerError, Response{
+						Message: "could not delete file in db",
+						Error:   deleteErr.Error(),
+					})
+					return
+				}
+				c.JSON(http.StatusInternalServerError, Response{
+					Message: "Unable to read multi part bytes",
+					Error:   err.Error(),
+				})
+				return
+			}
+			total += written
+
+			written, err = io.Copy(dst, part)
+			if err != nil {
+				deleteErr := s.persist.DeleteFile(fileID, userID)
+				if deleteErr != nil {
+					c.JSON(http.StatusInternalServerError, Response{
+						Message: "could not delete file in db",
+						Error:   deleteErr.Error(),
+					})
+					return
+				}
+				c.JSON(http.StatusInternalServerError, Response{
+					Message: "Unable to read multi part bytes",
+					Error:   err.Error(),
+				})
+				return
+			}
+			total += written
+		}
+
+		// Needs to happen at the end of the loop.
+		// This makes sure that we close parts as we are done with them
+		_ = part.Close()
+	}
+
+	// no file was created / consumed
+	if total == 0 {
+		deleteErr := s.persist.DeleteFile(fileID, userID)
+		if deleteErr != nil {
+			c.JSON(http.StatusInternalServerError, Response{
+				Message: "could not delete file in db",
+				Error:   deleteErr.Error(),
+			})
+			return
+		}
+
+		c.Status(http.StatusBadRequest)
 		return
 	}
 
 	// Update file size in database
 	err = s.persist.UpdateFile(persist.File{
-		ID:       fileID,
-		FileSize: int(size),
-	}, []string{"file_size"})
+		ID:        fileID,
+		FileSize:  total,
+		Extension: extension,
+		Name:      filename,
+		MimeType:  contentType,
+		Parent:    parent,
+	}, []string{"file_size", "extension", "name", "parent", "mime_type"})
 	if err != nil {
 		// what do we want to do if we cannot update the filesize?
 		c.JSON(http.StatusInternalServerError, Response{

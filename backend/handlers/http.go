@@ -25,7 +25,6 @@ type Server struct {
 	fs      afero.Fs
 }
 
-// setupRouter creates and configures the Gin router.
 func SetupServer(p *persist.Persist) Server {
 	r := gin.Default()
 	fs := afero.NewOsFs()

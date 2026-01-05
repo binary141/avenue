@@ -53,14 +53,14 @@ func (s *Server) Login(c *gin.Context) {
 		return
 	}
 
-	c.SetCookie(shared.USERCOOKIENAME, fmt.Sprintf("%d", u.ID), 600, "/", "localhost", false, true)
-	c.SetCookie(shared.SESSIONCOOKIENAME, session.SessionID, 600, "/", "localhost", false, true)
+	c.SetCookie(string(shared.USERCOOKIENAME), fmt.Sprintf("%d", u.ID), 600, "/", "localhost", false, true)
+	c.SetCookie(string(shared.SESSIONCOOKIENAME), session.SessionID, 600, "/", "localhost", false, true)
 
 	c.JSON(http.StatusOK, gin.H{
-		"Message":                "OK",
-		"User-Id":                u.ID,
-		shared.SESSIONCOOKIENAME: session.SessionID,
-		"user_data":              u,
+		"Message":                        "OK",
+		"User-Id":                        u.ID,
+		string(shared.SESSIONCOOKIENAME): session.SessionID,
+		"user_data":                      u,
 	})
 }
 
@@ -80,7 +80,7 @@ func (s *Server) authorize(email, password string) (persist.User, error) {
 
 func (s *Server) Logout(c *gin.Context) {
 	// expire the cookie
-	c.SetCookie(shared.USERCOOKIENAME, "", -1, "/", "localhost", false, true)
+	c.SetCookie(string(shared.USERCOOKIENAME), "", -1, "/", "localhost", false, true)
 
 	ctx := c.Request.Context()
 

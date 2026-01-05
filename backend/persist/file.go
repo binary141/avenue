@@ -12,7 +12,7 @@ type File struct {
 	Name      string    `gorm:"not null" json:"name"`
 	Extension string    `gorm:"not null" json:"extension"`
 	MimeType  string    `gorm:"not null" json:"mimeType"`
-	FileSize  int       `gorm:"column:file_size" json:"file_size"`
+	FileSize  int64     `gorm:"column:file_size" json:"file_size"`
 	Parent    string    `json:"parent"`
 	CreatedBy string    `gorm:"column:created_by;type:bigint" json:"created_by"`
 	CreatedAt time.Time `json:"created_at"`

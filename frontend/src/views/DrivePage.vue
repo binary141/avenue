@@ -66,7 +66,7 @@
 
     <BreadCrumbs :breadcrumbs=breadcrumbs>A</BreadCrumbs>
 
-    <div v-if="!loading && !error" class="folder-contents flex flex-col gap-4">
+    <div v-if="!loading" class="folder-contents flex flex-col gap-4">
       <!-- Folders Section -->
       <div v-if="folders.length > 0" class="folders-section">
         <h2>Folders</h2>

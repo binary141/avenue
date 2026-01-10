@@ -166,6 +166,7 @@ func (s *Server) SetupRoutes() {
 
 	// -- folder routes -- //
 	securedRouterV1.POST("/folder", s.CreateFolder)
+	securedRouterV1.DELETE("/folder/:folderID", s.DeleteFolder)
 	securedRouterV1.GET("/folder/list/", s.ListFolderContents) // for use for getting the root folder
 	securedRouterV1.GET("/folder/list/:folderID", s.ListFolderContents)
 

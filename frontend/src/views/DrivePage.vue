@@ -74,11 +74,14 @@
           <div
             v-for="folder in folders"
             :key="folder.folder_id"
-            @click="changeFolder(folder.folder_id)"
             class="folder-item card flex flex-row align-center gap-3 p-3"
           >
-            <span class="folder-icon">📁</span>
-            <span class="folder-name">{{ folder.name }}</span>
+            <span @click="changeFolder(folder.folder_id)">
+              <span class="folder-icon">📁</span>
+              <span class="folder-name">{{ folder.name }}</span>
+            </span>
+            <span class="file-delete" @click="deleteFolder(folder.folder_id)">🗑️</span>
+            <span class="file-edit cursor-pointer" @click="openFolderEditModal(folder)">✏️</span>
           </div>
         </div>
       </div>
@@ -99,7 +102,7 @@
             <span class="file-delete" @click="deleteFile(file.id)">🗑️</span>
 
             <!-- action buttons -->
-            <span class="file-edit cursor-pointer" @click="openEditModal(file)">✏️</span>
+            <span class="file-edit cursor-pointer" @click="openFileEditModal(file)">✏️</span>
             <span class="file-download">
               <a :href="getDownloadURL(file.id)" :download="file.name">⬇️</a>
             </span>
@@ -113,7 +116,7 @@
       </div>
     </div>
 
-    <!-- Rename Modal -->
+    <!-- Rename File Modal -->
     <div
       v-if="editingFile"
       class="fixed inset-0 flex items-center justify-center bg-black/50 z-50"
@@ -127,8 +130,35 @@
           placeholder="Enter new name"
         />
         <div class="flex justify-end gap-2">
-          <AppButton @click="closeModal">Cancel</AppButton>
+          <AppButton @click="closeFileModal">Cancel</AppButton>
           <AppButton @click="saveFileName">Save</AppButton>
+        </div>
+        <!-- Optional: Close button in corner -->
+        <button
+          @click="closeModal"
+          class="absolute top-2 right-2 text-gray-500 hover:text-gray-700"
+        >
+          ✕
+        </button>
+      </div>
+    </div>
+
+    <!-- Rename Folder Modal -->
+    <div
+      v-if="editingFolder"
+      class="fixed inset-0 flex items-center justify-center bg-black/50 z-50"
+    >
+      <!-- Modal content -->
+      <div class="bg-white rounded shadow-lg w-96 p-6 relative">
+        <h3 class="text-lg font-bold mb-4 text-black">Rename Folder</h3>
+        <input
+          v-model="newFolderName"
+          class="border p-2 w-full mb-4 text-black"
+          placeholder="Enter new name"
+        />
+        <div class="flex justify-end gap-2">
+          <AppButton @click="closeFolderModal">Cancel</AppButton>
+          <AppButton @click="saveFolderName">Save</AppButton>
         </div>
         <!-- Optional: Close button in corner -->
         <button
@@ -171,6 +201,9 @@ const usersStore = useUsersStore();
 const editingFile = ref<File | null>(null);
 const newFileName = ref('');
 
+const editingFolder = ref<Folder | null>(null);
+const newFolderName = ref('');
+
 const folderName = ref('');
 
 async function createFolder() {
@@ -211,14 +244,36 @@ async function deleteFile(fileId: string) {
   refreshCurrentList();
 }
 
-function openEditModal(file: File) {
+async function deleteFolder(folderId: string) {
+  var response = await api({ url: "v1/folder/" + folderId, method: "DELETE" });
+
+  if (response.status > 399) {
+    if (response.body.error) {
+      error.value = response.body.error
+    }
+  }
+
+  refreshCurrentList();
+}
+
+function openFileEditModal(file: File) {
   editingFile.value = file
   newFileName.value = file.name
 }
 
-function closeModal() {
+function openFolderEditModal(folder: Folder) {
+  editingFolder.value = folder
+  newFolderName.value = folder.name
+}
+
+function closeFileModal() {
   editingFile.value = null
   newFileName.value = ""
+}
+
+function closeFolderModal() {
+  editingFolder.value = null
+  newFolderName.value = ""
 }
 
 async function saveFileName() {
@@ -232,7 +287,7 @@ async function saveFileName() {
 
   if (response.ok) {
     editingFile.value.name = newFileName.value
-    closeModal()
+    closeFileModal()
   } else {
     console.error("Failed to rename file", response)
   }
@@ -254,9 +309,6 @@ function formatFileSize(bytes: number): string {
 // ----- Folder Contents -----
 async function loadFolderContents(folderId: string = '') {
   loading.value = true
-  error.value = undefined
-
-  console.log("folderId: ", folderId)
 
   try {
     const response = await api({

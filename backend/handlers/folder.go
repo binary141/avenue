@@ -43,7 +43,7 @@ func (s *Server) CreateFolder(c *gin.Context) {
 	}
 
 	if req.Parent != "" {
-		_, err = s.persist.GetFolder(req.Parent)
+		_, err = s.persist.GetFolder(req.Parent, userID)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, Response{
 				Message: "parent folder must exist",
@@ -66,6 +66,58 @@ func (s *Server) CreateFolder(c *gin.Context) {
 		return
 	}
 	c.Status(http.StatusCreated)
+}
+
+func (s *Server) DeleteFolder(c *gin.Context) {
+	userID, err := shared.GetUserIDFromContext(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Message: "could not get user id",
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	folderID := c.Param("folderID")
+
+	folds, err := s.persist.ListChildFolder(folderID, userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Message: "Internal server error",
+			Error:   err.Error(),
+		})
+		return
+	}
+	files, err := s.persist.ListChildFile(folderID, userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Message: "Internal server error",
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	if len(folds) != 0 || len(files) != 0 {
+		c.JSON(http.StatusBadRequest, Response{
+			Message: "",
+			Error:   "Folder still contains files or folders",
+		})
+		return
+	}
+
+	err = s.persist.DeleteFolder(folderID, userID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, Response{
+			Message: "",
+			Error:   "Folder still contains files or folders",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, Response{
+		Message: "Folder deleted successfully",
+		Error:   "",
+	})
 }
 
 func (s *Server) ListFolderContents(c *gin.Context) {

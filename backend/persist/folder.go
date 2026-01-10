@@ -20,13 +20,20 @@ func (p *Persist) CreateFolder(f *Folder) (string, error) {
 	return f.FolderID, p.db.Create(f).Error
 }
 
-func (p *Persist) GetFolder(id string) (*Folder, error) {
+func (p *Persist) GetFolder(folderID, userID string) (*Folder, error) {
 	var f Folder
-	err := p.db.Where("folder_id = ?", id).First(&f).Error
+	err := p.db.Where("owner_id = ?", userID).Where("folder_id = ?", folderID).First(&f).Error
 	if err != nil {
 		return nil, err
 	}
 	return &f, nil
+}
+
+func (p *Persist) DeleteFolder(folderID, userID string) error {
+	var f Folder
+	err := p.db.Where("owner_id = ?", userID).Where("folder_id = ?", folderID).Delete(&f).Error
+
+	return err
 }
 
 func (p *Persist) ListChildFolder(parentID string, ownerID string) ([]Folder, error) {

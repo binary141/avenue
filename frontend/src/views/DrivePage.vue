@@ -62,7 +62,7 @@
       <p>Loading folder contents...</p>
     </div>
 
-    <ErrorMessage v-if="error">{{ error }}</ErrorMessage>
+    <ErrorMessage :msg=error @clear="error = ''"/>
 
     <BreadCrumbs :breadcrumbs=breadcrumbs>A</BreadCrumbs>
 

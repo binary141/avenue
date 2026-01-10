@@ -177,16 +177,21 @@ func (s *Server) ListFolderContents(c *gin.Context) {
 			continue
 		}
 
+		if folderID == "" && f.FolderID == shared.ROOTFOLDERID {
+			// an empty folderID in the request if for the root folder
+			continue
+		}
+
 		x.BreadCrumbs = append(x.BreadCrumbs, Breadcrumb{
 			Label:    f.Name,
 			FolderID: f.FolderID,
 		})
 	}
 
-	if folderID != shared.ROOTFOLDERID {
+	if folderID != "" && folderID != shared.ROOTFOLDERID {
 		x.BreadCrumbs = append(x.BreadCrumbs, Breadcrumb{
 			Label:    "/",
-			FolderID: shared.ROOTFOLDERID,
+			FolderID: "",
 		})
 	}
 

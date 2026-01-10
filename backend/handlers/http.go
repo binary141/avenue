@@ -157,6 +157,9 @@ func (s *Server) SetupRoutes() {
 
 	securedRouterV1.GET("/ping", s.pingHandler)
 
+	// -- meta routes -- //
+	securedRouterV1.GET("/dashboard", s.DashboardInfo)
+
 	// -- file routes -- //
 	securedRouterV1.POST("/file", s.Upload)
 	securedRouterV1.GET("/file/list", s.ListFiles)

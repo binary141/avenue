@@ -294,6 +294,23 @@ async function saveFileName() {
   }
 }
 
+async function saveFolderName() {
+  if (!editingFolder.value) return
+  // Call API to update the file name on the server
+  const response = await api({
+    url: `v1/folder/${editingFolder.value.folder_id}/${newFolderName.value}`,
+    method: 'PATCH',
+    json: { name: newFolderName.value }
+  })
+
+  if (response.ok) {
+    editingFolder.value.name = newFolderName.value
+    closeFolderModal()
+  } else {
+    console.error("Failed to rename folder", response)
+  }
+}
+
 function formatFileName(fileName: string): string {
   const maxNameLength = 35
   return fileName.length > maxNameLength ? fileName.substring(0, maxNameLength) + "..." : fileName

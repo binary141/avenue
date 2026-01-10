@@ -29,6 +29,10 @@ func (p *Persist) GetFolder(folderID, userID string) (*Folder, error) {
 	return &f, nil
 }
 
+func (p *Persist) UpdateFolder(f Folder, mask []string) error {
+	return p.db.Model(&Folder{}).Where("folder_id = ?", f.FolderID).Select(mask).Updates(f).Error
+}
+
 func (p *Persist) DeleteFolder(folderID, userID string) error {
 	var f Folder
 	err := p.db.Where("owner_id = ?", userID).Where("folder_id = ?", folderID).Delete(&f).Error

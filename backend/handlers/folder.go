@@ -1,12 +1,14 @@
 package handlers
 
 import (
+	"errors"
 	"net/http"
 
 	"avenue/backend/persist"
 	"avenue/backend/shared"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 // all files live in a per user file system
@@ -118,6 +120,55 @@ func (s *Server) DeleteFolder(c *gin.Context) {
 		Message: "Folder deleted successfully",
 		Error:   "",
 	})
+}
+
+func (s *Server) UpdateFolderName(c *gin.Context) {
+	userID, err := shared.GetUserIDFromContext(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Message: "could not get user id",
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	newName := c.Param("folderName")
+	if newName == "" {
+		c.JSON(http.StatusBadRequest, Response{
+			Error: "folder name can't be empty",
+		})
+		return
+	}
+
+	folder, err := s.persist.GetFolder(c.Param("folderID"), userID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, Response{
+				Message: "folder not found in db",
+				Error:   err.Error(),
+			})
+			return
+		}
+
+		c.JSON(http.StatusInternalServerError, Response{
+			Message: "could not get folder",
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	folder.Name = newName
+
+	err = s.persist.UpdateFolder(*folder, []string{"name"})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Message: "could not update folder",
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	c.Status(http.StatusOK)
 }
 
 func (s *Server) ListFolderContents(c *gin.Context) {

@@ -21,7 +21,7 @@
         class="file-input"
         @change="handleFileInputChange"
       />
-      
+
       <div v-if="!hasFiles" class="drop-zone__content">
         <svg
           class="drop-zone__icon"
@@ -42,10 +42,10 @@
           or drag and drop
         </p>
         <p class="drop-zone__hint">
-          {{ accept === '*' ? 'Any file type' : accept }} (Max {{ maxSize }}MB)
+          {{ accept === '*' ? 'Any file type' : accept }} (Max {{ formattedSize }})
         </p>
       </div>
-      
+
       <div v-else class="file-list">
         <div
           v-for="(file, index) in selectedFiles"
@@ -95,12 +95,12 @@
         </div>
       </div>
     </div>
-    
+
     <div v-if="isUploading" class="progress-bar">
       <div class="progress-bar__fill" :style="{ width: `${uploadProgress}%` }"></div>
       <span class="progress-bar__text">{{ uploadProgress }}%</span>
     </div>
-    
+
     <button
       v-if="hasFiles && !isUploading"
       type="button"
@@ -114,12 +114,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watchEffect } from 'vue'
 import api from '@/utils/api'
 
 interface Props {
   accept?: string
-  maxSize?: number // in MB
+  maxSize?: number // in bytes
   multiple?: boolean
   disabled?: boolean
   parent?: string // folder ID for parent folder
@@ -127,7 +127,7 @@ interface Props {
 
 const props = withDefaults(defineProps<Props>(), {
   accept: '*',
-  maxSize: 10,
+  maxSize: 10_000_000,
   multiple: false,
   disabled: false,
   parent: ''
@@ -143,6 +143,7 @@ const fileInput = ref<HTMLInputElement | null>(null)
 const selectedFiles = ref<File[]>([])
 const uploadProgress = ref<number>(0)
 const isUploading = ref(false)
+const formattedSize = ref('')
 
 const formatFileSize = (bytes: number): string => {
   if (bytes === 0) return '0 Bytes'
@@ -152,38 +153,42 @@ const formatFileSize = (bytes: number): string => {
   return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i]
 }
 
+watchEffect(() => {
+  formattedSize.value = formatFileSize(props.maxSize);
+});
+
 const validateFiles = (files: File[]): boolean => {
-  const maxSizeBytes = props.maxSize * 1024 * 1024
-  
+  const maxSizeBytes = props.maxSize
+
   for (const file of files) {
     if (file.size > maxSizeBytes) {
       emit('error', `File "${file.name}" exceeds maximum size of ${props.maxSize}MB`)
       return false
     }
   }
-  
+
   return true
 }
 
 const handleFiles = (files: FileList | null) => {
   if (!files || files.length === 0) return
-  
+
   const fileArray = Array.from(files)
-  
+
   if (!props.multiple && fileArray.length > 1) {
     emit('error', 'Only one file can be uploaded at a time')
     return
   }
-  
+
   if (!validateFiles(fileArray)) return
-  
+
   selectedFiles.value = fileArray
 }
 
 const handleDrop = (e: DragEvent) => {
   isDragging.value = false
   if (props.disabled) return
-  
+
   handleFiles(e.dataTransfer?.files || null)
 }
 
@@ -218,26 +223,26 @@ const uploadFiles = async () => {
     emit('error', 'No files selected')
     return
   }
-  
+
   isUploading.value = true
   uploadProgress.value = 0
-  
+
   try {
     // Upload files one by one
     const totalFiles = selectedFiles.value.length
     let uploadedCount = 0
-    
+
     for (const file of selectedFiles.value) {
       try {
         // Create FormData for file upload
         const formData = new FormData()
         formData.append('file', file)
-        
+
         // Add parent folder ID if provided
         if (props.parent) {
           formData.append('parent', props.parent)
         }
-        
+
         // Make API call with FormData
         const response = await api({
           url: 'v1/file',
@@ -245,14 +250,14 @@ const uploadFiles = async () => {
           body: formData
           // Don't set Content-Type header - browser will set it with boundary for multipart/form-data
         })
-        
+
         if (!response.ok) {
           const errorMessage = response.body?.error || response.body?.message || 'Upload failed'
           emit('error', `Failed to upload "${file.name}": ${errorMessage}`)
           isUploading.value = false
           return
         }
-        
+
         uploadedCount++
         uploadProgress.value = Math.round((uploadedCount / totalFiles) * 100)
       } catch (fileError) {
@@ -261,7 +266,7 @@ const uploadFiles = async () => {
         return
       }
     }
-    
+
     // All files uploaded successfully
     emit('upload', selectedFiles.value)
     selectedFiles.value = []

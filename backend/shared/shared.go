@@ -11,10 +11,11 @@ import (
 type cookieStr string
 
 const (
-	SESSIONCOOKIENAME cookieStr = "session_id"
-	USERCOOKIENAME    cookieStr = "user_id"
-	USERCOOKIEVALUE   cookieStr = "test"
-	ROOTFOLDERID                = "c32af1cc-aba9-4878-a305-5006dc7a5b76"
+	SESSIONCOOKIENAME  cookieStr = "session_id"
+	USERCOOKIENAME     cookieStr = "user_id"
+	USERCOOKIEVALUE    cookieStr = "test"
+	ROOTFOLDERID                 = "c32af1cc-aba9-4878-a305-5006dc7a5b76"
+	DEFAULTMAXFILESIZE int64     = 209715200
 )
 
 func GetEnvInt64(key string, defaultVal int64) int64 {

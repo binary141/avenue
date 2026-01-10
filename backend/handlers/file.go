@@ -55,8 +55,7 @@ func (s *Server) Upload(c *gin.Context) {
 		return
 	}
 
-	// default 200MiB
-	maxFileSize := shared.GetEnvInt64("MAX_FILE_BYTE_SIZE", 209715200)
+	maxFileSize := shared.GetEnvInt64("MAX_FILE_BYTE_SIZE", shared.DEFAULTMAXFILESIZE)
 	var total int64
 
 	c.Request.Body = http.MaxBytesReader(

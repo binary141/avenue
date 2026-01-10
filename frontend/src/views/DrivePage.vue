@@ -55,7 +55,7 @@
     </div>
 
     <FileUploader :parent="currentFolderId" @upload="handleFileUpload" @error="handleUploadError"
-    :multiple=true :maxSize=10000 />
+    :multiple=true :maxSize=maxFileSize />
 
     <div v-if="loading" class="flex flex-col align-center content-center gap-3">
       <SpinnerView />
@@ -189,6 +189,7 @@ const route = useRoute();
 const emit = defineEmits(['close-menu']);
 const router = useRouter();
 const loading = ref(false);
+const maxFileSize = ref(0);
 const error = ref<string | undefined>();
 const folders = ref<Folder[]>([]);
 const files = ref<File[]>([]);
@@ -356,8 +357,32 @@ watchEffect(() => {
   refreshCurrentList()
 })
 
+async function getDashboardInfo() {
+  let response = await api({
+    url: "v1/dashboard",
+    method: "GET",
+  });
+
+  if (!response.ok) {
+    return;
+  }
+
+  // 200MiB
+  let defaultSize = 209715200;
+
+  maxFileSize.value = defaultSize;
+
+  if (response.body.maxFileSize) {
+    maxFileSize.value = response.body.maxFileSize;
+  }
+
+  console.log(maxFileSize.value);
+}
+
 onMounted(() => {
   refreshCurrentList();
+
+  getDashboardInfo();
 });
 </script>
 

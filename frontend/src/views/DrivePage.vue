@@ -242,7 +242,7 @@ function changeFolder(folderId: string) {
 }
 
 function getDownloadURL(fileId: string): string {
-  const baseURL = import.meta.env.VITE_APP_API_URL
+  const baseURL = import.meta.env.VITE_APP_API_URL || '';
 
   return `${baseURL}v1/file/${fileId}?token=${usersStore.token}`
 }

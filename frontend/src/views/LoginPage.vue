@@ -13,7 +13,7 @@
         <input v-model="password" type="password" required />
       </div>
 
-      <ErrorMessage v-if="error">{{ error }}</ErrorMessage>
+      <ErrorMessage :msg=error @clear="error = ''"/>
 
       <AppButton type="submit">LOGIN</AppButton>
     </form>

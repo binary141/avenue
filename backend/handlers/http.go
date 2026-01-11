@@ -45,22 +45,27 @@ var (
 )
 
 func (s *Server) ServeUI(uiFS embed.FS) {
-	// Wrap embed.FS to serve static files
 	distFS, err := fs.Sub(uiFS, "frontend/dist")
 	if err != nil {
 		panic(err)
 	}
 
-	s.router.StaticFS("/assets", http.FS(distFS)) // Serve JS/CSS assets
+	assetsFS, err := fs.Sub(distFS, "assets")
+	if err != nil {
+		panic(err)
+	}
 
-	// Catch-all route for SPA (Vue Router)
+	// Serve only actual assets here
+	s.router.StaticFS("/assets", http.FS(assetsFS))
+
+	// SPA fallback
 	s.router.NoRoute(func(c *gin.Context) {
 		data, err := fs.ReadFile(distFS, "index.html")
 		if err != nil {
-			c.String(http.StatusInternalServerError, "index.html not found")
+			c.String(500, "index.html not found")
 			return
 		}
-		c.Data(http.StatusOK, "text/html; charset=utf-8", data)
+		c.Data(200, "text/html; charset=utf-8", data)
 	})
 }
 

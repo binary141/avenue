@@ -7,14 +7,15 @@
 <script setup lang="ts">
 import type { PropType } from 'vue';
 import { useRouter } from 'vue-router';
+import type { Breadcrumb } from '@/types/folder';
 
 const router = useRouter();
 
 const props = defineProps({
-breadcrumbs: Array,
+  breadcrumbs: Array as PropType<Breadcrumb[]>,
 })
 
-function handleClick(breadcrumb: string) {
+function handleClick(breadcrumb: Breadcrumb) {
   router.push({ path: '/', query: { folderId: breadcrumb.folder_id }})
 }
 </script>

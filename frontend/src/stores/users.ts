@@ -5,7 +5,15 @@ import { defineStore } from "pinia";
 import { ref } from "vue";
 
 const userDataDefault: User = {
-    id: 1
+    id: 1,
+    canLogin: false,
+    isAdmin: false,
+    createdAt: '',
+    deletedAt: null,
+    email: '',
+    firstName: null,
+    lastName: null,
+    updatedAt: null,
 }
 
 export const useUsersStore = defineStore('users', () => {
@@ -44,7 +52,7 @@ export const useUsersStore = defineStore('users', () => {
         return response;
     }
 
-    async function createUser(userData: { email: string; firstName: string; lastName: string }) {
+    async function createUser(userData: { email: string; firstName: string; lastName: string; password: string | null }) {
         const response = await api({
             url: "v1/user",
             method: "POST",

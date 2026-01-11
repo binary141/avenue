@@ -118,6 +118,7 @@
 import { onMounted, ref } from 'vue';
 import AppButton from './components/AppButton.vue'
 import { useUsersStore } from '@/stores/users';
+import type { User } from '@/types/users';
 
 const usersStore = useUsersStore();
 
@@ -125,7 +126,11 @@ onMounted(() => {
   getUsers();
 })
 
-const usersList = ref([]);
+const submitForm = () => {
+  console.log("Form submitted")
+}
+
+const usersList = ref<User[]>([]);
 const show = ref(false);
 
 const firstName = ref('');

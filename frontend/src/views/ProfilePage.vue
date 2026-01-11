@@ -69,7 +69,7 @@ function updateProfile() {
   submitting.value = true
   error.value = undefined
 
-  const payload: Record<string, string> = {}
+  const payload: Record<string, string | null> = {}
 
   if (isFNameDirty.value) {
     payload.fname = fName.value
@@ -105,8 +105,6 @@ function updateProfile() {
     submitting.value = false
     return
   }
-
-  console.log("POST to server:", payload)
 
   submitting.value = false
 }

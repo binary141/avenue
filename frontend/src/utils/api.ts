@@ -15,7 +15,7 @@ type UrlParams = {
 interface HandlerParamsBase {
   url: string;
   method: Method;
-  json: Json;
+  json: JSON;
   params: UrlParams;
   headers: { [key: string]: string | undefined };
   options: { [key: string]: any };
@@ -105,6 +105,7 @@ export interface ApiResponse {
   status: number;
   body?: any;
   error?: any;
+  headers?: any;
 }
 
 function getFilenameFromContentDispositionHeader(header: string): string {
@@ -226,7 +227,8 @@ export default async function api(
     };
   }
 
-  let responseBody: Blob;
+  let responseBody: any;
+  responseBody = null;
 
   const contentType = response.headers.get("content-type");
   const contentDisposition = response.headers.get("content-disposition");
@@ -234,16 +236,14 @@ export default async function api(
   if (contentDisposition && contentDisposition.startsWith("attachment")) {
     try {
       responseBody = await response.blob();
-    } catch (e) {
-      console.error(e)
-    }
 
-    if (responseBody) {
       responseBody = {
         filename: getFilenameFromContentDispositionHeader(contentDisposition),
         type: contentType || "",
         blob: responseBody,
       };
+    } catch (e) {
+      console.error(e)
     }
   } else {
     try {

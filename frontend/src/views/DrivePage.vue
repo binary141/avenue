@@ -19,8 +19,7 @@
       <div class="bg-white p-6 rounded-lg w-96">
         <h2 class="text-lg font-semibold mb-4 text-gray-700 ">Create Folder</h2>
 
-        <form
-          @submit.prevent="submitForm"
+        <div
           class="space-y-4 w-80 bg-white text-gray-700 p-6 rounded-lg shadow"
         >
           <div>
@@ -48,7 +47,7 @@
               Create
             </AppButton>
           </div>
-        </form>
+        </div>
 
 
       </div>
@@ -135,7 +134,7 @@
         </div>
         <!-- Optional: Close button in corner -->
         <button
-          @click="closeModal"
+          @click="closeFileModal"
           class="absolute top-2 right-2 text-gray-500 hover:text-gray-700"
         >
           ✕
@@ -162,7 +161,7 @@
         </div>
         <!-- Optional: Close button in corner -->
         <button
-          @click="closeModal"
+          @click="closeFolderModal"
           class="absolute top-2 right-2 text-gray-500 hover:text-gray-700"
         >
           ✕
@@ -179,7 +178,7 @@ import BreadCrumbs from './components/BreadCrumbs.vue'
 import { ref, onMounted, watchEffect } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import api from '@/utils/api';
-import type { Folder, File, FolderContents } from '@/types/folder';
+import type { Breadcrumb, Folder, File, FolderContents } from '@/types/folder';
 import SpinnerView from './components/SpinnerView.vue';
 import ErrorMessage from './components/ErrorMessage.vue';
 import FileUploader from '@/components/FileUploader.vue';
@@ -193,7 +192,7 @@ const maxFileSize = ref(0);
 const error = ref<string | undefined>();
 const folders = ref<Folder[]>([]);
 const files = ref<File[]>([]);
-const breadcrumbs = ref<string[]>([]);
+const breadcrumbs = ref<Breadcrumb[]>([]);
 const show = ref<boolean>(false);
 const currentFolderId = ref<string>('');
 const usersStore = useUsersStore();

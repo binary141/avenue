@@ -106,7 +106,8 @@ function goToProfile() {
 
 async function logout() {
   const response = await usersStore.logOut();
-  if (!response.ok && response.status != 401) {
+
+  if (response && !response.ok && response.status != 401) {
     console.error(response)
   }
 

@@ -281,7 +281,10 @@ func (s *Server) GetProfile(c *gin.Context) {
 }
 
 type UpdateProfileRequest struct {
-	Email string `json:"email" validate:"omitempty,email"`
+	Email     string `json:"email" validate:"omitempty,email,min=4,max=512"`
+	Password  string `json:"password" validate:"omitempty,min=4,max=64"`
+	FirstName string `json:"fname" validate:"omitempty,min=1,max=64"`
+	LastName  string `json:"lname" validate:"omitempty,min=1,max=64"`
 }
 
 func (s *Server) UpdateProfile(c *gin.Context) {
@@ -297,8 +300,9 @@ func (s *Server) UpdateProfile(c *gin.Context) {
 	var req UpdateProfileRequest
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		log.Print(err)
-		c.Status(http.StatusBadRequest)
+		c.AbortWithStatusJSON(http.StatusBadRequest, Response{
+			Error: err.Error(),
+		})
 		return
 	}
 
@@ -327,6 +331,18 @@ func (s *Server) UpdateProfile(c *gin.Context) {
 		}
 
 		u.Email = req.Email
+	}
+
+	if req.FirstName != "" {
+		u.FirstName = req.FirstName
+	}
+
+	if req.LastName != "" {
+		u.LastName = req.LastName
+	}
+
+	if req.Password != "" {
+		u.Password = req.Password
 	}
 
 	u, err = s.persist.UpdateUser(u)

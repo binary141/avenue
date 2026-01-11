@@ -69,7 +69,7 @@ const isEmailDirty = computed(() => email.value !== originalEmail.value)
 const isFNameDirty = computed(() => fName.value !== originalFName.value)
 const isLNameDirty = computed(() => lName.value !== originalLName.value)
 
-function updateProfile() {
+async function updateProfile() {
   submitting.value = true
   error.value = undefined
 
@@ -105,6 +105,19 @@ function updateProfile() {
   }
 
   if (Object.keys(payload).length === 0) {
+    submitting.value = false
+    return
+  }
+
+  let response = await usersStore.updateUser(payload)
+  if (!response || !response.ok) {
+    let errorVal = "An error occurred, try again later"
+    if (response.body.error) {
+      errorVal = response.body.error
+    }
+
+    error.value = errorVal;
+
     submitting.value = false
     return
   }

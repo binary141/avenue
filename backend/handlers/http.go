@@ -2,7 +2,9 @@ package handlers
 
 import (
 	"context"
+	"embed"
 	"fmt"
+	"io/fs"
 	"log"
 	"net/http"
 	"strings"
@@ -16,6 +18,9 @@ import (
 	"github.com/spf13/afero"
 )
 
+//go:embed frontend/dist/*
+var frontendFS embed.FS
+
 // Server holds dependencies for the HTTP server.
 type Server struct {
 	// Add dependencies here, e.g., a database connection
@@ -27,7 +32,7 @@ type Server struct {
 func SetupServer(p *persist.Persist) Server {
 	r := gin.Default()
 	fs := afero.NewOsFs()
-	jailedFs := afero.NewBasePathFs(fs, "./avenuectl/temp/")
+	jailedFs := afero.NewBasePathFs(fs, shared.GetEnv("UPLOAD_DIR", "./avenuectl/temp/"))
 	return Server{
 		fs:      jailedFs,
 		router:  r,
@@ -168,6 +173,29 @@ func (s *Server) SetupRoutes() {
 	securedRouterV1.PUT("/user/profile", s.UpdateProfile)
 	securedRouterV1.PATCH("/user/:userID", s.UpdateProfile)
 	securedRouterV1.PATCH("/user/password", s.UpdatePassword)
+
+	// Wrap embed.FS to serve static files
+	distFS, err := fs.Sub(frontendFS, "frontend/dist")
+	if err != nil {
+		panic(err)
+	}
+
+	s.router.StaticFS("/assets", http.FS(distFS)) // Serve JS/CSS assets
+
+	// Catch-all route for SPA (Vue Router)
+	s.router.NoRoute(func(c *gin.Context) {
+		data, err := fs.ReadFile(distFS, "index.html")
+		if err != nil {
+			c.String(http.StatusInternalServerError, "index.html not found")
+			return
+		}
+		c.Data(http.StatusOK, "text/html; charset=utf-8", data)
+	})
+
+	// Example API route
+	s.router.GET("/api/hello", func(c *gin.Context) {
+		c.JSON(200, gin.H{"message": "Hello from Go!"})
+	})
 }
 
 func (s *Server) Run(address string) error {

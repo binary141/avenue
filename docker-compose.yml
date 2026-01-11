@@ -6,12 +6,15 @@ services:
       dockerfile: Dockerfile
     volumes:
       - ./backend:/app:rw 
+      - upload-data:/avenue/uploads
+      - ./frontend/dist:/app/handlers/frontend/dist
     ports:
       - "8080:8080"
     depends_on:
       - postgres
     environment:
       MAX_FILE_BYTE_SIZE: 1073741824
+      UPLOAD_DIR: "/avenue/uploads"
       DB_HOST: postgres
       DB_USER: user
       DB_PASSWORD: secret
@@ -19,6 +22,8 @@ services:
 
   postgres:
     image: postgres:16.3
+    volumes:
+      - ./db-data:/var/lib/postgresql
     environment:
       POSTGRES_PASSWORD: secret
       POSTGRES_USER: user
@@ -26,3 +31,6 @@ services:
     ports:
       - "5432:5432"
    
+volumes:
+  upload-data:
+  db-data:

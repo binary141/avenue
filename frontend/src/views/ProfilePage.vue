@@ -32,7 +32,8 @@
         <input v-model="passwordConfirmation" type="password" autocomplete="new-password" />
       </div>
 
-      <ErrorMessage v-if="error">{{ error }}</ErrorMessage>
+      <ErrorMessage :msg=error @clear="error = ''"/>
+      <SuccessMessage :msg=successMsg @clear="successMsg = ''"/>
 
       <AppButton type="submit">UPDATE</AppButton>
     </form>
@@ -44,6 +45,7 @@ import { ref, computed } from 'vue'
 import AppButton from './components/AppButton.vue'
 import { useUsersStore } from '@/stores/users'
 import ErrorMessage from './components/ErrorMessage.vue'
+import SuccessMessage from './components/SuccessMessage.vue'
 
 const usersStore = useUsersStore()
 
@@ -54,6 +56,8 @@ const originalLName = ref(usersStore.userData.data.lastName)
 const email = ref(originalEmail.value)
 const fName = ref(originalFName.value)
 const lName = ref(originalLName.value)
+
+const successMsg = ref('')
 
 const password = ref('')
 const passwordConfirmation = ref('')
@@ -104,6 +108,8 @@ function updateProfile() {
     submitting.value = false
     return
   }
+
+  successMsg.value = "Successfully updated profile!"
 
   submitting.value = false
 }

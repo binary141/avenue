@@ -25,6 +25,7 @@
           <div>
             <label class="block text-sm font-medium mb-1 text-gray-600">Folder Name</label>
             <input
+              ref="inputRef"
               v-model="folderName"
               type="text"
               class="w-full border border-gray-300 rounded px-3 py-2 text-gray-700 bg-white"
@@ -175,7 +176,7 @@
 <script setup lang="ts">
 import AppButton from './components/AppButton.vue'
 import BreadCrumbs from './components/BreadCrumbs.vue'
-import { ref, onMounted, watchEffect } from 'vue';
+import { ref, onMounted, watchEffect, watch, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import api from '@/utils/api';
 import type { Breadcrumb, Folder, File, FolderContents } from '@/types/folder';
@@ -194,6 +195,7 @@ const folders = ref<Folder[]>([]);
 const files = ref<File[]>([]);
 const breadcrumbs = ref<Breadcrumb[]>([]);
 const show = ref<boolean>(false);
+const inputRef = ref<HTMLInputElement | null>(null);
 const currentFolderId = ref<string>('');
 const usersStore = useUsersStore();
 
@@ -205,6 +207,13 @@ const editingFolder = ref<Folder | null>(null);
 const newFolderName = ref('');
 
 const folderName = ref('');
+
+watch(show, async (open) => {
+  if (open) {
+    await nextTick()
+    inputRef.value?.focus()
+  }
+})
 
 async function createFolder() {
   const folderId = currentFolderId.value
@@ -245,7 +254,7 @@ async function deleteFile(fileId: string) {
 }
 
 async function deleteFolder(folderId: string) {
-  var response = await api({ url: "v1/folder/" + folderId, method: "DELETE" });
+  let response = await api({ url: "v1/folder/" + folderId, method: "DELETE" });
 
   if (response.status > 399) {
     if (response.body.error) {

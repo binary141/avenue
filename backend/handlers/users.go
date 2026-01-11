@@ -168,7 +168,7 @@ func (s *Server) CreateUser(c *gin.Context) {
 		return
 	}
 
-	u, err := s.persist.GetUserByIdStr(userID)
+	u, err := s.persist.GetUserByIDStr(userID)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{
 			Error: err.Error(),
@@ -234,7 +234,7 @@ func (s *Server) GetUsers(c *gin.Context) {
 		return
 	}
 
-	u, err := s.persist.GetUserByIdStr(userID)
+	u, err := s.persist.GetUserByIDStr(userID)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{
 			Error: err.Error(),
@@ -269,7 +269,7 @@ func (s *Server) GetProfile(c *gin.Context) {
 		return
 	}
 
-	u, err := s.persist.GetUserByIdStr(userID)
+	u, err := s.persist.GetUserByIDStr(userID)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{
 			Error: err.Error(),
@@ -310,7 +310,7 @@ func (s *Server) UpdateProfile(c *gin.Context) {
 		return
 	}
 
-	u, err := s.persist.GetUserByIdStr(userID)
+	u, err := s.persist.GetUserByIDStr(userID)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{
 			Error: err.Error(),
@@ -370,7 +370,7 @@ func (s *Server) UpdatePassword(c *gin.Context) {
 		return
 	}
 
-	u, err := s.persist.GetUserByIdStr(userID)
+	u, err := s.persist.GetUserByIDStr(userID)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{
 			Error: err.Error(),

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -44,20 +43,8 @@ var (
 )
 
 func (s *Server) UserIDExists(userID string) bool {
-	// todo do a lookup in the db and see if the user exists
-	i, err := strconv.Atoi(userID)
-	if err != nil {
-		log.Print(err)
-		return false
-	}
-
-	_, err = s.persist.GetUserById(i)
-	if err != nil {
-		log.Print(err)
-		return false
-	}
-
-	return true
+	_, err := s.persist.GetUserByIDStr(userID)
+	return err == nil
 }
 
 func (s *Server) sessionCheck(c *gin.Context) {
@@ -65,7 +52,6 @@ func (s *Server) sessionCheck(c *gin.Context) {
 	if h := c.GetHeader(MASTERAUTHHEADER); h != "" {
 		if u := c.GetHeader(USERIDHEADER); u != "" {
 			if h == AUTHKEY && s.UserIDExists(u) {
-
 				rc := c.Request.Context()
 
 				// Add a new value to the context

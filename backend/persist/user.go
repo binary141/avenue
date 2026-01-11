@@ -23,7 +23,7 @@ type User struct {
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"deletedAt"`
 }
 
-func (p *Persist) GetUserByIdStr(idStr string) (User, error) {
+func (p *Persist) GetUserByIDStr(idStr string) (User, error) {
 	var u User
 
 	id, err := strconv.Atoi(idStr)
@@ -31,7 +31,7 @@ func (p *Persist) GetUserByIdStr(idStr string) (User, error) {
 		return u, err
 	}
 
-	return p.GetUserById(id)
+	return p.getUserByID(id)
 }
 
 func (p *Persist) GetUsers() ([]User, error) {
@@ -45,7 +45,7 @@ func (p *Persist) GetUsers() ([]User, error) {
 	return users, nil
 }
 
-func (p *Persist) GetUserById(id int) (User, error) {
+func (p *Persist) getUserByID(id int) (User, error) {
 	var u User
 
 	err := p.db.First(&u, id).Error

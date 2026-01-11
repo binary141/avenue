@@ -7,7 +7,7 @@ services:
     volumes:
       - ./backend:/app:rw 
       - upload-data:/avenue/uploads
-      - ./frontend/dist:/app/handlers/frontend/dist
+      - ./frontend/dist:/app/avenuectl/frontend/dist
     ports:
       - "8080:8080"
     depends_on:
@@ -15,6 +15,7 @@ services:
     environment:
       MAX_FILE_BYTE_SIZE: 1073741824
       UPLOAD_DIR: "/avenue/uploads"
+      APP_ENV: "production"
       DB_HOST: postgres
       DB_USER: user
       DB_PASSWORD: secret

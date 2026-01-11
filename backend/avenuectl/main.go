@@ -4,7 +4,11 @@ import (
 	"avenue/backend/handlers"
 	"avenue/backend/persist"
 	"avenue/backend/shared"
+	"embed"
 )
+
+//go:embed frontend/dist/*
+var frontendFS embed.FS
 
 func main() {
 	persist := persist.NewPersist(
@@ -19,6 +23,10 @@ func main() {
 	server := handlers.SetupServer(persist)
 
 	server.SetupRoutes()
+
+	if shared.GetEnv("APP_ENV", "dev") == "production" {
+		server.ServeUI(frontendFS)
+	}
 
 	// Start the server
 	_ = server.Run(":8080")

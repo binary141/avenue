@@ -162,7 +162,7 @@ const validateFiles = (files: File[]): boolean => {
 
   for (const file of files) {
     if (file.size > maxSizeBytes) {
-      emit('error', `File "${file.name}" exceeds maximum size of ${props.maxSize}MB`)
+      emit('error', `File "${file.name}" exceeds maximum size of ${formattedSize.value}`)
       return false
     }
   }

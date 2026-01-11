@@ -69,7 +69,6 @@ export const useUsersStore = defineStore('users', () => {
         });
 
         if (!response.ok && response.status != 401) {
-          console.log("error logging out: ", response)
           return;
         }
 

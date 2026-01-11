@@ -391,8 +391,6 @@ async function getDashboardInfo() {
   if (response.body.maxFileSize) {
     maxFileSize.value = response.body.maxFileSize;
   }
-
-  console.log(maxFileSize.value);
 }
 
 onMounted(() => {

@@ -101,7 +101,6 @@ function updateProfile() {
   }
 
   if (Object.keys(payload).length === 0) {
-    console.log("nothing to send to server")
     submitting.value = false
     return
   }

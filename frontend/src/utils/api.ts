@@ -92,7 +92,6 @@ export function removeRequestHandler(handler: Function): void {
 }
 
 export function resetModifications(): void {
-  // console.log(apiRoot, GLOBAL_HEADERS, RESPONSE_HANDLERS, REQUEST_HANDLERS);
   apiRoot = ORIG_API_ROOT;
   Object.keys(GLOBAL_HEADERS).forEach((k) => delete GLOBAL_HEADERS[k]);
   Object.keys(RESPONSE_HANDLERS).forEach((k) => delete RESPONSE_HANDLERS[k]);

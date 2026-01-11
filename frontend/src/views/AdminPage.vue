@@ -126,9 +126,7 @@ onMounted(() => {
   getUsers();
 })
 
-const submitForm = () => {
-  console.log("Form submitted")
-}
+const submitForm = () => {}
 
 const usersList = ref<User[]>([]);
 const show = ref(false);
@@ -140,12 +138,10 @@ const password = ref('');
 
 async function createUser() {
   if (email.value == '') {
-    console.log('email is empty');
     return;
   }
 
   if (password.value == '') {
-    console.log('password is empty');
     return;
   }
 
@@ -157,7 +153,6 @@ async function createUser() {
   });
 
   if (!response.ok) {
-    console.log("error: ", response)
     return
   }
 
@@ -174,12 +169,8 @@ async function getUsers() {
   const response = await usersStore.getUsers()
 
   if (!response.ok) {
-    console.log("Unable to get users");
-    console.log(response)
     return
   }
-
-  console.log(response.body)
 
   usersList.value = response.body
 }

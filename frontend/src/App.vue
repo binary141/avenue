@@ -124,16 +124,13 @@ async function getUserAndLogin() {
       usersStore.logIn(response.body);
 
       let isAdminLocal = usersStore.userData.data.isAdmin;
-      console.log("Admin: ", isAdminLocal)
       if (isAdminLocal !== undefined) {
         isAdmin.value = isAdminLocal;
-        console.log("ADMIN: ", isAdmin.value)
       }
     } else if (response.status == 401) {
       usersStore.logOut();
       status.value = "loaded";
     } else {
-      console.log(response.body)
       status.value = "error";
     }
   } else {

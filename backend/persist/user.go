@@ -7,6 +7,7 @@ import (
 
 	"avenue/backend/shared"
 
+	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
 
@@ -78,10 +79,24 @@ func (p *Persist) UpdateUser(user User) (User, error) {
 }
 
 func (p *Persist) UpsertRootUser() error {
+	emailEnv := shared.GetEnv("ROOT_USER_EMAIL", "root@gmail.com")
+
+	_, err := p.GetUserByEmail(emailEnv)
+	if err == nil {
+		// don't do anything if the user exists
+		return nil
+	}
+
+	passEnv := shared.GetEnv("ROOT_USER_PASSWORD", "password")
+	password, err := bcrypt.GenerateFromPassword([]byte(passEnv), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+
 	user := User{
 		ID:        1,
-		Email:     shared.GetEnv("ROOT_USER_EMAIL", "root@gmail.com"),
-		Password:  shared.GetEnv("ROOT_USER_PASSWORD", "password"),
+		Email:     emailEnv,
+		Password:  string(password),
 		CanLogin:  true,
 		IsAdmin:   true,
 		CreatedAt: time.Now(),

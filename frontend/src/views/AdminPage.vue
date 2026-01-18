@@ -20,6 +20,7 @@
           <th class="px-4 py-2 text-left">First Name</th>
           <th class="px-4 py-2 text-left">Last Name</th>
           <th class="px-4 py-2 text-left">Email</th>
+          <th class="px-4 py-2 text-left">Admin</th>
           <th class="px-4 py-2 text-left">Actions</th>
         </tr>
       </thead>
@@ -34,6 +35,15 @@
           <td class="px-4 py-2">{{ user.firstName }}</td>
           <td class="px-4 py-2">{{ user.lastName }}</td>
           <td class="px-4 py-2">{{ user.email }}</td>
+          <td class="px-4 py-2">
+            <span
+              v-if="user.isAdmin"
+              class="px-2 py-1 text-xs rounded bg-green-600 text-white"
+            >
+              Admin
+            </span>
+            <span v-else class="opacity-60 text-sm">User</span>
+          </td>
           <td class="px-4 py-2">
             <AppButton
               class="px-3 py-1 bg-grey-200 rounded"
@@ -59,20 +69,12 @@
         <form @submit.prevent="submitUser" class="space-y-4">
           <div>
             <label class="block text-sm font-medium mb-1">First Name</label>
-            <input
-              v-model="form.firstName"
-              type="text"
-              class="input"
-            />
+            <input v-model="form.firstName" type="text" class="input" />
           </div>
 
           <div>
             <label class="block text-sm font-medium mb-1">Last Name</label>
-            <input
-              v-model="form.lastName"
-              type="text"
-              class="input"
-            />
+            <input v-model="form.lastName" type="text" class="input" />
           </div>
 
           <div>
@@ -83,6 +85,19 @@
               class="input"
               required
             />
+          </div>
+
+          <!-- Admin Checkbox -->
+          <div class="flex items-center gap-2">
+            <input
+              id="isAdmin"
+              type="checkbox"
+              v-model="form.isAdmin"
+              class="h-4 w-4 rounded border-grey-300"
+            />
+            <label for="isAdmin" class="text-sm font-medium">
+              Administrator
+            </label>
           </div>
 
           <div>
@@ -140,6 +155,7 @@ const form = reactive({
   lastName: '',
   email: '',
   password: '',
+  isAdmin: false,
 })
 
 onMounted(fetchUsers)
@@ -160,6 +176,7 @@ function openEditModal(user: User) {
   form.firstName = user.firstName
   form.lastName = user.lastName
   form.email = user.email
+  form.isAdmin = user.isAdmin
   form.password = ''
 
   showModal.value = true
@@ -175,17 +192,23 @@ async function submitUser() {
   if (modalMode.value === 'create') {
     const res = await usersStore.createUser({ ...form })
     if (!res.ok) return
-    usersList.value = res.body
   } else if (editingUserId.value !== null) {
-    const res = await usersStore.updateUser(editingUserId.value, {
+    let req = {
+      id: `${editingUserId.value}`,
       firstName: form.firstName,
       lastName: form.lastName,
       email: form.email,
+      isAdmin: form.isAdmin,
       ...(form.password ? { password: form.password } : {}),
-    })
+    }
+
+    console.log(req)
+
+    const res = await usersStore.updateUser(req)
     if (!res.ok) return
-    usersList.value = res.body
   }
+
+  await fetchUsers()
 
   closeModal()
 }
@@ -201,6 +224,7 @@ function resetForm() {
   form.lastName = ''
   form.email = ''
   form.password = ''
+  form.isAdmin = false
 }
 </script>
 

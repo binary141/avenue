@@ -139,7 +139,9 @@ func (s *Server) Register(c *gin.Context) {
 		return
 	}
 
-	u, err := s.persist.CreateUser(req.Email, req.Password, req.FirstName, req.LastName)
+	isAdmin := false
+
+	u, err := s.persist.CreateUser(req.Email, req.Password, req.FirstName, req.LastName, isAdmin)
 	if err != nil {
 		log.Print(err)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{
@@ -156,6 +158,7 @@ type CreateUserRequest struct {
 	Password  string `json:"password" validate:"required,min=4,max=64"`
 	FirstName string `json:"firstName" validate:"min=1,max=64"`
 	LastName  string `json:"lastName" validate:"min=1,max=64"`
+	IsAdmin   bool   `json:"isAdmin"`
 }
 
 func (s *Server) CreateUser(c *gin.Context) {
@@ -197,6 +200,8 @@ func (s *Server) CreateUser(c *gin.Context) {
 		return
 	}
 
+	log.Printf("Req: %+v\n", req)
+
 	if !s.persist.IsUniqueEmail(req.Email) {
 		c.AbortWithStatusJSON(http.StatusConflict, Response{
 			Error: "Email already exists",
@@ -204,13 +209,15 @@ func (s *Server) CreateUser(c *gin.Context) {
 		return
 	}
 
-	_, err = s.persist.CreateUser(req.Email, req.Password, req.FirstName, req.LastName)
+	nu, err := s.persist.CreateUser(req.Email, req.Password, req.FirstName, req.LastName, req.IsAdmin)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{
 			Error: err.Error(),
 		})
 		return
 	}
+
+	log.Printf("New User: %+v\n", nu)
 
 	// todo allow pagination
 	us, err := s.persist.GetUsers()
@@ -281,10 +288,12 @@ func (s *Server) GetProfile(c *gin.Context) {
 }
 
 type UpdateProfileRequest struct {
+	ID        string `json:"id" validate:"required"`
 	Email     string `json:"email" validate:"omitempty,email,min=4,max=512"`
+	IsAdmin   bool   `json:"isAdmin"`
 	Password  string `json:"password" validate:"omitempty,min=4,max=64"`
-	FirstName string `json:"fname" validate:"omitempty,min=1,max=64"`
-	LastName  string `json:"lname" validate:"omitempty,min=1,max=64"`
+	FirstName string `json:"firstName" validate:"omitempty,min=1,max=64"`
+	LastName  string `json:"lastName" validate:"omitempty,min=1,max=64"`
 }
 
 func (s *Server) UpdateProfile(c *gin.Context) {
@@ -322,30 +331,14 @@ func (s *Server) UpdateProfile(c *gin.Context) {
 		return
 	}
 
-	if req.Email != "" && req.Email != u.Email {
-		if !s.persist.IsUniqueEmail(req.Email) {
-			c.AbortWithStatusJSON(http.StatusConflict, Response{
-				Error: "Email already exists",
-			})
-			return
-		}
-
-		u.Email = req.Email
+	if req.ID != userID && !u.IsAdmin {
+		c.AbortWithStatusJSON(http.StatusBadRequest, Response{
+			Error: "Only admin users can edit another users information",
+		})
+		return
 	}
 
-	if req.FirstName != "" {
-		u.FirstName = req.FirstName
-	}
-
-	if req.LastName != "" {
-		u.LastName = req.LastName
-	}
-
-	if req.Password != "" {
-		u.Password = req.Password
-	}
-
-	u, err = s.persist.UpdateUser(u)
+	updatingUser, err := s.persist.GetUserByIDStr(req.ID)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{
 			Error: err.Error(),
@@ -353,7 +346,53 @@ func (s *Server) UpdateProfile(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, u)
+	if req.Email != "" && req.Email != updatingUser.Email {
+		if !s.persist.IsUniqueEmail(req.Email) {
+			c.AbortWithStatusJSON(http.StatusConflict, Response{
+				Error: "Email already exists",
+			})
+			return
+		}
+
+		updatingUser.Email = req.Email
+	}
+
+	if req.FirstName != "" {
+		updatingUser.FirstName = req.FirstName
+	}
+
+	if req.LastName != "" {
+		updatingUser.LastName = req.LastName
+	}
+
+	if req.Password != "" {
+		updatingUser.Password = req.Password
+	}
+
+	updatingUser.IsAdmin = req.IsAdmin
+
+	if !req.IsAdmin {
+		otherAdmins, _ := s.persist.HasOtherAdmins(updatingUser)
+		if !otherAdmins {
+			c.AbortWithStatusJSON(http.StatusBadRequest, Response{
+				Error: "Application requires at least one Admin user",
+			})
+			return
+		}
+	}
+
+	log.Printf("%+v", req)
+	log.Printf("%+v", updatingUser)
+
+	updatingUser, err = s.persist.UpdateUser(updatingUser)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{
+			Error: err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, updatingUser)
 }
 
 type UpdatePasswordRequest struct {

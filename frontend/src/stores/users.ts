@@ -123,9 +123,10 @@ export const useUsersStore = defineStore('users', () => {
 
         return response;
     }
-    async function updateUser(json: Partial<User>) {
+    async function updateUser(req: Partial<User>) {
+      console.log("req: ", req)
         userData.value.loading = true;
-        const response = await api({ url: `v1/user/${userData.value.data.id}`, method: 'PATCH', json})
+        const response = await api({ url: `v1/user/${userData.value.data.id}`, method: 'PATCH', json: req})
         userData.value.loading = false;
 
         if (response.ok) {

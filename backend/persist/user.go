@@ -37,7 +37,7 @@ func (p *Persist) GetUserByIDStr(idStr string) (User, error) {
 func (p *Persist) GetUsers() ([]User, error) {
 	var users []User
 
-	result := p.db.Find(&users)
+	result := p.db.Order("id asc").Find(&users)
 	if result.Error != nil {
 		return users, result.Error
 	}
@@ -55,8 +55,24 @@ func (p *Persist) getUserByID(id int) (User, error) {
 	return u, nil
 }
 
+func (p *Persist) HasOtherAdmins(user User) (bool, error) {
+	res := p.db.Model(&User{}).
+		Where("is_admin = true").
+		Where("id <> ?", user.ID).
+		First(&User{})
+
+	if res.Error != nil {
+		return false, res.Error
+	}
+
+	return true, nil
+}
+
 func (p *Persist) UpdateUser(user User) (User, error) {
-	res := p.db.Model(&User{}).Where("id = ?", user.ID).Updates(user)
+	res := p.db.Model(&User{}).
+		Where("id = ?", user.ID).
+		Select("IsAdmin", "FirstName", "LastName", "Email", "Password", "CanLogin").
+		Updates(user)
 
 	return user, res.Error
 }
@@ -88,9 +104,11 @@ func (p *Persist) GetUserByEmail(email string) (User, error) {
 	return u, nil
 }
 
-func (p *Persist) CreateUser(email, password, firstName, lastName string) (User, error) {
+// TODO this should take in a users struct instead of all the fields to make it
+func (p *Persist) CreateUser(email, password, firstName, lastName string, isAdmin bool) (User, error) {
 	u := User{
 		Email:     email,
+		IsAdmin:   isAdmin,
 		FirstName: firstName,
 		LastName:  lastName,
 		Password:  password,

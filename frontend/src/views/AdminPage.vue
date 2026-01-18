@@ -47,7 +47,7 @@
           <td class="px-4 py-2">
             <AppButton
               class="px-3 py-1 bg-grey-200 rounded"
-              @click="openEditModal(user)"
+              @click="() => {$emit('close-menu'); openEditModal(user)}"
             >
               Edit
             </AppButton>
@@ -82,6 +82,7 @@
             <input
               v-model="form.email"
               type="email"
+              autocomplete="new-email"
               class="input"
               required
             />
@@ -111,9 +112,12 @@
               v-model="form.password"
               type="password"
               class="input"
+              autocomplete="new-password"
               :required="modalMode === 'create'"
             />
           </div>
+
+          <ErrorMessage :msg=error @clear="error = ''"/>
 
           <div class="flex justify-end gap-3 pt-4">
             <AppButton
@@ -141,14 +145,18 @@
 import { onMounted, ref, reactive } from 'vue'
 import AppButton from './components/AppButton.vue'
 import { useUsersStore } from '@/stores/users'
+import ErrorMessage from './components/ErrorMessage.vue';
 import type { User } from '@/types/users'
 
 const usersStore = useUsersStore()
+
+const emit = defineEmits(['close-menu']);
 
 const usersList = ref<User[]>([])
 const showModal = ref(false)
 const modalMode = ref<'create' | 'edit'>('create')
 const editingUserId = ref<number | null>(null)
+const error = ref<string>('')
 
 const form = reactive({
   firstName: '',
@@ -205,7 +213,10 @@ async function submitUser() {
     console.log(req)
 
     const res = await usersStore.updateUser(req)
-    if (!res.ok) return
+    if (!res.ok) {
+      error.value = res.body.error
+      return
+    }
   }
 
   await fetchUsers()

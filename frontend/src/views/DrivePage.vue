@@ -74,14 +74,22 @@
           <div
             v-for="folder in folders"
             :key="folder.folder_id"
-            class="folder-item card flex flex-row align-center gap-3 p-3"
+            class="folder-item card flex flex-row items-center gap-3 p-3"
           >
-            <span @click="changeFolder(folder.folder_id)">
+            <!-- Folder clickable name -->
+            <span
+              class="folder-info flex-1 flex items-center gap-2 cursor-pointer"
+              @click="changeFolder(folder.folder_id)"
+            >
               <span class="folder-icon">📁</span>
               <span class="folder-name">{{ folder.name }}</span>
             </span>
-            <span class="file-delete" @click="deleteFolder(folder.folder_id)">🗑️</span>
-            <span class="file-edit cursor-pointer" @click="openFolderEditModal(folder)">✏️</span>
+
+            <!-- Action buttons aligned right -->
+            <span class="folder-actions flex items-center gap-2">
+              <span class="file-edit cursor-pointer" @click="openFolderEditModal(folder)">✏️</span>
+              <span class="file-delete cursor-pointer" @click="deleteFolder(folder.folder_id)">🗑️</span>
+            </span>
           </div>
         </div>
       </div>
@@ -422,6 +430,15 @@ onMounted(() => {
 
 .items-list {
   width: 100%;
+}
+
+.folder-info {
+  flex: 1;
+}
+
+.folder-actions {
+  display: flex;
+  gap: 0.5rem;
 }
 
 .folder-item,

@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -11,6 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
+	"golang.org/x/crypto/bcrypt"
 )
 
 type LoginRequest struct {
@@ -70,9 +70,11 @@ func (s *Server) authorize(email, password string) (persist.User, error) {
 		return user, err
 	}
 
-	// todo make this more smart
-	if user.Password != password {
-		return user, errors.New("password incorrect")
+	log.Println(user.Password)
+
+	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password))
+	if err != nil {
+		return persist.User{}, err
 	}
 
 	return user, nil
@@ -200,8 +202,6 @@ func (s *Server) CreateUser(c *gin.Context) {
 		return
 	}
 
-	log.Printf("Req: %+v\n", req)
-
 	if !s.persist.IsUniqueEmail(req.Email) {
 		c.AbortWithStatusJSON(http.StatusConflict, Response{
 			Error: "Email already exists",
@@ -209,7 +209,16 @@ func (s *Server) CreateUser(c *gin.Context) {
 		return
 	}
 
-	nu, err := s.persist.CreateUser(req.Email, req.Password, req.FirstName, req.LastName, req.IsAdmin)
+	hashed, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if err != nil {
+		log.Println(err.Error())
+		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{
+			Error: err.Error(),
+		})
+		return
+	}
+
+	nu, err := s.persist.CreateUser(req.Email, string(hashed), req.FirstName, req.LastName, req.IsAdmin)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{
 			Error: err.Error(),
@@ -366,7 +375,15 @@ func (s *Server) UpdateProfile(c *gin.Context) {
 	}
 
 	if req.Password != "" {
-		updatingUser.Password = req.Password
+		hashed, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+		if err != nil {
+			log.Println(err.Error())
+			c.AbortWithStatusJSON(http.StatusInternalServerError, Response{
+				Error: err.Error(),
+			})
+			return
+		}
+		updatingUser.Password = string(hashed)
 	}
 
 	updatingUser.IsAdmin = req.IsAdmin

@@ -57,6 +57,26 @@
     <FileUploader :parent="currentFolderId" @upload="handleFileUpload" @error="handleUploadError"
     :multiple=true :maxSize=maxFileSize />
 
+    <!-- Bulk Actions -->
+    <div
+      v-if="hasSelection"
+      class="flex items-center gap-3 mb-4 p-3 rounded bg-blue-50 border border-blue-200"
+    >
+      <span class="text-sm text-gray-700">
+        Selected:
+        {{ selectedFolders.size }} folders,
+        {{ selectedFiles.size }} files
+      </span>
+
+      <AppButton class="bg-red-600 text-white px-3 py-1" @click="bulkDelete">
+        Delete
+      </AppButton>
+
+      <AppButton class="bg-gray-200 px-3 py-1" @click="clearSelection">
+        Clear
+      </AppButton>
+    </div>
+
     <div v-if="loading" class="flex flex-col align-center content-center gap-3">
       <SpinnerView />
       <p>Loading folder contents...</p>
@@ -76,6 +96,14 @@
             :key="folder.folder_id"
             class="folder-item card flex flex-row items-center gap-3 p-3"
           >
+            <!-- Checkbox -->
+            <input
+              type="checkbox"
+              :checked="selectedFolders.has(folder.folder_id)"
+              @click.stop
+              @change="toggleFolderSelection(folder.folder_id)"
+            />
+
             <!-- Folder clickable name -->
             <span
               class="folder-info flex-1 flex items-center gap-2 cursor-pointer"
@@ -85,10 +113,10 @@
               <span class="folder-name">{{ folder.name }}</span>
             </span>
 
-            <!-- Action buttons aligned right -->
+            <!-- Actions -->
             <span class="folder-actions flex items-center gap-2">
-              <span class="file-edit cursor-pointer" @click="openFolderEditModal(folder)">✏️</span>
-              <span class="file-delete cursor-pointer" @click="deleteFolder(folder.folder_id)">🗑️</span>
+              <span class="file-edit cursor-pointer" @click.stop="openFolderEditModal(folder)">✏️</span>
+              <span class="file-delete cursor-pointer" @click.stop="deleteFolder(folder.folder_id)">🗑️</span>
             </span>
           </div>
         </div>
@@ -101,18 +129,25 @@
           <div
             v-for="file in files"
             :key="file.id"
-            class="file-item card flex flex-row align-center gap-3 p-3"
+            class="file-item card flex flex-row items-center gap-3 p-3"
           >
+            <!-- Checkbox -->
+            <input
+              type="checkbox"
+              :checked="selectedFiles.has(file.id)"
+              @click.stop
+              @change="toggleFileSelection(file.id)"
+            />
+
             <span class="file-icon">📄</span>
-            <span class="file-name" :title="file.name">{{ formatFileName(file.name) }}</span>
+            <span class="file-name">{{ formatFileName(file.name) }}</span>
             <span class="file-size">{{ formatFileSize(file.file_size) }}</span>
             <span class="file-extension">{{ file.extension }}</span>
-            <span class="file-delete" @click="deleteFile(file.id)">🗑️</span>
 
-            <!-- action buttons -->
-            <span class="file-edit cursor-pointer" @click="openFileEditModal(file)">✏️</span>
+            <span class="file-edit cursor-pointer" @click.stop="openFileEditModal(file)">✏️</span>
+            <span class="file-delete cursor-pointer" @click.stop="deleteFile(file.id)">🗑️</span>
             <span class="file-download">
-              <a :href="getDownloadURL(file.id)" :download="file.name">⬇️</a>
+              <a @click.stop :href="getDownloadURL(file.id)" :download="file.name">⬇️</a>
             </span>
           </div>
         </div>
@@ -184,7 +219,7 @@
 <script setup lang="ts">
 import AppButton from './components/AppButton.vue'
 import BreadCrumbs from './components/BreadCrumbs.vue'
-import { ref, onMounted, watchEffect, watch, nextTick } from 'vue';
+import { ref, onMounted, watchEffect, watch, nextTick, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import api from '@/utils/api';
 import type { Breadcrumb, Folder, File, FolderContents } from '@/types/folder';
@@ -215,6 +250,46 @@ const editingFolder = ref<Folder | null>(null);
 const newFolderName = ref('');
 
 const folderName = ref('');
+
+const selectedFolders = ref<Set<string>>(new Set())
+const selectedFiles = ref<Set<string>>(new Set())
+
+const hasSelection = computed(
+  () => selectedFolders.value.size > 0 || selectedFiles.value.size > 0
+)
+
+function toggleFolderSelection(id: string) {
+  selectedFolders.value.has(id)
+    ? selectedFolders.value.delete(id)
+    : selectedFolders.value.add(id)
+}
+
+function toggleFileSelection(id: string) {
+  selectedFiles.value.has(id)
+    ? selectedFiles.value.delete(id)
+    : selectedFiles.value.add(id)
+}
+
+function clearSelection() {
+  selectedFolders.value.clear()
+  selectedFiles.value.clear()
+}
+
+async function bulkDelete() {
+  // Delete files
+  for (const fileId of selectedFiles.value) {
+    await deleteFile(fileId)
+  }
+
+  // Delete folders
+  for (const folderId of selectedFolders.value) {
+    await deleteFolder(folderId)
+  }
+
+  clearSelection()
+  refreshCurrentList()
+}
+
 
 watch(show, async (open) => {
   if (open) {

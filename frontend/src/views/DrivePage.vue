@@ -92,7 +92,7 @@
         <h2>Folders</h2>
         <div class="items-list flex flex-col gap-2">
           <div
-            v-for="folder in folders"
+            v-for="(folder, index) in folders"
             :key="folder.folder_id"
             class="folder-item card flex flex-row items-center gap-3 p-3"
           >
@@ -100,8 +100,7 @@
             <input
               type="checkbox"
               :checked="selectedFolders.has(folder.folder_id)"
-              @click.stop
-              @change="toggleFolderSelection(folder.folder_id)"
+              @click.stop="onFolderCheckboxClick(folder.folder_id, index, $event)"
             />
 
             <!-- Folder clickable name -->
@@ -127,7 +126,7 @@
         <h2>Files</h2>
         <div class="items-list flex flex-col gap-2">
           <div
-            v-for="file in files"
+            v-for="(file, index) in files"
             :key="file.id"
             class="file-item card flex flex-row items-center gap-3 p-3"
           >
@@ -135,8 +134,7 @@
             <input
               type="checkbox"
               :checked="selectedFiles.has(file.id)"
-              @click.stop
-              @change="toggleFileSelection(file.id)"
+              @click.stop="onFileCheckboxClick(file.id, index, $event)"
             />
 
             <span class="file-icon">📄</span>
@@ -253,6 +251,57 @@ const folderName = ref('');
 
 const selectedFolders = ref<Set<string>>(new Set())
 const selectedFiles = ref<Set<string>>(new Set())
+
+const lastFolderIndex = ref<number | null>(null)
+const lastFileIndex = ref<number | null>(null)
+
+function selectFolderRange(start: number, end: number) {
+  const [from, to] = start < end ? [start, end] : [end, start]
+
+  for (let i = from; i <= to; i++) {
+    selectedFolders.value.add(folders.value[i].folder_id)
+  }
+}
+
+function selectFileRange(start: number, end: number) {
+  const [from, to] = start < end ? [start, end] : [end, start]
+
+  for (let i = from; i <= to; i++) {
+    selectedFiles.value.add(files.value[i].id)
+  }
+}
+
+function onFolderCheckboxClick(
+  folderId: string,
+  index: number,
+  event: MouseEvent
+) {
+  if (event.shiftKey && lastFolderIndex.value !== null) {
+    selectFolderRange(lastFolderIndex.value, index)
+  } else {
+    selectedFolders.value.has(folderId)
+      ? selectedFolders.value.delete(folderId)
+      : selectedFolders.value.add(folderId)
+  }
+
+  lastFolderIndex.value = index
+}
+
+function onFileCheckboxClick(
+  fileId: string,
+  index: number,
+  event: MouseEvent
+) {
+  if (event.shiftKey && lastFileIndex.value !== null) {
+    selectFileRange(lastFileIndex.value, index)
+  } else {
+    selectedFiles.value.has(fileId)
+      ? selectedFiles.value.delete(fileId)
+      : selectedFiles.value.add(fileId)
+  }
+
+  lastFileIndex.value = index
+}
 
 const hasSelection = computed(
   () => selectedFolders.value.size > 0 || selectedFiles.value.size > 0

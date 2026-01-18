@@ -1,4 +1,4 @@
-FROM golang:1.25.1 as dev
+FROM golang:1.25.1 AS dev
 
 WORKDIR /app
 
@@ -14,7 +14,7 @@ RUN curl -sSfL https://raw.githubusercontent.com/air-verse/air/master/install.sh
 
 CMD ["air", "-c", "/app/.air.toml"]
 
-FROM dev as final
+FROM dev AS final
 
 RUN CGO_ENABLED=0 GOOS=linux go build  -o /app/api ./avenuectl
 

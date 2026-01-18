@@ -2,10 +2,10 @@ services:
   backend:
     build:
       target: "${BACKEND_TARGET:-live-dev}"
-      context: ./backend
+      context: ./
       dockerfile: Dockerfile
     volumes:
-      - ./backend:/app:rw 
+      - ./:/app:rw 
       - upload-data:/avenue/uploads
     ports:
       - "8080:8080"

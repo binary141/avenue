@@ -1,100 +1,26 @@
 <template>
   <div class="page gap-5">
+    <!-- Header -->
     <div class="flex items-center justify-between mb-4 w-full">
-      <h1 class="text-center flex-1 text-2xl font-bold">Admin</h1>
+      <h1 class="text-2xl font-bold">Admin</h1>
 
       <AppButton
-        @click="show = true"
-        class="px-4 py-2 bg-blue-600 text-white rounded"
+        @click="openCreateModal"
+        class="px-4 py-2 bg-blue-600 text-grey rounded"
       >
         Create User
       </AppButton>
     </div>
 
-    <!-- create user form -->
-    <div
-      v-if="show"
-      class="fixed inset-0 flex items-center justify-center"
-    >
-      <div class="bg-white p-6 rounded-lg w-96">
-        <h2 class="text-lg font-semibold mb-4 text-gray-700 ">Create User</h2>
-
-        <form
-          @submit.prevent="submitForm"
-          class="space-y-4 w-80 bg-white text-gray-700 p-6 rounded-lg shadow"
-        >
-          <div>
-            <label class="block text-sm font-medium mb-1 text-gray-600">First Name</label>
-            <input
-              v-model="firstName"
-              type="text"
-              autocomplete="off"
-              class="w-full border border-gray-300 rounded px-3 py-2 text-gray-700 bg-white"
-            />
-          </div>
-
-          <div>
-            <label class="block text-sm font-medium mb-1 text-gray-600">Last Name</label>
-            <input
-              v-model="lastName"
-              type="text"
-              autocomplete="off"
-              class="w-full border border-gray-300 rounded px-3 py-2 text-gray-700 bg-white"
-            />
-          </div>
-
-          <div>
-            <label class="block text-sm font-medium mb-1 text-gray-600">Email</label>
-            <input
-              v-model="email"
-              type="email"
-              autocomplete="new-email"
-              class="w-full border border-gray-300 rounded px-3 py-2 text-gray-700 bg-white"
-              required
-            />
-          </div>
-
-          <div>
-            <label class="block text-sm font-medium mb-1 text-gray-600">Password</label>
-            <input
-              v-model="password"
-              type="password"
-              autocomplete="new-password"
-              class="w-full border border-gray-300 rounded px-3 py-2 text-gray-700 bg-white"
-            />
-          </div>
-
-          <div class="flex justify-end gap-3 mt-6">
-            <AppButton
-              @click="show = false"
-              class="px-3 py-2 bg-gray-200 text-gray-700 rounded"
-            >
-              Cancel
-            </AppButton>
-
-            <AppButton
-              type="submit"
-              @click="createUser"
-              class="px-3 py-2 bg-blue-600 text-white rounded"
-            >
-              Save
-            </AppButton>
-          </div>
-        </form>
-
-
-      </div>
-    </div>
-
-    <h1>Users</h1>
-
-    <table class="min-w-full border border-gray-300 rounded-lg overflow-hidden">
-      <thead class="bg-gray-100 border-b border-gray-300">
+    <!-- Users Table -->
+    <table class="min-w-full border border-grey-300 rounded-lg overflow-hidden">
+      <thead class="bg-grey-100 border-b border-grey-300">
         <tr>
-          <th class="px-4 py-2 text-left font-semibold text-gray-700 border-r">ID</th>
-          <th class="px-4 py-2 text-left font-semibold text-gray-700 border-r">First Name</th>
-          <th class="px-4 py-2 text-left font-semibold text-gray-700 border-r">Last Name</th>
-          <th class="px-4 py-2 text-left font-semibold text-gray-700">Email</th>
+          <th class="px-4 py-2 text-left">ID</th>
+          <th class="px-4 py-2 text-left">First Name</th>
+          <th class="px-4 py-2 text-left">Last Name</th>
+          <th class="px-4 py-2 text-left">Email</th>
+          <th class="px-4 py-2 text-left">Actions</th>
         </tr>
       </thead>
 
@@ -102,81 +28,188 @@
         <tr
           v-for="user in usersList"
           :key="user.id"
-          class="odd:bg-white even:bg-gray-50 border-b border-gray-200"
+          class="odd:bg-grey-100 even:bg-grey-50 border-b"
         >
-          <td class="px-4 py-2 border-r text-gray-700">{{ user.id }}</td>
-          <td class="px-4 py-2 border-r text-gray-700">{{ user.firstName }}</td>
-          <td class="px-4 py-2 border-r text-gray-700">{{ user.lastName }}</td>
-          <td class="px-4 py-2 text-gray-700">{{ user.email }}</td>
+          <td class="px-4 py-2">{{ user.id }}</td>
+          <td class="px-4 py-2">{{ user.firstName }}</td>
+          <td class="px-4 py-2">{{ user.lastName }}</td>
+          <td class="px-4 py-2">{{ user.email }}</td>
+          <td class="px-4 py-2">
+            <AppButton
+              class="px-3 py-1 bg-grey-200 rounded"
+              @click="openEditModal(user)"
+            >
+              Edit
+            </AppButton>
+          </td>
         </tr>
       </tbody>
     </table>
+
+    <!-- User Modal (Create + Edit) -->
+    <div
+      v-if="showModal"
+      class="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
+    >
+      <div class="bg-[#3A3F78] p-6 rounded-lg w-96">
+        <h2 class="text-lg font-semibold mb-4 text-grey-700">
+          {{ modalMode === 'create' ? 'Create User' : 'Edit User' }}
+        </h2>
+
+        <form @submit.prevent="submitUser" class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium mb-1">First Name</label>
+            <input
+              v-model="form.firstName"
+              type="text"
+              class="input"
+            />
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium mb-1">Last Name</label>
+            <input
+              v-model="form.lastName"
+              type="text"
+              class="input"
+            />
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium mb-1">Email</label>
+            <input
+              v-model="form.email"
+              type="email"
+              class="input"
+              required
+            />
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium mb-1">
+              Password
+              <span v-if="modalMode === 'edit'" class="text-xs opacity-60">
+                (leave blank to keep unchanged)
+              </span>
+            </label>
+            <input
+              v-model="form.password"
+              type="password"
+              class="input"
+              :required="modalMode === 'create'"
+            />
+          </div>
+
+          <div class="flex justify-end gap-3 pt-4">
+            <AppButton
+              type="button"
+              class="px-3 py-2 bg-grey-200 rounded"
+              @click="closeModal"
+            >
+              Cancel
+            </AppButton>
+
+            <AppButton
+              type="submit"
+              class="px-3 py-2 bg-blue-600 text-grey rounded"
+            >
+              Save
+            </AppButton>
+          </div>
+        </form>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { onMounted, ref, reactive } from 'vue'
 import AppButton from './components/AppButton.vue'
-import { useUsersStore } from '@/stores/users';
-import type { User } from '@/types/users';
+import { useUsersStore } from '@/stores/users'
+import type { User } from '@/types/users'
 
-const usersStore = useUsersStore();
+const usersStore = useUsersStore()
 
-onMounted(() => {
-  getUsers();
+const usersList = ref<User[]>([])
+const showModal = ref(false)
+const modalMode = ref<'create' | 'edit'>('create')
+const editingUserId = ref<number | null>(null)
+
+const form = reactive({
+  firstName: '',
+  lastName: '',
+  email: '',
+  password: '',
 })
 
-const submitForm = () => {}
+onMounted(fetchUsers)
 
-const usersList = ref<User[]>([]);
-const show = ref(false);
+/* ---------------- Actions ---------------- */
 
-const firstName = ref('');
-const lastName = ref('');
-const email = ref('');
-const password = ref('');
-
-async function createUser() {
-  if (email.value == '') {
-    return;
-  }
-
-  if (password.value == '') {
-    return;
-  }
-
-  const response = await usersStore.createUser({
-    email: email.value,
-    password: password.value,
-    firstName: firstName.value,
-    lastName: lastName.value,
-  });
-
-  if (!response.ok) {
-    return
-  }
-
-  firstName.value = '';
-  lastName.value = '';
-  email.value = '';
-
-  show.value = false;
-
-  usersList.value = response.body
+function openCreateModal() {
+  modalMode.value = 'create'
+  editingUserId.value = null
+  resetForm()
+  showModal.value = true
 }
 
-async function getUsers() {
-  const response = await usersStore.getUsers()
+function openEditModal(user: User) {
+  modalMode.value = 'edit'
+  editingUserId.value = user.id
 
-  if (!response.ok) {
-    return
-  }
+  form.firstName = user.firstName
+  form.lastName = user.lastName
+  form.email = user.email
+  form.password = ''
 
-  usersList.value = response.body
+  showModal.value = true
 }
 
+function closeModal() {
+  showModal.value = false
+}
+
+/* ---------------- API ---------------- */
+
+async function submitUser() {
+  if (modalMode.value === 'create') {
+    const res = await usersStore.createUser({ ...form })
+    if (!res.ok) return
+    usersList.value = res.body
+  } else if (editingUserId.value !== null) {
+    const res = await usersStore.updateUser(editingUserId.value, {
+      firstName: form.firstName,
+      lastName: form.lastName,
+      email: form.email,
+      ...(form.password ? { password: form.password } : {}),
+    })
+    if (!res.ok) return
+    usersList.value = res.body
+  }
+
+  closeModal()
+}
+
+async function fetchUsers() {
+  const res = await usersStore.getUsers()
+  if (!res.ok) return
+  usersList.value = res.body
+}
+
+function resetForm() {
+  form.firstName = ''
+  form.lastName = ''
+  form.email = ''
+  form.password = ''
+}
 </script>
 
 <style scoped>
+.input {
+  width: 100%;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+}
 </style>
 

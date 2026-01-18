@@ -1,0 +1,33 @@
+.git
+.gitignore
+.env
+node_modules
+
+# Exclude avenuectl temp folder
+avenuectl/temp/
+
+# Optional: exclude temp folders elsewhere
+tmp/
+persist/tmp/
+
+# Node_modules, frontend build (if copied in backend)
+frontend/node_modules/
+frontend/dist/
+
+# Logs
+*.log
+
+# Exclude the temp folder
+avenuectl/temp/
+
+# Optional: other temp/log folders
+tmp/
+persist/tmp/
+
+# Node modules
+frontend/node_modules/
+frontend/dist/
+
+# Logs
+*.log
+

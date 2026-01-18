@@ -7,7 +7,6 @@ services:
     volumes:
       - ./backend:/app:rw 
       - upload-data:/avenue/uploads
-      - ./frontend/dist:/app/avenuectl/frontend/dist
     ports:
       - "8080:8080"
     depends_on:

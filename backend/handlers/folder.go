@@ -3,6 +3,7 @@ package handlers
 import (
 	"errors"
 	"net/http"
+	"slices"
 
 	"avenue/backend/persist"
 	"avenue/backend/shared"
@@ -222,12 +223,7 @@ func (s *Server) ListFolderContents(c *gin.Context) {
 	x.Folders = folds
 	x.Files = files
 
-	for i, f := range folderParents {
-		// skip the first folder as that is the one that is being queried
-		if i == 0 {
-			continue
-		}
-
+	for _, f := range folderParents {
 		if folderID == "" && f.FolderID == shared.ROOTFOLDERID {
 			// an empty folderID in the request if for the root folder
 			continue
@@ -246,13 +242,7 @@ func (s *Server) ListFolderContents(c *gin.Context) {
 		})
 	}
 
+	slices.Reverse(x.BreadCrumbs)
+
 	c.JSON(http.StatusOK, x)
 }
-
-// func mustSet(json, key string, val interface{}) string {
-// 	ret, err := sjson.Set(json, key, val)
-// 	if err != nil {
-// 		panic("this is not possible")
-// 	}
-// 	return ret
-// }

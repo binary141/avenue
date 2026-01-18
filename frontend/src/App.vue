@@ -11,7 +11,7 @@
         </div>
 
         <!-- RIGHT PFP -->
-        <div class="ml-auto relative">
+        <div v-if="isLoggedIn" class="ml-auto relative">
           <img
             src="/pfp.svg"
             class="w-10 h-10 cursor-pointer"
@@ -69,6 +69,7 @@ const usersStore = useUsersStore();
 const status = ref<"loading" | "loaded" | "error">("loading");
 const showMenu = ref(false);
 const isAdmin = ref(false);
+const isLoggedIn = ref(false);
 const router = useRouter();
 const route = useRoute();
 
@@ -111,6 +112,8 @@ async function logout() {
     console.error(response)
   }
 
+  isLoggedIn.value = false
+
   router.push("/login")
   showMenu.value = false
 }
@@ -122,6 +125,7 @@ async function getUserAndLogin() {
     if (response.ok) {
       status.value = "loaded";
       usersStore.logIn(response.body);
+      isLoggedIn.value = true
 
       let isAdminLocal = usersStore.userData.data.isAdmin;
       if (isAdminLocal !== undefined) {

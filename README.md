@@ -7,11 +7,14 @@
 - [X] Allow files of any file size. Maybe make it env driven?
 - [X] Folder creation in the ui
 - [X] Breadcrumb the folder tree in the ui for easier navigation
-- [] Bulk delete of files (maybe have a multi-select in the list)
+- [X] Bulk delete of files (maybe have a multi-select in the list)
 - [] Add way to move files around
 - [] Fileviewer in ui? How would this be implemented?
 - [] Password resets
 - [] Add file search
+- [] Add trash can
+- [] Add worker to actually delete files that are in the trash after X days
+- [] Consolidate api wrapper and have a unified logout if a 401 response is received. Currently broken in a handful of places
 
 # frontend
 

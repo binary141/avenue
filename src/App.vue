@@ -6,14 +6,14 @@
       <div class="header flex flex-row items-center px-4">
         <!-- LEFT BRANDING -->
         <div class="branding flex flex-row items-center gap-3">
-          <img src="/avenue-logo.png" alt="Logo" class="logo" @click="home"/>
+          <img :src="logo" alt="Logo" class="logo" @click="home"/>
           <span class="avenue-text">AVENUE</span>
         </div>
 
         <!-- RIGHT PFP -->
         <div v-if="isLoggedIn" class="ml-auto relative">
           <img
-            src="/pfp.svg"
+            :src="pfp"
             class="w-10 h-10 cursor-pointer"
             @click="showMenu = !showMenu"
           />
@@ -59,6 +59,8 @@
 
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue';
+import logo from '@/assets/avenue-logo.png'
+import pfp from '@/assets/pfp.svg'
 import AppButton from './views/components/AppButton.vue';
 import SpinnerView from './views/components/SpinnerView.vue';
 import { useUsersStore } from './stores/users';

@@ -62,14 +62,23 @@ func (s *Server) ServeUI(uiFS embed.FS) {
 	// Serve only actual assets here
 	s.router.StaticFS("/assets", http.FS(assetsFS))
 
+	s.router.GET("/favicon.ico", func(c *gin.Context) {
+		data, err := fs.ReadFile(distFS, "favicon.ico")
+		if err != nil {
+			c.String(http.StatusNotFound, "favicon not found")
+			return
+		}
+		c.Data(http.StatusOK, "image/x-icon", data)
+	})
+
 	// SPA fallback
 	s.router.NoRoute(func(c *gin.Context) {
 		data, err := fs.ReadFile(distFS, "index.html")
 		if err != nil {
-			c.String(500, "index.html not found")
+			c.String(http.StatusInternalServerError, "index.html not found")
 			return
 		}
-		c.Data(200, "text/html; charset=utf-8", data)
+		c.Data(http.StatusOK, "text/html; charset=utf-8", data)
 	})
 }
 

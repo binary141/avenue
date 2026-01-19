@@ -15,5 +15,11 @@ run:
 lint:
 	golangci-lint run
 
-build:
-	go build -o api ./avenuectl
+build-api:
+	go build -o api ./
+
+build-api-prod:
+	go build -tags prod -o api ./
+
+build-ui:
+	npm run build

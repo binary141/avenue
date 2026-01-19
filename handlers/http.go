@@ -28,6 +28,10 @@ type Server struct {
 
 func SetupServer(p *persist.Persist) Server {
 	r := gin.Default()
+	if shared.GetEnv("APP_ENV", "dev") == "production" {
+		gin.SetMode(gin.ReleaseMode)
+	}
+
 	fs := afero.NewOsFs()
 	jailedFs := afero.NewBasePathFs(fs, shared.GetEnv("UPLOAD_DIR", "./avenuectl/temp/"))
 	return Server{
@@ -45,7 +49,7 @@ var (
 )
 
 func (s *Server) ServeUI(uiFS embed.FS) {
-	distFS, err := fs.Sub(uiFS, "frontend/dist")
+	distFS, err := fs.Sub(uiFS, "dist")
 	if err != nil {
 		panic(err)
 	}

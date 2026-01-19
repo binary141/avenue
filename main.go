@@ -5,9 +5,10 @@ import (
 	"avenue/backend/persist"
 	"avenue/backend/shared"
 	"embed"
+
+	"github.com/gin-gonic/gin"
 )
 
-//go:embed frontend/dist/*
 var frontendFS embed.FS
 
 func main() {
@@ -25,6 +26,7 @@ func main() {
 	server.SetupRoutes()
 
 	if shared.GetEnv("APP_ENV", "dev") == "production" {
+		gin.SetMode(gin.ReleaseMode)
 		server.ServeUI(frontendFS)
 	}
 

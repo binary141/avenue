@@ -297,7 +297,7 @@ func (s *Server) GetProfile(c *gin.Context) {
 }
 
 type UpdateProfileRequest struct {
-	ID        string `json:"id" validate:"required"`
+	ID        int64  `json:"id" validate:"required,min=1"`
 	Email     string `json:"email" validate:"omitempty,email,min=4,max=512"`
 	IsAdmin   bool   `json:"isAdmin"`
 	Password  string `json:"password" validate:"omitempty,min=4,max=64"`
@@ -340,14 +340,14 @@ func (s *Server) UpdateProfile(c *gin.Context) {
 		return
 	}
 
-	if req.ID != userID && !u.IsAdmin {
+	if fmt.Sprintf("%d", req.ID) != userID && !u.IsAdmin {
 		c.AbortWithStatusJSON(http.StatusBadRequest, Response{
 			Error: "Only admin users can edit another users information",
 		})
 		return
 	}
 
-	updatingUser, err := s.persist.GetUserByIDStr(req.ID)
+	updatingUser, err := s.persist.GetUserByIDStr(fmt.Sprintf("%d", req.ID))
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{
 			Error: err.Error(),
@@ -397,9 +397,6 @@ func (s *Server) UpdateProfile(c *gin.Context) {
 			return
 		}
 	}
-
-	log.Printf("%+v", req)
-	log.Printf("%+v", updatingUser)
 
 	updatingUser, err = s.persist.UpdateUser(updatingUser)
 	if err != nil {

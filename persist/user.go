@@ -19,6 +19,7 @@ type User struct {
 	Password  string         `gorm:"not null" json:"-"` // omit password from json output
 	CanLogin  bool           `gorm:"not null" json:"canLogin"`
 	IsAdmin   bool           `gorm:"not null;default:false" json:"isAdmin"`
+	Quota     int64          `gorm:"not null;default:0" json:"quota"`
 	CreatedAt time.Time      `json:"createdAt"`
 	UpdatedAt time.Time      `json:"updatedAt"`
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"deletedAt"`
@@ -72,7 +73,7 @@ func (p *Persist) HasOtherAdmins(user User) (bool, error) {
 func (p *Persist) UpdateUser(user User) (User, error) {
 	res := p.db.Model(&User{}).
 		Where("id = ?", user.ID).
-		Select("IsAdmin", "FirstName", "LastName", "Email", "Password", "CanLogin").
+		Select("IsAdmin", "FirstName", "LastName", "Email", "Password", "CanLogin", "Quota").
 		Updates(user)
 
 	return user, res.Error
@@ -135,6 +136,14 @@ func (p *Persist) CreateUser(email, password, firstName, lastName string, isAdmi
 	res := p.db.Create(&u)
 
 	return u, res.Error
+}
+
+func (p *Persist) GetUserQuota(id string) (int64, error) {
+	var total int64
+
+	res := p.db.Raw("SELECT SUM(file_size) FROM files WHERE created_by = ?", id).Scan(&total)
+
+	return total, res.Error
 }
 
 func (p *Persist) IsUniqueEmail(email string) bool {

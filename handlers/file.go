@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -55,13 +56,44 @@ func (s *Server) Upload(c *gin.Context) {
 		return
 	}
 
+	user, err := s.persist.GetUserByIDStr(userID)
+	if err != nil {
+		log.Printf("error getting user: %s", err.Error())
+		c.JSON(http.StatusInternalServerError, Response{
+			Error: err.Error(),
+		})
+		return
+	}
+
+	totalUsed, err := s.persist.GetUserQuota(userID)
+	if err != nil {
+		log.Printf("error getting user quota: %s", err.Error())
+		c.JSON(http.StatusInternalServerError, Response{
+			Error: err.Error(),
+		})
+		return
+	}
+
+	log.Printf("user.Quota: %d, totalUsed: %d", user.Quota, totalUsed)
+
+	if totalUsed >= user.Quota {
+		c.JSON(http.StatusUnprocessableEntity, Response{
+			Error: "Max quota reached. Please delete files to be able to upload files",
+		})
+		return
+	}
+
+	remainingQuota := user.Quota - totalUsed
+
 	maxFileSize := shared.GetEnvInt64("MAX_FILE_BYTE_SIZE", shared.DEFAULTMAXFILESIZE)
 	var total int64
+
+	maxUploadSize := math.Min(float64(remainingQuota), float64(maxFileSize))
 
 	c.Request.Body = http.MaxBytesReader(
 		c.Writer,
 		c.Request.Body,
-		maxFileSize,
+		int64(maxUploadSize),
 	)
 
 	err = ensureDir(s.fs, fmt.Sprintf("/%s", userID))
@@ -208,12 +240,16 @@ func (s *Server) Upload(c *gin.Context) {
 
 				var maxErr *http.MaxBytesError
 				if errors.As(err, &maxErr) {
-					c.Status(http.StatusRequestEntityTooLarge)
+					c.JSON(http.StatusRequestEntityTooLarge, Response{
+						Error: "File too large",
+					})
 					return
 				}
 
 				if errors.Is(err, http.ErrBodyReadAfterClose) {
-					c.Status(http.StatusRequestEntityTooLarge)
+					c.JSON(http.StatusRequestEntityTooLarge, Response{
+						Error: "File too large",
+					})
 					return
 				}
 

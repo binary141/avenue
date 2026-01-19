@@ -303,6 +303,7 @@ type UpdateProfileRequest struct {
 	Password  string `json:"password" validate:"omitempty,min=4,max=64"`
 	FirstName string `json:"firstName" validate:"omitempty,min=1,max=64"`
 	LastName  string `json:"lastName" validate:"omitempty,min=1,max=64"`
+	Quota     int64  `json:"quota" validate:"omitempty,min=0"`
 }
 
 func (s *Server) UpdateProfile(c *gin.Context) {
@@ -397,6 +398,8 @@ func (s *Server) UpdateProfile(c *gin.Context) {
 			return
 		}
 	}
+
+	updatingUser.Quota = req.Quota
 
 	updatingUser, err = s.persist.UpdateUser(updatingUser)
 	if err != nil {

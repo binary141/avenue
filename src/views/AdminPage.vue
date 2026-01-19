@@ -21,6 +21,7 @@
           <th class="px-4 py-2 text-left">Last Name</th>
           <th class="px-4 py-2 text-left">Email</th>
           <th class="px-4 py-2 text-left">Admin</th>
+          <th class="px-4 py-2 text-left">Quota</th>
           <th class="px-4 py-2 text-left">Actions</th>
         </tr>
       </thead>
@@ -45,9 +46,12 @@
             <span v-else class="opacity-60 text-sm">User</span>
           </td>
           <td class="px-4 py-2">
+            {{ formatQuota(user.quota) }}
+          </td>
+          <td class="px-4 py-2">
             <AppButton
               class="px-3 py-1 bg-grey-200 rounded"
-              @click="() => {$emit('close-menu'); openEditModal(user)}"
+              @click="() => { emit('close-menu'); openEditModal(user) }"
             >
               Edit
             </AppButton>
@@ -101,6 +105,33 @@
             </label>
           </div>
 
+          <!-- Quota -->
+          <div>
+            <label class="block text-sm font-medium mb-1">
+              Storage Quota
+            </label>
+
+            <div class="flex gap-2">
+              <input
+                v-model.number="form.quotaValue"
+                type="number"
+                min="0"
+                class="input flex-1"
+                placeholder="0 = Unlimited"
+              />
+
+              <select v-model="form.quotaUnit" class="w-24">
+                <option value="MiB">MiB</option>
+                <option value="GiB">GiB</option>
+              </select>
+            </div>
+
+            <p class="text-xs opacity-60 mt-1">
+              Set to 0 for unlimited
+            </p>
+          </div>
+
+          <!-- Password -->
           <div>
             <label class="block text-sm font-medium mb-1">
               Password
@@ -117,7 +148,7 @@
             />
           </div>
 
-          <ErrorMessage :msg=error @clear="error = ''"/>
+          <ErrorMessage :msg="error" @clear="error = ''" />
 
           <div class="flex justify-end gap-3 pt-4">
             <AppButton
@@ -145,12 +176,11 @@
 import { onMounted, ref, reactive } from 'vue'
 import AppButton from './components/AppButton.vue'
 import { useUsersStore } from '@/stores/users'
-import ErrorMessage from './components/ErrorMessage.vue';
+import ErrorMessage from './components/ErrorMessage.vue'
 import type { User } from '@/types/users'
 
 const usersStore = useUsersStore()
-
-const emit = defineEmits(['close-menu']);
+const emit = defineEmits(['close-menu'])
 
 const usersList = ref<User[]>([])
 const showModal = ref(false)
@@ -164,6 +194,8 @@ interface UserForm {
   email: string
   password: string
   isAdmin: boolean
+  quotaValue: number
+  quotaUnit: 'MiB' | 'GiB'
 }
 
 const form = reactive<UserForm>({
@@ -172,9 +204,32 @@ const form = reactive<UserForm>({
   email: '',
   password: '',
   isAdmin: false,
+  quotaValue: 0,
+  quotaUnit: 'GiB',
 })
 
 onMounted(fetchUsers)
+
+/* ---------------- Helpers ---------------- */
+
+function formatQuota(bytes?: number) {
+  if (!bytes || bytes <= 0) return 'Unlimited'
+
+  const gib = 1024 ** 3
+  const mib = 1024 ** 2
+
+  return bytes >= gib
+    ? `${(bytes / gib).toFixed(2)} GiB`
+    : `${(bytes / mib).toFixed(2)} MiB`
+}
+
+function quotaToBytes() {
+  if (!form.quotaValue || form.quotaValue <= 0) return 0
+  return Math.floor(
+    form.quotaValue *
+      (form.quotaUnit === 'GiB' ? 1024 ** 3 : 1024 ** 2)
+  )
+}
 
 /* ---------------- Actions ---------------- */
 
@@ -195,6 +250,19 @@ function openEditModal(user: User) {
   form.isAdmin = user.isAdmin
   form.password = ''
 
+  if (user.quota && user.quota > 0) {
+    if (user.quota >= 1024 ** 3) {
+      form.quotaUnit = 'GiB'
+      form.quotaValue = +(user.quota / 1024 ** 3).toFixed(2)
+    } else {
+      form.quotaUnit = 'MiB'
+      form.quotaValue = +(user.quota / 1024 ** 2).toFixed(2)
+    }
+  } else {
+    form.quotaValue = 0
+    form.quotaUnit = 'GiB'
+  }
+
   showModal.value = true
 }
 
@@ -206,7 +274,10 @@ function closeModal() {
 
 async function submitUser() {
   if (modalMode.value === 'create') {
-    const res = await usersStore.createUser({ ...form })
+    const res = await usersStore.createUser({
+      ...form,
+      quota: quotaToBytes(),
+    })
     if (!res.ok) return
   } else if (editingUserId.value !== null) {
     const req = {
@@ -215,6 +286,7 @@ async function submitUser() {
       lastName: form.lastName,
       email: form.email,
       isAdmin: form.isAdmin,
+      quota: quotaToBytes(),
       ...(form.password ? { password: form.password } : {}),
     }
 
@@ -226,7 +298,6 @@ async function submitUser() {
   }
 
   await fetchUsers()
-
   closeModal()
 }
 
@@ -242,6 +313,8 @@ function resetForm() {
   form.email = ''
   form.password = ''
   form.isAdmin = false
+  form.quotaValue = 0
+  form.quotaUnit = 'GiB'
 }
 </script>
 

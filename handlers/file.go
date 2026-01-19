@@ -65,35 +65,38 @@ func (s *Server) Upload(c *gin.Context) {
 		return
 	}
 
-	totalUsed, err := s.persist.GetUserQuota(userID)
-	if err != nil {
-		log.Printf("error getting user quota: %s", err.Error())
-		c.JSON(http.StatusInternalServerError, Response{
-			Error: err.Error(),
-		})
-		return
-	}
-
-	log.Printf("user.Quota: %d, totalUsed: %d", user.Quota, totalUsed)
-
-	if totalUsed >= user.Quota {
-		c.JSON(http.StatusUnprocessableEntity, Response{
-			Error: "Max quota reached. Please delete files to be able to upload files",
-		})
-		return
-	}
-
-	remainingQuota := user.Quota - totalUsed
-
 	maxFileSize := shared.GetEnvInt64("MAX_FILE_BYTE_SIZE", shared.DEFAULTMAXFILESIZE)
 	var total int64
 
-	maxUploadSize := math.Min(float64(remainingQuota), float64(maxFileSize))
+	// 0 is unlimited
+	if user.Quota != 0 {
+		totalUsed, err := s.persist.GetUserQuota(userID)
+		if err != nil {
+			log.Printf("error getting user quota: %s", err.Error())
+			c.JSON(http.StatusInternalServerError, Response{
+				Error: err.Error(),
+			})
+			return
+		}
+
+		log.Printf("user.Quota: %d, totalUsed: %d", user.Quota, totalUsed)
+
+		if totalUsed >= user.Quota {
+			c.JSON(http.StatusUnprocessableEntity, Response{
+				Error: "Max quota reached. Please delete files to be able to upload files",
+			})
+			return
+		}
+
+		remainingQuota := user.Quota - totalUsed
+
+		maxFileSize = int64(math.Min(float64(remainingQuota), float64(maxFileSize)))
+	}
 
 	c.Request.Body = http.MaxBytesReader(
 		c.Writer,
 		c.Request.Body,
-		int64(maxUploadSize),
+		maxFileSize,
 	)
 
 	err = ensureDir(s.fs, fmt.Sprintf("/%s", userID))

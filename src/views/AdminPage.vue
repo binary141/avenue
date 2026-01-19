@@ -158,7 +158,15 @@ const modalMode = ref<'create' | 'edit'>('create')
 const editingUserId = ref<number | null>(null)
 const error = ref<string>('')
 
-const form = reactive({
+interface UserForm {
+  firstName: string
+  lastName: string
+  email: string
+  password: string
+  isAdmin: boolean
+}
+
+const form = reactive<UserForm>({
   firstName: '',
   lastName: '',
   email: '',
@@ -181,8 +189,8 @@ function openEditModal(user: User) {
   modalMode.value = 'edit'
   editingUserId.value = user.id
 
-  form.firstName = user.firstName
-  form.lastName = user.lastName
+  form.firstName = user.firstName ?? ''
+  form.lastName = user.lastName ?? ''
   form.email = user.email
   form.isAdmin = user.isAdmin
   form.password = ''
@@ -201,16 +209,14 @@ async function submitUser() {
     const res = await usersStore.createUser({ ...form })
     if (!res.ok) return
   } else if (editingUserId.value !== null) {
-    let req = {
-      id: `${editingUserId.value}`,
+    const req = {
+      id: editingUserId.value,
       firstName: form.firstName,
       lastName: form.lastName,
       email: form.email,
       isAdmin: form.isAdmin,
       ...(form.password ? { password: form.password } : {}),
     }
-
-    console.log(req)
 
     const res = await usersStore.updateUser(req)
     if (!res.ok) {

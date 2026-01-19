@@ -127,7 +127,7 @@ async function getUserAndLogin() {
       usersStore.logIn(response.body);
       isLoggedIn.value = true
 
-      let isAdminLocal = usersStore.userData.data.isAdmin;
+      const isAdminLocal = usersStore.userData.data.isAdmin;
       if (isAdminLocal !== undefined) {
         isAdmin.value = isAdminLocal;
       }

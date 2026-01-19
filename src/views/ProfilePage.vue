@@ -109,7 +109,7 @@ async function updateProfile() {
     return
   }
 
-  let response = await usersStore.updateUser(payload)
+  const response = await usersStore.updateUser(payload)
   if (!response || !response.ok) {
     let errorVal = "An error occurred, try again later"
     if (response.body.error) {

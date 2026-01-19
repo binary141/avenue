@@ -256,18 +256,24 @@ const lastFolderIndex = ref<number | null>(null)
 const lastFileIndex = ref<number | null>(null)
 
 function selectFolderRange(start: number, end: number) {
+  const list = folders.value.slice()
   const [from, to] = start < end ? [start, end] : [end, start]
 
   for (let i = from; i <= to; i++) {
-    selectedFolders.value.add(folders.value[i].folder_id)
+    const folder = list[i]
+    if (!folder) continue
+    selectedFolders.value.add(folder.folder_id)
   }
 }
 
 function selectFileRange(start: number, end: number) {
+  const list = files.value.slice() // snapshot
   const [from, to] = start < end ? [start, end] : [end, start]
 
   for (let i = from; i <= to; i++) {
-    selectedFiles.value.add(files.value[i].id)
+    const file = list[i]
+    if (!file) continue
+    selectedFiles.value.add(file.id)
   }
 }
 
@@ -386,7 +392,7 @@ async function deleteFile(fileId: string) {
 }
 
 async function deleteFolder(folderId: string) {
-  let response = await api({ url: "v1/folder/" + folderId, method: "DELETE" });
+  const response = await api({ url: "v1/folder/" + folderId, method: "DELETE" });
 
   if (response.status > 399) {
     if (response.body.error) {
@@ -515,7 +521,7 @@ watchEffect(() => {
 })
 
 async function getDashboardInfo() {
-  let response = await api({
+  const response = await api({
     url: "v1/dashboard",
     method: "GET",
   });
@@ -525,7 +531,7 @@ async function getDashboardInfo() {
   }
 
   // 200MiB
-  let defaultSize = 209715200;
+  const defaultSize = 209715200;
 
   maxFileSize.value = defaultSize;
 

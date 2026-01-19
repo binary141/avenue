@@ -15,6 +15,11 @@
 
 # frontend
 
+## ENV
+```sh
+VITE_APP_API_URL="http://localhost:8080/"
+```
+
 This template should help get you started developing with Vue 3 in Vite.
 
 ## Recommended IDE Setup

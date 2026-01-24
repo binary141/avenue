@@ -23,3 +23,7 @@ build-api-prod:
 
 build-ui:
 	npm run build-prod
+
+build-image: build-ui
+	docker build --target final -t binary141/avenue:latest .
+	

@@ -1,11 +1,15 @@
 services:
   backend:
+    # Build from source only if BACKEND_TARGET is set to a build target
     build:
-      target: "${BACKEND_TARGET:-live-dev}"
       context: ./
       dockerfile: Dockerfile
+      target: "${BACKEND_TARGET:-live-dev}"  # defaults to live-dev
+    # Pull/run prebuilt image if BACKEND_TARGET is 'image' or not set
+    image: "${BACKEND_IMAGE:-binary141/avenue:latest}"
+
     volumes:
-      - ./:/app:rw 
+      - ./:/app:rw
       - upload-data:/avenue/uploads
     ports:
       - "8080:8080"
@@ -14,7 +18,7 @@ services:
     environment:
       MAX_FILE_BYTE_SIZE: 1073741824
       UPLOAD_DIR: "/avenue/uploads"
-      APP_ENV: "production"
+      APP_ENV: "dev"
       DB_HOST: postgres
       DB_USER: user
       DB_PASSWORD: secret
@@ -30,7 +34,8 @@ services:
       POSTGRES_DB: avenue
     ports:
       - "5432:5432"
-   
+
 volumes:
   upload-data:
   db-data:
+

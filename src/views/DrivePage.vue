@@ -54,8 +54,13 @@
       </div>
     </div>
 
-    <FileUploader :parent="currentFolderId" @upload="refreshCurrentList" @error="handleUploadError"
-    :multiple=true :maxSize=maxFileSize />
+    <FileUploader
+      :parent="currentFolderId"
+      @upload="refreshCurrentList"
+      @error="handleUploadError"
+      :multiple=true
+      :maxSize=maxFileSize
+      :disabled="usersStore.userData.data.spaceUsed >= usersStore.userData.data.quota" />
 
     <FileUsageBar
       :used="usersStore.userData.data.spaceUsed"

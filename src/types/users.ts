@@ -1,5 +1,7 @@
 export interface User {
     canLogin: boolean;
+    quota: number;
+    spaceUsed: number;
     isAdmin: boolean;
     createdAt: string;
     deletedAt: string | null;

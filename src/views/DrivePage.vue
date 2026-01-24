@@ -325,18 +325,6 @@ const hasSelection = computed(
   () => selectedFolders.value.size > 0 || selectedFiles.value.size > 0
 )
 
-function toggleFolderSelection(id: string) {
-  selectedFolders.value.has(id)
-    ? selectedFolders.value.delete(id)
-    : selectedFolders.value.add(id)
-}
-
-function toggleFileSelection(id: string) {
-  selectedFiles.value.has(id)
-    ? selectedFiles.value.delete(id)
-    : selectedFiles.value.add(id)
-}
-
 function clearSelection() {
   selectedFolders.value.clear()
   selectedFiles.value.clear()

@@ -54,7 +54,7 @@
       </div>
     </div>
 
-    <FileUploader :parent="currentFolderId" @upload="handleFileUpload" @error="handleUploadError"
+    <FileUploader :parent="currentFolderId" @upload="refreshCurrentList" @error="handleUploadError"
     :multiple=true :maxSize=maxFileSize />
 
     <FileUsageBar
@@ -501,10 +501,6 @@ async function loadFolderContents(folderId: string = '') {
   } finally {
     loading.value = false
   }
-}
-
-function handleFileUpload() {
-  loadFolderContents(currentFolderId.value)
 }
 
 function handleUploadError(message: string) {

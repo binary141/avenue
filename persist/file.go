@@ -23,7 +23,20 @@ func (p *Persist) CreateFile(file *File) (string, error) {
 	if file.ID == "" {
 		file.ID = uuid.NewString()
 	}
-	return file.ID, p.db.Create(file).Error
+
+	err := p.db.Create(file).Error
+	if err != nil {
+		return "", err
+	}
+
+	// increment the users quota
+	userID := file.CreatedBy
+	err = p.UpdateUsage(userID, file.FileSize)
+	if err != nil {
+		return "", err
+	}
+
+	return file.ID, nil
 }
 
 func (p *Persist) GetFileByID(id string, creatorID string) (*File, error) {

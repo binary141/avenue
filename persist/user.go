@@ -20,6 +20,7 @@ type User struct {
 	CanLogin  bool           `gorm:"not null" json:"canLogin"`
 	IsAdmin   bool           `gorm:"not null;default:false" json:"isAdmin"`
 	Quota     int64          `gorm:"not null;default:0" json:"quota"`
+	SpaceUsed int64          `gorm:"not null;default:0" json:"spaceUsed"`
 	CreatedAt time.Time      `json:"createdAt"`
 	UpdatedAt time.Time      `json:"updatedAt"`
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"deletedAt"`
@@ -34,6 +35,30 @@ func (p *Persist) GetUserByIDStr(idStr string) (User, error) {
 	}
 
 	return p.getUserByID(id)
+}
+
+func (p *Persist) UpdateUsage(userID string, fileSize int64) error {
+	u, err := p.GetUserByIDStr(userID)
+	if err != nil {
+		return err
+	}
+
+	u.SpaceUsed += fileSize
+
+	if u.SpaceUsed < 0 {
+		u.SpaceUsed = 0
+	}
+
+	res := p.db.Model(&User{}).
+		Where("id = ?", u.ID).
+		Select("SpaceUsed").
+		Updates(u)
+
+	if res.Error != nil {
+		return res.Error
+	}
+
+	return nil
 }
 
 func (p *Persist) GetUsers() ([]User, error) {
@@ -138,10 +163,10 @@ func (p *Persist) CreateUser(email, password, firstName, lastName string, isAdmi
 	return u, res.Error
 }
 
-func (p *Persist) GetUserQuota(id string) (int64, error) {
+func (p *Persist) GetUserUsage(id string) (int64, error) {
 	var total int64
 
-	res := p.db.Raw("SELECT SUM(file_size) FROM files WHERE created_by = ?", id).Scan(&total)
+	res := p.db.Raw("SELECT space_used from users where id = ?", id).Scan(&total)
 
 	return total, res.Error
 }

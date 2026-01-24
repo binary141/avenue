@@ -70,7 +70,7 @@ func (s *Server) Upload(c *gin.Context) {
 
 	// 0 is unlimited
 	if user.Quota != 0 {
-		totalUsed, err := s.persist.GetUserQuota(userID)
+		totalUsed, err := s.persist.GetUserUsage(userID)
 		if err != nil {
 			log.Printf("error getting user quota: %s", err.Error())
 			c.JSON(http.StatusInternalServerError, Response{
@@ -78,8 +78,6 @@ func (s *Server) Upload(c *gin.Context) {
 			})
 			return
 		}
-
-		log.Printf("user.Quota: %d, totalUsed: %d", user.Quota, totalUsed)
 
 		if totalUsed >= user.Quota {
 			c.JSON(http.StatusUnprocessableEntity, Response{
@@ -301,6 +299,16 @@ func (s *Server) Upload(c *gin.Context) {
 		return
 	}
 
+	err = s.persist.UpdateUsage(userID, total)
+	if err != nil {
+		// todo should we rollback? Or just have a cron that'll reconcile?
+		c.JSON(http.StatusInternalServerError, Response{
+			Message: "could not update user quota usage",
+			Error:   err.Error(),
+		})
+		return
+	}
+
 	c.Status(http.StatusCreated)
 }
 
@@ -472,6 +480,16 @@ func (s *Server) DeleteFile(c *gin.Context) {
 	if err = s.persist.DeleteFile(c.Param("fileID"), userID); err != nil {
 		c.JSON(http.StatusInternalServerError, Response{
 			Message: "error deleting file from db",
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	err = s.persist.UpdateUsage(userID, -f.FileSize)
+	if err != nil {
+		// todo should we rollback? Or just have a cron that'll reconcile?
+		c.JSON(http.StatusInternalServerError, Response{
+			Message: "could not update user quota usage",
 			Error:   err.Error(),
 		})
 		return

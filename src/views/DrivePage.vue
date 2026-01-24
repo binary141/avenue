@@ -57,6 +57,11 @@
     <FileUploader :parent="currentFolderId" @upload="handleFileUpload" @error="handleUploadError"
     :multiple=true :maxSize=maxFileSize />
 
+    <FileUsageBar
+      :used="usersStore.userData.data.spaceUsed"
+      :quota="usersStore.userData.data.quota"
+    />
+
     <!-- Bulk Actions -->
     <div
       v-if="hasSelection"
@@ -85,6 +90,7 @@
     <ErrorMessage :msg=error @clear="error = ''"/>
 
     <BreadCrumbs :breadcrumbs=breadcrumbs>A</BreadCrumbs>
+
 
     <div v-if="!loading" class="folder-contents flex flex-col gap-4">
       <!-- Folders Section -->
@@ -224,6 +230,7 @@ import type { Breadcrumb, Folder, File, FolderContents } from '@/types/folder';
 import SpinnerView from './components/SpinnerView.vue';
 import ErrorMessage from './components/ErrorMessage.vue';
 import FileUploader from '@/components/FileUploader.vue';
+import FileUsageBar from '@/components/FileUsageBar.vue';
 import { useUsersStore } from '../stores/users';
 
 const route = useRoute();
@@ -514,6 +521,8 @@ function refreshCurrentList() {
   route.params.folderId = currentFolderId.value
 
   loadFolderContents(currentFolderId.value)
+
+  usersStore.pullMe()
 }
 
 watchEffect(() => {

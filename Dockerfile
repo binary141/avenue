@@ -25,9 +25,16 @@ FROM alpine:latest as final
 WORKDIR /app
 COPY --from=image /app/api /app/api
 
+# Install su-exec for dropping privileges
+RUN apk add --no-cache su-exec
+
+# Copy the entrypoint script
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
 # Create a non-root user and group
 RUN addgroup -S app && adduser -S app -G app
 
-USER app
+ENTRYPOINT ["/entrypoint.sh"]
 
 CMD ["/app/api"]

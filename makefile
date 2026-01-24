@@ -22,4 +22,4 @@ build-api-prod:
 	go build -tags prod -o api ./
 
 build-ui:
-	npm run build
+	npm run build-prod

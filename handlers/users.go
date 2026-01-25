@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 
 	"avenue/backend/persist"
 	"avenue/backend/shared"
@@ -105,17 +106,28 @@ func (s *Server) Logout(c *gin.Context) {
 
 type RegisterRequest struct {
 	Password  string `json:"password" validate:"required,min=4,max=64"`
-	FirstName string `json:"firstName" validate:"min=1,max=64"`
-	LastName  string `json:"lastName" validate:"min=1,max=64"`
+	FirstName string `json:"firstName" validate:"max=64"`
+	LastName  string `json:"lastName" validate:"max=64"`
 	Email     string `json:"email" validate:"required,min=4,max=512"`
 }
 
 func (s *Server) Register(c *gin.Context) {
+	enabled := strings.ToLower(shared.GetEnv("REGISTRATION_ENABLED", "false"))
+
+	if enabled == "false" {
+		c.AbortWithStatusJSON(http.StatusBadRequest, Response{
+			Error: "Registration is not enabled",
+		})
+		return
+	}
+
 	var req RegisterRequest
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		log.Print(err)
-		c.Status(http.StatusBadRequest)
+		c.AbortWithStatusJSON(http.StatusBadRequest, Response{
+			Error: err.Error(),
+		})
 		return
 	}
 
@@ -143,7 +155,16 @@ func (s *Server) Register(c *gin.Context) {
 
 	isAdmin := false
 
-	u, err := s.persist.CreateUser(req.Email, req.Password, req.FirstName, req.LastName, isAdmin)
+	hashedPass, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if err != nil {
+		log.Println(err.Error())
+		c.AbortWithStatusJSON(http.StatusUnprocessableEntity, Response{
+			Error: err.Error(),
+		})
+		return
+	}
+
+	u, err := s.persist.CreateUser(req.Email, string(hashedPass), req.FirstName, req.LastName, isAdmin)
 	if err != nil {
 		log.Print(err)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{

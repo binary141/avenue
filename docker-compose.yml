@@ -18,6 +18,7 @@ services:
     environment:
       MAX_FILE_BYTE_SIZE: 1073741824
       UPLOAD_DIR: "/avenue/uploads"
+      REGISTRATION_ENABLED: "true"
       APP_ENV: "dev"
       DB_HOST: postgres
       DB_USER: user

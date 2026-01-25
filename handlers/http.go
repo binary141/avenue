@@ -176,6 +176,7 @@ func (s *Server) SetupRoutes() {
 
 	unsecuredRouter.GET("/ping", s.pingHandler)
 	unsecuredRouter.POST("/login", s.Login)
+	unsecuredRouter.GET("/loginMeta", s.LoginMeta)
 	unsecuredRouter.POST("/register", s.Register)
 
 	securedRouterV1 := s.router.Group("/v1")

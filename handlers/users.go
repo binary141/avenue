@@ -21,6 +21,13 @@ type LoginRequest struct {
 
 var validate = validator.New()
 
+func (s *Server) LoginMeta(c *gin.Context) {
+
+	enabled := shared.GetEnv("REGISTRATION_ENABLED", "false")
+
+	c.JSON(http.StatusOK, gin.H{"registration_enabled": enabled})
+}
+
 func (s *Server) Login(c *gin.Context) {
 	var req LoginRequest
 

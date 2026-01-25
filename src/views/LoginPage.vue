@@ -10,24 +10,43 @@
 
       <div class="flex flex-col gap-3">
         <label>Password</label>
-        <input v-model="password" type="password" required />
+
+        <div class="relative">
+          <input
+            v-model="password"
+            :type="showPassword ? 'text' : 'password'"
+            required
+            class="border rounded p-2 w-full pr-10"
+          />
+
+          <button
+            type="button"
+            @click="showPassword = !showPassword"
+            class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400"
+          >
+            <span v-if="showPassword" class="text-2xl">🐵</span>
+            <span v-else class="text-2xl">🙈</span>
+          </button>
+        </div>
       </div>
+
 
       <ErrorMessage :msg=error @clear="error = ''"/>
 
       <AppButton type="submit">LOGIN</AppButton>
     </form>
 
-    <p>Already have an account? <RouterLink :to="{ name: 'signup' }" class="text-link">Sign Up</RouterLink> instead.</p>
+    <p v-if="canRegister">Already have an account? <RouterLink :to="{ name: 'signup' }" class="text-link">Sign Up</RouterLink> instead.</p>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onMounted, ref } from 'vue';
 import AppButton from './components/AppButton.vue'
 import { useUsersStore } from '@/stores/users';
 import { useRouter } from 'vue-router';
 import ErrorMessage from './components/ErrorMessage.vue';
+import api from '@/utils/api'
 
 const usersStore = useUsersStore();
 const router = useRouter();
@@ -37,6 +56,26 @@ const password = ref('')
 
 const error = ref<string | undefined>();
 const submitting = ref(false);
+const showPassword = ref(false);
+const canRegister = ref(false);
+
+async function loginMeta() {
+  const response = await api({
+    url: 'loginMeta',
+    method: 'GET',
+  })
+
+  if (!response.ok) {
+    console.log(response)
+    return
+  }
+
+  canRegister.value = response.body.registration_enabled !== "false" ?? false
+}
+
+onMounted(() => {
+  loginMeta()
+})
 
 async function handleLogin() {
   error.value = undefined;

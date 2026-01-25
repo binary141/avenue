@@ -325,13 +325,13 @@ func (s *Server) GetProfile(c *gin.Context) {
 }
 
 type UpdateProfileRequest struct {
-	ID        int64  `json:"id" validate:"required,min=1"`
-	Email     string `json:"email" validate:"omitempty,email,min=4,max=512"`
-	IsAdmin   bool   `json:"isAdmin"`
-	Password  string `json:"password" validate:"omitempty,min=4,max=64"`
-	FirstName string `json:"firstName" validate:"omitempty,min=1,max=64"`
-	LastName  string `json:"lastName" validate:"omitempty,min=1,max=64"`
-	Quota     int64  `json:"quota" validate:"omitempty,min=0"`
+	ID        int64   `json:"id" validate:"required,min=1"`
+	Email     *string `json:"email" validate:"omitempty,email,min=4,max=512"`
+	IsAdmin   *bool   `json:"isAdmin"`
+	Password  *string `json:"password" validate:"omitempty,min=4,max=64"`
+	FirstName *string `json:"firstName" validate:"omitempty,min=1,max=64"`
+	LastName  *string `json:"lastName" validate:"omitempty,min=1,max=64"`
+	Quota     *int64  `json:"quota" validate:"omitempty,min=0"`
 }
 
 func (s *Server) UpdateProfile(c *gin.Context) {
@@ -384,27 +384,30 @@ func (s *Server) UpdateProfile(c *gin.Context) {
 		return
 	}
 
-	if req.Email != "" && req.Email != updatingUser.Email {
-		if !s.persist.IsUniqueEmail(req.Email) {
+	if req.Email != nil && *req.Email != updatingUser.Email {
+		if !s.persist.IsUniqueEmail(*req.Email) {
 			c.AbortWithStatusJSON(http.StatusConflict, Response{
 				Error: "Email already exists",
 			})
 			return
 		}
 
-		updatingUser.Email = req.Email
+		updatingUser.Email = *req.Email
 	}
 
-	if req.FirstName != "" {
-		updatingUser.FirstName = req.FirstName
+	if req.FirstName != nil {
+		updatingUser.FirstName = *req.FirstName
 	}
 
-	if req.LastName != "" {
-		updatingUser.LastName = req.LastName
+	if req.LastName != nil {
+		updatingUser.LastName = *req.LastName
 	}
 
-	if req.Password != "" {
-		hashed, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	log.Println(req)
+	log.Println(updatingUser)
+
+	if req.Password != nil {
+		hashed, err := bcrypt.GenerateFromPassword([]byte(*req.Password), bcrypt.DefaultCost)
 		if err != nil {
 			log.Println(err.Error())
 			c.AbortWithStatusJSON(http.StatusInternalServerError, Response{
@@ -415,9 +418,7 @@ func (s *Server) UpdateProfile(c *gin.Context) {
 		updatingUser.Password = string(hashed)
 	}
 
-	updatingUser.IsAdmin = req.IsAdmin
-
-	if !req.IsAdmin {
+	if req.IsAdmin != nil && u.IsAdmin {
 		otherAdmins, _ := s.persist.HasOtherAdmins(updatingUser)
 		if !otherAdmins {
 			c.AbortWithStatusJSON(http.StatusBadRequest, Response{
@@ -425,9 +426,13 @@ func (s *Server) UpdateProfile(c *gin.Context) {
 			})
 			return
 		}
+
+		updatingUser.IsAdmin = *req.IsAdmin
 	}
 
-	updatingUser.Quota = req.Quota
+	if req.Quota != nil {
+		updatingUser.Quota = *req.Quota
+	}
 
 	updatingUser, err = s.persist.UpdateUser(updatingUser)
 	if err != nil {

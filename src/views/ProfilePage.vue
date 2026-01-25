@@ -75,12 +75,14 @@ async function updateProfile() {
 
   const payload: Record<string, string | null> = {}
 
+  payload.id = usersStore.userData.data.id
+
   if (isFNameDirty.value) {
-    payload.fname = fName.value
+    payload.firstName = fName.value
   }
 
   if (isLNameDirty.value) {
-    payload.lname = lName.value
+    payload.lastName = lName.value
   }
 
   if (isEmailDirty.value) {

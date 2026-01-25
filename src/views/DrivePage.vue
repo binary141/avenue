@@ -297,9 +297,11 @@ function onFolderCheckboxClick(
   if (event.shiftKey && lastFolderIndex.value !== null) {
     selectFolderRange(lastFolderIndex.value, index)
   } else {
-    selectedFolders.value.has(folderId)
-      ? selectedFolders.value.delete(folderId)
-      : selectedFolders.value.add(folderId)
+    if (selectedFolders.value.has(folderId)) {
+      selectedFolders.value.delete(folderId)
+    } else {
+      selectedFolders.value.add(folderId)
+    }
   }
 
   lastFolderIndex.value = index
@@ -313,9 +315,11 @@ function onFileCheckboxClick(
   if (event.shiftKey && lastFileIndex.value !== null) {
     selectFileRange(lastFileIndex.value, index)
   } else {
-    selectedFiles.value.has(fileId)
-      ? selectedFiles.value.delete(fileId)
-      : selectedFiles.value.add(fileId)
+    if (selectedFiles.value.has(fileId)) {
+      selectedFiles.value.delete(fileId)
+    } else {
+      selectedFiles.value.add(fileId)
+    }
   }
 
   lastFileIndex.value = index

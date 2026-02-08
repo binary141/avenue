@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -41,8 +42,17 @@ func SetupServer(p *persist.Persist) Server {
 		persist: p,
 	}
 }
-func SetupMcp() *mcp.Server {
-	return nil
+func SetupMcp(userId string) *mcp.Server {
+	server := mcp.NewServer(
+		&mcp.Implementation{
+			Name:    "avenue",
+			Version: "0.0.1",
+		},
+		nil,
+	)
+	mcpFileTools(server)
+
+	return server
 }
 
 var (
@@ -214,8 +224,13 @@ func (s *Server) SetupRoutes() {
 	securedRouterV1.PATCH("/user/:userID", s.UpdateProfile)
 	securedRouterV1.PATCH("/user/password", s.UpdatePassword)
 
-	mcpServer := SetupMcp()
-	mcpHandler := mcp.NewSSEHandler(func(request *http.Request) *mcp.Server {
+	mcpHandler := mcp.NewSSEHandler(func(req *http.Request) *mcp.Server {
+		userID, err := shared.GetUserIDFromContext(req.Context())
+		if err != nil {
+			slog.Error("Error starting mcp connection with error getting context: %v", err)
+			return nil
+		}
+		mcpServer := SetupMcp(userID)
 		return mcpServer
 	}, nil)
 	securedRouterV1.Any("/mcp", gin.WrapH(mcpHandler))

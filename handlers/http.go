@@ -42,7 +42,7 @@ func SetupServer(p *persist.Persist) Server {
 		persist: p,
 	}
 }
-func SetupMcp(userId string) *mcp.Server {
+func (s *Server) SetupMcp(userId string) *mcp.Server {
 	server := mcp.NewServer(
 		&mcp.Implementation{
 			Name:    "avenue",
@@ -50,7 +50,7 @@ func SetupMcp(userId string) *mcp.Server {
 		},
 		nil,
 	)
-	mcpFileTools(server)
+	s.mcpFileTools(server, userId)
 
 	return server
 }
@@ -230,7 +230,7 @@ func (s *Server) SetupRoutes() {
 			slog.Error("Error starting mcp connection with error getting context: %v", err)
 			return nil
 		}
-		mcpServer := SetupMcp(userID)
+		mcpServer := s.SetupMcp(userID)
 		return mcpServer
 	}, nil)
 	securedRouterV1.Any("/mcp", gin.WrapH(mcpHandler))

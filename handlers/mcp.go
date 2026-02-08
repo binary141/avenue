@@ -6,11 +6,18 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-func mcpFileTools(server *mcp.Server) {
-	server.AddTool(&mcp.Tool{}, mcpListDirectoryTool)
+func (s *Server) mcpFileTools(server *mcp.Server, userId string) {
+	server.AddTool(&mcp.Tool{
+		Name:        "ListDirectory",
+		Description: "Tool to list contents of current directory",
+	}, s.mcpListDirectoryTool(userId))
 }
 
-func mcpListDirectoryTool(context.Context, *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+type ListDirectoryReq struct{}
 
-	return nil, nil
+func (s *Server) mcpListDirectoryTool(userId string) func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	userId := userId
+	return func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		x := userId
+	}
 }

@@ -15,6 +15,7 @@ import (
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/spf13/afero"
 )
 
@@ -39,6 +40,9 @@ func SetupServer(p *persist.Persist) Server {
 		router:  r,
 		persist: p,
 	}
+}
+func SetupMcp() *mcp.Server {
+	return nil
 }
 
 var (
@@ -210,6 +214,11 @@ func (s *Server) SetupRoutes() {
 	securedRouterV1.PATCH("/user/:userID", s.UpdateProfile)
 	securedRouterV1.PATCH("/user/password", s.UpdatePassword)
 
+	mcpServer := SetupMcp()
+	mcpHandler := mcp.NewSSEHandler(func(request *http.Request) *mcp.Server {
+		return mcpServer
+	}, nil)
+	securedRouterV1.Any("/mcp", gin.WrapH(mcpHandler))
 }
 
 func (s *Server) Run(address string) error {

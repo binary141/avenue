@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"avenue/backend/persist"
+	"avenue/backend/db"
 	"avenue/backend/shared"
 
 	"github.com/gin-contrib/cors"
@@ -20,13 +20,11 @@ import (
 
 // Server holds dependencies for the HTTP server.
 type Server struct {
-	// Add dependencies here, e.g., a database connection
-	router  *gin.Engine
-	persist *persist.Persist
-	fs      afero.Fs
+	router *gin.Engine
+	fs     afero.Fs
 }
 
-func SetupServer(p *persist.Persist) Server {
+func SetupServer() Server {
 	r := gin.Default()
 	if shared.GetEnv("APP_ENV", "dev") == "production" {
 		gin.SetMode(gin.ReleaseMode)
@@ -35,9 +33,8 @@ func SetupServer(p *persist.Persist) Server {
 	fs := afero.NewOsFs()
 	jailedFs := afero.NewBasePathFs(fs, shared.GetEnv("UPLOAD_DIR", "./avenuectl/temp/"))
 	return Server{
-		fs:      jailedFs,
-		router:  r,
-		persist: p,
+		fs:     jailedFs,
+		router: r,
 	}
 }
 
@@ -82,8 +79,8 @@ func (s *Server) ServeUI(uiFS embed.FS) {
 	})
 }
 
-func (s *Server) UserIDExists(userID string) bool {
-	_, err := s.persist.GetUserByIDStr(userID)
+func (s *Server) userIDExists(userID string) bool {
+	_, err := db.GetUserByIDStr(userID)
 	return err == nil
 }
 
@@ -91,7 +88,7 @@ func (s *Server) sessionCheck(c *gin.Context) {
 	// if the auth header is present with the needed fields, we can allow them to bypass the cookie check :)
 	if h := c.GetHeader(MASTERAUTHHEADER); h != "" {
 		if u := c.GetHeader(USERIDHEADER); u != "" {
-			if h == AUTHKEY && s.UserIDExists(u) {
+			if h == AUTHKEY && s.userIDExists(u) {
 				rc := c.Request.Context()
 
 				// Add a new value to the context
@@ -127,13 +124,13 @@ func (s *Server) sessionCheck(c *gin.Context) {
 	}
 
 	// see if the session is valid
-	session, valid := s.persist.IsValidSession(parts[1])
+	session, valid := db.IsValidSession(parts[1])
 	if !valid {
 		c.AbortWithStatus(http.StatusUnauthorized)
 		return
 	}
 
-	if !s.UserIDExists(fmt.Sprint(session.UserId)) {
+	if !s.userIDExists(fmt.Sprint(session.UserId)) {
 		c.AbortWithStatus(http.StatusUnauthorized)
 		return
 	}
@@ -141,7 +138,7 @@ func (s *Server) sessionCheck(c *gin.Context) {
 	session.ExpiresAt = time.Now().Add(15 * time.Minute).Unix()
 
 	// update the session to be a rolling timeout
-	_, err := s.persist.UpdateSession(session)
+	_, err := db.UpdateSession(session)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

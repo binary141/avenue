@@ -1,10 +1,12 @@
 package main
 
 import (
-	"avenue/backend/handlers"
-	"avenue/backend/persist"
-	"avenue/backend/shared"
 	"embed"
+	"log"
+
+	"avenue/backend/db"
+	"avenue/backend/handlers"
+	"avenue/backend/shared"
 
 	"github.com/gin-gonic/gin"
 )
@@ -12,16 +14,19 @@ import (
 var frontendFS embed.FS
 
 func main() {
-	persist := persist.NewPersist(
-		shared.GetEnv("DB_HOST", "localhost"),
-		shared.GetEnv("DB_USER", "user"),
-		shared.GetEnv("DB_PASSWORD", "secret"),
-		shared.GetEnv("DB_DATABASE", "avenue"),
-	)
+	if err := db.Connect(); err != nil {
+		log.Fatalf("db connect: %v", err)
+	}
 
-	_ = persist.UpsertRootUser()
+	if err := db.RunMigrations(); err != nil {
+		log.Fatalf("db migrations: %v", err)
+	}
 
-	server := handlers.SetupServer(persist)
+	if err := db.UpsertRootUser(); err != nil {
+		log.Printf("upsert root user: %v", err)
+	}
+
+	server := handlers.SetupServer()
 
 	server.SetupRoutes()
 

@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strings"
 
-	"avenue/backend/persist"
+	"avenue/backend/db"
 	"avenue/backend/shared"
 
 	"github.com/gin-gonic/gin"
@@ -52,7 +52,7 @@ func (s *Server) Login(c *gin.Context) {
 		return
 	}
 
-	session, err := s.persist.CreateSession(int(u.ID))
+	session, err := db.CreateSession(u.ID)
 	if err != nil {
 		// for now send the error in the response 🤔
 		c.AbortWithStatusJSON(http.StatusUnauthorized, Response{
@@ -72,8 +72,8 @@ func (s *Server) Login(c *gin.Context) {
 	})
 }
 
-func (s *Server) authorize(email, password string) (persist.User, error) {
-	user, err := s.persist.GetUserByEmail(email)
+func (s *Server) authorize(email, password string) (db.User, error) {
+	user, err := db.GetUserByEmail(email)
 	if err != nil {
 		return user, err
 	}
@@ -82,7 +82,7 @@ func (s *Server) authorize(email, password string) (persist.User, error) {
 
 	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password))
 	if err != nil {
-		return persist.User{}, err
+		return db.User{}, err
 	}
 
 	return user, nil
@@ -102,7 +102,7 @@ func (s *Server) Logout(c *gin.Context) {
 		return
 	}
 
-	err := s.persist.DeleteSession(sessIDStr)
+	err := db.DeleteSession(sessIDStr)
 	if err != nil {
 		c.Status(http.StatusInternalServerError)
 		return
@@ -153,7 +153,7 @@ func (s *Server) Register(c *gin.Context) {
 		return
 	}
 
-	if !s.persist.IsUniqueEmail(req.Email) {
+	if !db.IsUniqueEmail(req.Email) {
 		c.AbortWithStatusJSON(http.StatusConflict, Response{
 			Error: "Email already exists",
 		})
@@ -171,7 +171,7 @@ func (s *Server) Register(c *gin.Context) {
 		return
 	}
 
-	u, err := s.persist.CreateUser(req.Email, string(hashedPass), req.FirstName, req.LastName, isAdmin)
+	u, err := db.CreateUser(req.Email, string(hashedPass), req.FirstName, req.LastName, isAdmin)
 	if err != nil {
 		log.Print(err)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{
@@ -201,7 +201,7 @@ func (s *Server) CreateUser(c *gin.Context) {
 		return
 	}
 
-	u, err := s.persist.GetUserByIDStr(userID)
+	u, err := db.GetUserByIDStr(userID)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{
 			Error: err.Error(),
@@ -230,7 +230,7 @@ func (s *Server) CreateUser(c *gin.Context) {
 		return
 	}
 
-	if !s.persist.IsUniqueEmail(req.Email) {
+	if !db.IsUniqueEmail(req.Email) {
 		c.AbortWithStatusJSON(http.StatusConflict, Response{
 			Error: "Email already exists",
 		})
@@ -246,7 +246,7 @@ func (s *Server) CreateUser(c *gin.Context) {
 		return
 	}
 
-	nu, err := s.persist.CreateUser(req.Email, string(hashed), req.FirstName, req.LastName, req.IsAdmin)
+	nu, err := db.CreateUser(req.Email, string(hashed), req.FirstName, req.LastName, req.IsAdmin)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{
 			Error: err.Error(),
@@ -257,7 +257,7 @@ func (s *Server) CreateUser(c *gin.Context) {
 	log.Printf("New User: %+v\n", nu)
 
 	// todo allow pagination
-	us, err := s.persist.GetUsers()
+	us, err := db.GetUsers()
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{
 			Error: err.Error(),
@@ -278,7 +278,7 @@ func (s *Server) GetUsers(c *gin.Context) {
 		return
 	}
 
-	u, err := s.persist.GetUserByIDStr(userID)
+	u, err := db.GetUserByIDStr(userID)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{
 			Error: err.Error(),
@@ -292,7 +292,7 @@ func (s *Server) GetUsers(c *gin.Context) {
 	}
 
 	// todo allow pagination
-	us, err := s.persist.GetUsers()
+	us, err := db.GetUsers()
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{
 			Error: err.Error(),
@@ -313,7 +313,7 @@ func (s *Server) GetProfile(c *gin.Context) {
 		return
 	}
 
-	u, err := s.persist.GetUserByIDStr(userID)
+	u, err := db.GetUserByIDStr(userID)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{
 			Error: err.Error(),
@@ -361,7 +361,7 @@ func (s *Server) UpdateProfile(c *gin.Context) {
 		return
 	}
 
-	u, err := s.persist.GetUserByIDStr(userID)
+	u, err := db.GetUserByIDStr(userID)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{
 			Error: err.Error(),
@@ -376,7 +376,7 @@ func (s *Server) UpdateProfile(c *gin.Context) {
 		return
 	}
 
-	updatingUser, err := s.persist.GetUserByIDStr(fmt.Sprintf("%d", req.ID))
+	updatingUser, err := db.GetUserByID(req.ID)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{
 			Error: err.Error(),
@@ -385,7 +385,7 @@ func (s *Server) UpdateProfile(c *gin.Context) {
 	}
 
 	if req.Email != nil && *req.Email != updatingUser.Email {
-		if !s.persist.IsUniqueEmail(*req.Email) {
+		if !db.IsUniqueEmail(*req.Email) {
 			c.AbortWithStatusJSON(http.StatusConflict, Response{
 				Error: "Email already exists",
 			})
@@ -419,7 +419,7 @@ func (s *Server) UpdateProfile(c *gin.Context) {
 	}
 
 	if req.IsAdmin != nil && u.IsAdmin {
-		otherAdmins, _ := s.persist.HasOtherAdmins(updatingUser)
+		otherAdmins, _ := db.HasOtherAdmins(updatingUser)
 		if !otherAdmins {
 			c.AbortWithStatusJSON(http.StatusBadRequest, Response{
 				Error: "Application requires at least one Admin user",
@@ -434,7 +434,7 @@ func (s *Server) UpdateProfile(c *gin.Context) {
 		updatingUser.Quota = *req.Quota
 	}
 
-	updatingUser, err = s.persist.UpdateUser(updatingUser)
+	updatingUser, err = db.UpdateUser(updatingUser)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{
 			Error: err.Error(),
@@ -475,7 +475,7 @@ func (s *Server) UpdatePassword(c *gin.Context) {
 		return
 	}
 
-	u, err := s.persist.GetUserByIDStr(userID)
+	u, err := db.GetUserByIDStr(userID)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{
 			Error: err.Error(),
@@ -483,9 +483,17 @@ func (s *Server) UpdatePassword(c *gin.Context) {
 		return
 	}
 
-	u.Password = req.Password
+	hashed, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if err != nil {
+		log.Println(err.Error())
+		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{
+			Error: err.Error(),
+		})
+		return
+	}
+	u.Password = string(hashed)
 
-	u, err = s.persist.UpdateUser(u)
+	u, err = db.UpdateUser(u)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{
 			Error: err.Error(),

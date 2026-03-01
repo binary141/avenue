@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bytes"
+	"database/sql"
 	"errors"
 	"fmt"
 	"io"
@@ -12,12 +13,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	"avenue/backend/persist"
+	"avenue/backend/db"
 	"avenue/backend/shared"
 
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/afero"
-	"gorm.io/gorm"
 )
 
 type UploadReq struct {
@@ -56,7 +56,7 @@ func (s *Server) Upload(c *gin.Context) {
 		return
 	}
 
-	user, err := s.persist.GetUserByIDStr(userID)
+	user, err := db.GetUserByIDStr(userID)
 	if err != nil {
 		log.Printf("error getting user: %s", err.Error())
 		c.JSON(http.StatusInternalServerError, Response{
@@ -70,7 +70,7 @@ func (s *Server) Upload(c *gin.Context) {
 
 	// 0 is unlimited
 	if user.Quota != 0 {
-		totalUsed, err := s.persist.GetUserUsage(userID)
+		totalUsed, err := db.GetUserUsage(userID)
 		if err != nil {
 			log.Printf("error getting user quota: %s", err.Error())
 			c.JSON(http.StatusInternalServerError, Response{
@@ -170,7 +170,7 @@ func (s *Server) Upload(c *gin.Context) {
 			contentType = http.DetectContentType(buf[:n])
 
 			// Create file record in database
-			fileID, err = s.persist.CreateFile(&persist.File{
+			fileID, err = db.CreateFile(&db.File{
 				Name:      filename,
 				Extension: extension,
 				MimeType:  contentType,
@@ -189,7 +189,7 @@ func (s *Server) Upload(c *gin.Context) {
 			dstPath := fmt.Sprintf("/%s/%s", userID, fileID)
 			dst, err := s.fs.Create(dstPath)
 			if err != nil {
-				deleteErr := s.persist.DeleteFile(fileID, userID)
+				deleteErr := db.DeleteFile(fileID, userID)
 				if deleteErr != nil {
 					log.Println(deleteErr)
 					c.JSON(http.StatusInternalServerError, Response{
@@ -209,7 +209,7 @@ func (s *Server) Upload(c *gin.Context) {
 			r := bytes.NewReader(buf)
 			written, err := io.Copy(dst, r)
 			if err != nil {
-				deleteErr := s.persist.DeleteFile(fileID, userID)
+				deleteErr := db.DeleteFile(fileID, userID)
 				if deleteErr != nil {
 					log.Println(deleteErr)
 					c.JSON(http.StatusInternalServerError, Response{
@@ -229,7 +229,7 @@ func (s *Server) Upload(c *gin.Context) {
 
 			written, err = io.Copy(dst, part)
 			if err != nil {
-				deleteErr := s.persist.DeleteFile(fileID, userID)
+				deleteErr := db.DeleteFile(fileID, userID)
 				if deleteErr != nil {
 					log.Println(deleteErr)
 					c.JSON(http.StatusInternalServerError, Response{
@@ -282,14 +282,14 @@ func (s *Server) Upload(c *gin.Context) {
 	}
 
 	// Update file size in database
-	err = s.persist.UpdateFile(persist.File{
+	err = db.UpdateFile(db.File{
 		ID:        fileID,
 		FileSize:  total,
 		Extension: extension,
 		Name:      filename,
 		MimeType:  contentType,
 		Parent:    parent,
-	}, []string{"file_size", "extension", "name", "parent", "mime_type"})
+	})
 	if err != nil {
 		// what do we want to do if we cannot update the filesize?
 		c.JSON(http.StatusInternalServerError, Response{
@@ -299,7 +299,7 @@ func (s *Server) Upload(c *gin.Context) {
 		return
 	}
 
-	err = s.persist.UpdateUsage(userID, total)
+	err = db.UpdateUsage(userID, total)
 	if err != nil {
 		// todo should we rollback? Or just have a cron that'll reconcile?
 		c.JSON(http.StatusInternalServerError, Response{
@@ -322,7 +322,7 @@ func (s *Server) ListFiles(c *gin.Context) {
 		return
 	}
 
-	files, err := s.persist.ListFiles(userID)
+	files, err := db.ListFiles(userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, Response{
 			Message: "could not list files",
@@ -351,9 +351,9 @@ func (s *Server) UpdateFileName(c *gin.Context) {
 		return
 	}
 
-	file, err := s.persist.GetFileByID(c.Param("fileID"), userID)
+	file, err := db.GetFileByID(c.Param("fileID"), userID)
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		if errors.Is(err, sql.ErrNoRows) {
 			c.JSON(http.StatusNotFound, Response{
 				Message: "file not found in db",
 				Error:   err.Error(),
@@ -370,7 +370,7 @@ func (s *Server) UpdateFileName(c *gin.Context) {
 
 	file.Name = newName
 
-	err = s.persist.UpdateFile(*file, []string{"name"})
+	err = db.UpdateFile(*file)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, Response{
 			Message: "could not update file",
@@ -392,9 +392,9 @@ func (s *Server) GetFile(c *gin.Context) {
 		return
 	}
 
-	file, err := s.persist.GetFileByID(c.Param("fileID"), userID)
+	file, err := db.GetFileByID(c.Param("fileID"), userID)
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		if errors.Is(err, sql.ErrNoRows) {
 			c.JSON(http.StatusNotFound, Response{
 				Message: "file not found in db",
 				Error:   err.Error(),
@@ -456,7 +456,7 @@ func (s *Server) DeleteFile(c *gin.Context) {
 		})
 		return
 	}
-	f, err := s.persist.GetFileByID(c.Param("fileID"), userID)
+	f, err := db.GetFileByID(c.Param("fileID"), userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, Response{
 			Message: "error getting file",
@@ -477,7 +477,7 @@ func (s *Server) DeleteFile(c *gin.Context) {
 		}
 	}
 
-	if err = s.persist.DeleteFile(c.Param("fileID"), userID); err != nil {
+	if err = db.DeleteFile(c.Param("fileID"), userID); err != nil {
 		c.JSON(http.StatusInternalServerError, Response{
 			Message: "error deleting file from db",
 			Error:   err.Error(),
@@ -485,7 +485,7 @@ func (s *Server) DeleteFile(c *gin.Context) {
 		return
 	}
 
-	err = s.persist.UpdateUsage(userID, -f.FileSize)
+	err = db.UpdateUsage(userID, -f.FileSize)
 	if err != nil {
 		// todo should we rollback? Or just have a cron that'll reconcile?
 		c.JSON(http.StatusInternalServerError, Response{

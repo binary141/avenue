@@ -1,15 +1,15 @@
 package handlers
 
 import (
+	"database/sql"
 	"errors"
 	"net/http"
 	"slices"
 
-	"avenue/backend/persist"
+	"avenue/backend/db"
 	"avenue/backend/shared"
 
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 )
 
 // all files live in a per user file system
@@ -46,7 +46,7 @@ func (s *Server) CreateFolder(c *gin.Context) {
 	}
 
 	if req.Parent != "" {
-		_, err = s.persist.GetFolder(req.Parent, userID)
+		_, err = db.GetFolder(req.Parent, userID)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, Response{
 				Message: "parent folder must exist",
@@ -56,7 +56,7 @@ func (s *Server) CreateFolder(c *gin.Context) {
 		}
 	}
 
-	_, err = s.persist.CreateFolder(&persist.Folder{
+	_, err = db.CreateFolder(&db.Folder{
 		Name:    req.Name,
 		OwnerID: userID,
 		Parent:  req.Parent,
@@ -83,7 +83,7 @@ func (s *Server) DeleteFolder(c *gin.Context) {
 
 	folderID := c.Param("folderID")
 
-	folds, err := s.persist.ListChildFolder(folderID, userID)
+	folds, err := db.ListChildFolder(folderID, userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, Response{
 			Message: "Internal server error",
@@ -91,7 +91,7 @@ func (s *Server) DeleteFolder(c *gin.Context) {
 		})
 		return
 	}
-	files, err := s.persist.ListChildFile(folderID, userID)
+	files, err := db.ListChildFile(folderID, userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, Response{
 			Message: "Internal server error",
@@ -108,7 +108,7 @@ func (s *Server) DeleteFolder(c *gin.Context) {
 		return
 	}
 
-	err = s.persist.DeleteFolder(folderID, userID)
+	err = db.DeleteFolder(folderID, userID)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, Response{
 			Message: "",
@@ -141,9 +141,9 @@ func (s *Server) UpdateFolderName(c *gin.Context) {
 		return
 	}
 
-	folder, err := s.persist.GetFolder(c.Param("folderID"), userID)
+	folder, err := db.GetFolder(c.Param("folderID"), userID)
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		if errors.Is(err, sql.ErrNoRows) {
 			c.JSON(http.StatusNotFound, Response{
 				Message: "folder not found in db",
 				Error:   err.Error(),
@@ -160,7 +160,7 @@ func (s *Server) UpdateFolderName(c *gin.Context) {
 
 	folder.Name = newName
 
-	err = s.persist.UpdateFolder(*folder, []string{"name"})
+	err = db.UpdateFolder(*folder)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, Response{
 			Message: "could not update folder",
@@ -183,7 +183,7 @@ func (s *Server) ListFolderContents(c *gin.Context) {
 	}
 
 	folderID := c.Param("folderID")
-	folds, err := s.persist.ListChildFolder(folderID, userID)
+	folds, err := db.ListChildFolder(folderID, userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, Response{
 			Message: "Internal server error",
@@ -191,7 +191,7 @@ func (s *Server) ListFolderContents(c *gin.Context) {
 		})
 		return
 	}
-	files, err := s.persist.ListChildFile(folderID, userID)
+	files, err := db.ListChildFile(folderID, userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, Response{
 			Message: "Internal server error",
@@ -206,12 +206,12 @@ func (s *Server) ListFolderContents(c *gin.Context) {
 	}
 
 	var x struct {
-		Files       []persist.File   `json:"files"`
-		Folders     []persist.Folder `json:"folders"`
-		BreadCrumbs []Breadcrumb     `json:"breadcrumbs"`
+		Files       []db.File     `json:"files"`
+		Folders     []db.Folder   `json:"folders"`
+		BreadCrumbs []Breadcrumb  `json:"breadcrumbs"`
 	}
 
-	folderParents, err := s.persist.ListFolderParents(folderID, userID)
+	folderParents, err := db.ListFolderParents(folderID, userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, Response{
 			Message: "Internal server error",

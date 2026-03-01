@@ -10,16 +10,13 @@ import (
 	"avenue/backend/shared"
 
 	"github.com/gin-gonic/gin"
-	"github.com/go-playground/validator/v10"
 	"golang.org/x/crypto/bcrypt"
 )
 
 type LoginRequest struct {
-	Email    string `json:"email" validate:"required,min=4,max=64"`
-	Password string `json:"password" validate:"required,min=4,max=64"`
+	Email    string `json:"email" binding:"required,min=4,max=64"`
+	Password string `json:"password" binding:"required,min=4,max=64"`
 }
-
-var validate = validator.New()
 
 func (s *Server) LoginMeta(c *gin.Context) {
 
@@ -33,13 +30,6 @@ func (s *Server) Login(c *gin.Context) {
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.Status(http.StatusBadRequest)
-		return
-	}
-
-	if err := validate.Struct(req); err != nil {
-		c.AbortWithStatusJSON(http.StatusBadRequest, Response{
-			Error: err.Error(),
-		})
 		return
 	}
 
@@ -112,10 +102,10 @@ func (s *Server) Logout(c *gin.Context) {
 }
 
 type RegisterRequest struct {
-	Password  string `json:"password" validate:"required,min=4,max=64"`
-	FirstName string `json:"firstName" validate:"max=64"`
-	LastName  string `json:"lastName" validate:"max=64"`
-	Email     string `json:"email" validate:"required,min=4,max=512"`
+	Password  string `json:"password" binding:"required,min=4,max=64"`
+	FirstName string `json:"firstName" binding:"max=64"`
+	LastName  string `json:"lastName" binding:"max=64"`
+	Email     string `json:"email" binding:"required,min=4,max=512"`
 }
 
 func (s *Server) Register(c *gin.Context) {
@@ -131,14 +121,6 @@ func (s *Server) Register(c *gin.Context) {
 	var req RegisterRequest
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		log.Print(err)
-		c.AbortWithStatusJSON(http.StatusBadRequest, Response{
-			Error: err.Error(),
-		})
-		return
-	}
-
-	if err := validate.Struct(req); err != nil {
 		log.Print(err)
 		c.AbortWithStatusJSON(http.StatusBadRequest, Response{
 			Error: err.Error(),
@@ -184,10 +166,10 @@ func (s *Server) Register(c *gin.Context) {
 }
 
 type CreateUserRequest struct {
-	Email     string `json:"email" validate:"required,min=4,max=512"`
-	Password  string `json:"password" validate:"required,min=4,max=64"`
-	FirstName string `json:"firstName" validate:"min=1,max=64"`
-	LastName  string `json:"lastName" validate:"min=1,max=64"`
+	Email     string `json:"email" binding:"required,min=4,max=512"`
+	Password  string `json:"password" binding:"required,min=4,max=64"`
+	FirstName string `json:"firstName" binding:"min=1,max=64"`
+	LastName  string `json:"lastName" binding:"min=1,max=64"`
 	IsAdmin   bool   `json:"isAdmin"`
 }
 
@@ -219,14 +201,6 @@ func (s *Server) CreateUser(c *gin.Context) {
 	if err := c.ShouldBindJSON(&req); err != nil {
 		log.Print(err)
 		c.Status(http.StatusBadRequest)
-		return
-	}
-
-	if err := validate.Struct(req); err != nil {
-		log.Print(err)
-		c.AbortWithStatusJSON(http.StatusBadRequest, Response{
-			Error: err.Error(),
-		})
 		return
 	}
 
@@ -325,13 +299,13 @@ func (s *Server) GetProfile(c *gin.Context) {
 }
 
 type UpdateProfileRequest struct {
-	ID        int64   `json:"id" validate:"required,min=1"`
-	Email     *string `json:"email" validate:"omitempty,email,min=4,max=512"`
+	ID        int64   `json:"id" binding:"required,min=1"`
+	Email     *string `json:"email" binding:"omitempty,email,min=4,max=512"`
 	IsAdmin   *bool   `json:"isAdmin"`
-	Password  *string `json:"password" validate:"omitempty,min=4,max=64"`
-	FirstName *string `json:"firstName" validate:"omitempty,min=1,max=64"`
-	LastName  *string `json:"lastName" validate:"omitempty,min=1,max=64"`
-	Quota     *int64  `json:"quota" validate:"omitempty,min=0"`
+	Password  *string `json:"password" binding:"omitempty,min=4,max=64"`
+	FirstName *string `json:"firstName" binding:"min=0,max=64"`
+	LastName  *string `json:"lastName" binding:"min=0,max=64"`
+	Quota     *int64  `json:"quota" binding:"omitempty,min=0"`
 }
 
 func (s *Server) UpdateProfile(c *gin.Context) {
@@ -347,14 +321,6 @@ func (s *Server) UpdateProfile(c *gin.Context) {
 	var req UpdateProfileRequest
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.AbortWithStatusJSON(http.StatusBadRequest, Response{
-			Error: err.Error(),
-		})
-		return
-	}
-
-	if err := validate.Struct(req); err != nil {
-		log.Print(err)
 		c.AbortWithStatusJSON(http.StatusBadRequest, Response{
 			Error: err.Error(),
 		})
@@ -446,7 +412,7 @@ func (s *Server) UpdateProfile(c *gin.Context) {
 }
 
 type UpdatePasswordRequest struct {
-	Password string `json:"password" validate:"required,min=8,max=128"`
+	Password string `json:"password" binding:"required,min=8,max=128"`
 }
 
 func (s *Server) UpdatePassword(c *gin.Context) {
@@ -464,14 +430,6 @@ func (s *Server) UpdatePassword(c *gin.Context) {
 	if err := c.ShouldBindJSON(&req); err != nil {
 		log.Print(err)
 		c.Status(http.StatusBadRequest)
-		return
-	}
-
-	if err := validate.Struct(req); err != nil {
-		log.Print(err)
-		c.AbortWithStatusJSON(http.StatusBadRequest, Response{
-			Error: err.Error(),
-		})
 		return
 	}
 

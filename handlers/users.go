@@ -386,7 +386,7 @@ func (s *Server) UpdateProfile(c *gin.Context) {
 
 	if req.IsAdmin != nil && u.IsAdmin {
 		otherAdmins, _ := db.HasOtherAdmins(updatingUser)
-		if !otherAdmins {
+		if !otherAdmins && !*req.IsAdmin {
 			c.AbortWithStatusJSON(http.StatusBadRequest, Response{
 				Error: "Application requires at least one Admin user",
 			})

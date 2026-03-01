@@ -4,6 +4,16 @@ import api, { setGlobalRequestHeader } from "@/utils/api";
 import { defineStore } from "pinia";
 import { ref } from "vue";
 
+function parseStoredToken(): string | null {
+    const stored = localStorage.getItem("token");
+    if (!stored) return null;
+    try {
+        return JSON.parse(stored);
+    } catch {
+        return stored;
+    }
+}
+
 const userDataDefault: User = {
     id: 1,
     canLogin: false,
@@ -24,9 +34,7 @@ export const useUsersStore = defineStore('users', () => {
         loading: false,
     })
     const loggedIn = ref(false);
-    const token = ref<string | null>(
-        JSON.parse(localStorage.getItem("token") || "null"),
-    );
+    const token = ref<string | null>(parseStoredToken());
 
     function setToken(value: string | null) {
         token.value = value;

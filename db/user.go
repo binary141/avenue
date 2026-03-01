@@ -130,27 +130,36 @@ func UpdateUsage(userID string, delta int64) error {
 }
 
 // UpsertRootUser creates the admin account from env vars if it doesn't already exist.
+// If ROOT_USER_RESET=true is set, the root user's password is also updated on startup.
 func UpsertRootUser() error {
 	email := getenv("ROOT_USER_EMAIL", "root@gmail.com")
-
-	var count int
-	if err := DB.QueryRow(`SELECT COUNT(*) FROM users WHERE email=$1`, email).Scan(&count); err != nil {
-		return err
-	}
-	if count > 0 {
-		return nil
-	}
-
 	password := getenv("ROOT_USER_PASSWORD", "password")
+
 	hashed, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return err
 	}
 
-	_, err = DB.Exec(`
-		INSERT INTO users (email, password, can_login, is_admin, created_at, updated_at)
-		VALUES ($1, $2, true, true, now(), now())
-	`, email, string(hashed))
-	return err
+	var count int
+	if err := DB.QueryRow(`SELECT COUNT(*) FROM users WHERE email=$1`, email).Scan(&count); err != nil {
+		return err
+	}
+
+	if count == 0 {
+		_, err = DB.Exec(`
+			INSERT INTO users (email, password, can_login, is_admin, created_at, updated_at)
+			VALUES ($1, $2, true, true, now(), now())
+		`, email, string(hashed))
+		return err
+	}
+
+	if getenv("ROOT_USER_RESET", "") == "true" {
+		_, err = DB.Exec(`
+			UPDATE users SET password=$2, updated_at=now() WHERE email=$1
+		`, email, string(hashed))
+		return err
+	}
+
+	return nil
 }
 

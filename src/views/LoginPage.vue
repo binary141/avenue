@@ -44,12 +44,13 @@
 import { onMounted, ref } from 'vue';
 import AppButton from './components/AppButton.vue'
 import { useUsersStore } from '@/stores/users';
-import { useRouter } from 'vue-router';
+import { useRouter, useRoute } from 'vue-router';
 import ErrorMessage from './components/ErrorMessage.vue';
 import api from '@/utils/api'
 
 const usersStore = useUsersStore();
 const router = useRouter();
+const route = useRoute();
 
 const email = ref('')
 const password = ref('')
@@ -87,7 +88,8 @@ async function handleLogin() {
   if (response.status === 200) {
     usersStore.setToken(response.body.session_id);
     usersStore.logIn(response.body.user_data);
-    router.replace({ name: "home" });
+    const redirect = route.query.redirect as string | undefined;
+    router.replace(redirect || { name: "home" });
   } else {
     error.value = response.body.error;
   }

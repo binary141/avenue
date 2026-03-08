@@ -16,7 +16,7 @@
         <p class="text-4xl mb-3">🔐</p>
         <h1 class="text-xl font-bold text-gray-800 mb-2">Login required</h1>
         <p class="text-gray-500 text-sm mb-5">You need to be logged in to access this shared file.</p>
-        <a href="/login" class="inline-block px-4 py-2 rounded font-semibold text-white" style="background: #3A3F78;">
+        <a :href="`/login?redirect=${encodeURIComponent(route.fullPath)}`" class="inline-block px-4 py-2 rounded font-semibold text-white" style="background: #3A3F78;">
           Go to login
         </a>
       </div>

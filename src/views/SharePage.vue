@@ -11,6 +11,16 @@
         <p>Loading…</p>
       </div>
 
+      <!-- Login required -->
+      <div v-else-if="loginRequired" class="text-center">
+        <p class="text-4xl mb-3">🔐</p>
+        <h1 class="text-xl font-bold text-gray-800 mb-2">Login required</h1>
+        <p class="text-gray-500 text-sm mb-5">You need to be logged in to access this shared file.</p>
+        <a href="/login" class="inline-block px-4 py-2 rounded font-semibold text-white" style="background: #3A3F78;">
+          Go to login
+        </a>
+      </div>
+
       <!-- Error / expired -->
       <div v-else-if="notFound" class="text-center">
         <p class="text-4xl mb-3">🔒</p>
@@ -48,6 +58,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
+import { useUsersStore } from '../stores/users';
 
 interface ShareMeta {
   file_name: string;
@@ -58,15 +69,19 @@ interface ShareMeta {
 }
 
 const route = useRoute();
+const usersStore = useUsersStore();
 const loading = ref(true);
 const notFound = ref(false);
+const loginRequired = ref(false);
 const meta = ref<ShareMeta | null>(null);
 
 const apiRoot = import.meta.env.VITE_APP_API_URL || '';
 
-const downloadURL = computed(() =>
-  meta.value ? `${apiRoot}share/${meta.value.token}/download` : ''
-);
+const downloadURL = computed(() => {
+  if (!meta.value) return '';
+  const base = `${apiRoot}share/${meta.value.token}/download`;
+  return usersStore.token ? `${base}?token=${usersStore.token}` : base;
+});
 
 function formatFileSize(bytes: number): string {
   if (bytes === 0) return '0 B';
@@ -82,9 +97,15 @@ function formatExpiry(iso: string): string {
 
 onMounted(async () => {
   const token = route.params.token as string;
+  const headers: Record<string, string> = {};
+  if (usersStore.token) {
+    headers['Authorization'] = `Token ${usersStore.token}`;
+  }
   try {
-    const res = await fetch(`${apiRoot}share/${token}`);
-    if (!res.ok) {
+    const res = await fetch(`${apiRoot}share/${token}`, { headers });
+    if (res.status === 401) {
+      loginRequired.value = true;
+    } else if (!res.ok) {
       notFound.value = true;
     } else {
       meta.value = await res.json();

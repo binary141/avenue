@@ -1,0 +1,1 @@
+ALTER TABLE share_links ADD COLUMN require_login BOOLEAN NOT NULL DEFAULT FALSE;

@@ -16,7 +16,8 @@ import (
 )
 
 type createShareLinkReq struct {
-	ExpiresAt *time.Time `json:"expires_at"`
+	ExpiresAt    *time.Time `json:"expires_at"`
+	RequireLogin bool       `json:"require_login"`
 }
 
 type shareLinkResponse struct {
@@ -58,7 +59,7 @@ func (s *Server) CreateShareLink(c *gin.Context) {
 		return
 	}
 
-	link, err := db.CreateShareLink(fileID, userID, req.ExpiresAt)
+	link, err := db.CreateShareLink(fileID, userID, req.ExpiresAt, req.RequireLogin)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, Response{Error: err.Error()})
 		return
@@ -77,6 +78,11 @@ func (s *Server) GetShareLinkMeta(c *gin.Context) {
 	link, err := db.GetShareLink(token)
 	if err != nil {
 		c.JSON(http.StatusNotFound, Response{Message: "share link not found or expired"})
+		return
+	}
+
+	if link.RequireLogin && !s.isAuthenticated(c) {
+		c.JSON(http.StatusUnauthorized, Response{Message: "authentication required"})
 		return
 	}
 
@@ -163,6 +169,11 @@ func (s *Server) DownloadSharedFile(c *gin.Context) {
 	link, err := db.GetShareLink(token)
 	if err != nil {
 		c.JSON(http.StatusNotFound, Response{Message: "share link not found or expired"})
+		return
+	}
+
+	if link.RequireLogin && !s.isAuthenticated(c) {
+		c.JSON(http.StatusUnauthorized, Response{Message: "authentication required"})
 		return
 	}
 

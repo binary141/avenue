@@ -284,6 +284,16 @@
             />
           </div>
 
+          <div class="mb-4 flex items-center gap-2">
+            <input
+              id="shareRequireLogin"
+              v-model="shareRequireLogin"
+              type="checkbox"
+              class="rounded"
+            />
+            <label for="shareRequireLogin" class="text-sm text-gray-600 select-none cursor-pointer">Require login to access</label>
+          </div>
+
           <div class="flex justify-end gap-2">
             <AppButton @click="closeShareModal" class="px-3 py-2 bg-gray-200 text-gray-700 rounded text-sm">Close</AppButton>
             <AppButton @click="generateShareLink" :disabled="shareGenerating" class="px-3 py-2 bg-blue-600 text-white rounded text-sm">
@@ -342,6 +352,7 @@ interface ShareLinkItem {
 
 const sharingFile = ref<File | null>(null);
 const shareExpiresAt = ref('');
+const shareRequireLogin = ref(false);
 const shareLinks = ref<ShareLinkItem[]>([]);
 const sharesLoading = ref(false);
 const shareGenerating = ref(false);
@@ -549,6 +560,7 @@ async function loadFileShares(fileId: string) {
 function openShareModal(file: File) {
   sharingFile.value = file
   shareExpiresAt.value = ''
+  shareRequireLogin.value = false
   shareLinks.value = []
   shareTokenCopied.value = {}
   loadFileShares(file.uuid)
@@ -558,6 +570,7 @@ function closeShareModal() {
   sharingFile.value = null
   shareLinks.value = []
   shareExpiresAt.value = ''
+  shareRequireLogin.value = false
   shareTokenCopied.value = {}
 }
 
@@ -565,9 +578,12 @@ async function generateShareLink() {
   if (!sharingFile.value) return
   shareGenerating.value = true
 
-  const body: { expires_at?: string } = {}
+  const body: { expires_at?: string; require_login?: boolean } = {}
   if (shareExpiresAt.value) {
     body.expires_at = new Date(shareExpiresAt.value).toISOString()
+  }
+  if (shareRequireLogin.value) {
+    body.require_login = true
   }
 
   const response = await api({

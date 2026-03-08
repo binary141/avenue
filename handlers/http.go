@@ -79,6 +79,23 @@ func (s *Server) ServeUI(uiFS embed.FS) {
 	})
 }
 
+func (s *Server) isAuthenticated(c *gin.Context) bool {
+	h := c.GetHeader(AUTHHEADER)
+	if h == "" {
+		q := c.Query("token")
+		if q == "" {
+			return false
+		}
+		h = fmt.Sprintf("Token %s", q)
+	}
+	parts := strings.Split(h, "Token ")
+	if len(parts) != 2 {
+		return false
+	}
+	_, valid := db.IsValidSession(parts[1])
+	return valid
+}
+
 func (s *Server) userIDExists(userID string) bool {
 	_, err := db.GetUserByIDStr(userID)
 	return err == nil

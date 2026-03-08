@@ -290,7 +290,7 @@ func (s *Server) Upload(c *gin.Context) {
 
 	// Update file size in database
 	err = db.UpdateFile(db.File{
-		ID:        fileID,
+		UUID:      fileID,
 		FileSize:  total,
 		Extension: extension,
 		Name:      filename,
@@ -416,7 +416,7 @@ func (s *Server) GetFile(c *gin.Context) {
 		return
 	}
 
-	path := fmt.Sprintf("/%s/%s", userID, file.ID)
+	path := fmt.Sprintf("/%s/%s", userID, file.UUID)
 	fileData, err := s.fs.Open(path)
 	if err != nil {
 		if errors.Is(err, afero.ErrFileNotFound) {
@@ -477,7 +477,7 @@ func (s *Server) DeleteFile(c *gin.Context) {
 		return
 	}
 
-	if err = s.fs.Remove(fmt.Sprintf("/%s/%s", userID, f.ID)); err != nil {
+	if err = s.fs.Remove(fmt.Sprintf("/%s/%s", userID, f.UUID)); err != nil {
 		// only error if the file was found
 		// if the file wasn't found, we still want to delete from the system
 		if !errors.Is(err, afero.ErrFileNotFound) {

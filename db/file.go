@@ -8,7 +8,8 @@ import (
 )
 
 type File struct {
-	ID        string    `json:"id"`         // uuid column
+	ID        int64     `json:"id"`
+	UUID      string    `json:"uuid"`
 	Name      string    `json:"name"`
 	Extension string    `json:"extension"`
 	MimeType  string    `json:"mimeType"`
@@ -19,17 +20,18 @@ type File struct {
 }
 
 func CreateFile(file *File) (string, error) {
-	if file.ID == "" {
-		file.ID = uuid.NewString()
+	if file.UUID == "" {
+		file.UUID = uuid.NewString()
 	}
-	_, err := DB.Exec(`
+	err := DB.QueryRow(`
 		INSERT INTO files (uuid, name, extension, mime_type, file_size, parent_id, created_by, created_at)
 		VALUES ($1, $2, $3, $4, $5,
 			CASE WHEN $6 = '' THEN NULL
 			     ELSE (SELECT id FROM folders WHERE uuid = $6)
 			END,
 			$7, now())
-	`, file.ID, file.Name, file.Extension, file.MimeType, file.FileSize, file.Parent, file.CreatedBy)
+		RETURNING id
+	`, file.UUID, file.Name, file.Extension, file.MimeType, file.FileSize, file.Parent, file.CreatedBy).Scan(&file.ID)
 	if err != nil {
 		return "", err
 	}
@@ -38,15 +40,15 @@ func CreateFile(file *File) (string, error) {
 		return "", err
 	}
 
-	return file.ID, nil
+	return file.UUID, nil
 }
 
 func GetFileByID(id, creatorID string) (*File, error) {
 	var f File
 	err := DB.QueryRow(`
-		SELECT uuid, name, extension, mime_type, file_size, created_by, created_at
+		SELECT id, uuid, name, extension, mime_type, file_size, created_by, created_at
 		FROM files WHERE uuid=$1 AND created_by=$2::BIGINT
-	`, id, creatorID).Scan(&f.ID, &f.Name, &f.Extension, &f.MimeType, &f.FileSize, &f.CreatedBy, &f.CreatedAt)
+	`, id, creatorID).Scan(&f.ID, &f.UUID, &f.Name, &f.Extension, &f.MimeType, &f.FileSize, &f.CreatedBy, &f.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -56,9 +58,9 @@ func GetFileByID(id, creatorID string) (*File, error) {
 func GetFileByIDPublic(id string) (*File, error) {
 	var f File
 	err := DB.QueryRow(`
-		SELECT uuid, name, extension, mime_type, file_size, created_by, created_at
+		SELECT id, uuid, name, extension, mime_type, file_size, created_by, created_at
 		FROM files WHERE uuid=$1
-	`, id).Scan(&f.ID, &f.Name, &f.Extension, &f.MimeType, &f.FileSize, &f.CreatedBy, &f.CreatedAt)
+	`, id).Scan(&f.ID, &f.UUID, &f.Name, &f.Extension, &f.MimeType, &f.FileSize, &f.CreatedBy, &f.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -67,7 +69,7 @@ func GetFileByIDPublic(id string) (*File, error) {
 
 func ListFiles(creatorID string) ([]File, error) {
 	rows, err := DB.Query(`
-		SELECT uuid, name, extension, mime_type, file_size, created_by, created_at
+		SELECT id, uuid, name, extension, mime_type, file_size, created_by, created_at
 		FROM files WHERE created_by=$1::BIGINT
 	`, creatorID)
 	if err != nil {
@@ -78,7 +80,7 @@ func ListFiles(creatorID string) ([]File, error) {
 	var files []File
 	for rows.Next() {
 		var f File
-		if err := rows.Scan(&f.ID, &f.Name, &f.Extension, &f.MimeType, &f.FileSize, &f.CreatedBy, &f.CreatedAt); err != nil {
+		if err := rows.Scan(&f.ID, &f.UUID, &f.Name, &f.Extension, &f.MimeType, &f.FileSize, &f.CreatedBy, &f.CreatedAt); err != nil {
 			return nil, err
 		}
 		files = append(files, f)
@@ -99,12 +101,12 @@ func ListChildFile(parentID, creatorID string) ([]File, error) {
 
 	if parentID == "" {
 		rows, err = DB.Query(`
-			SELECT uuid, name, extension, mime_type, file_size, created_by, created_at
+			SELECT id, uuid, name, extension, mime_type, file_size, created_by, created_at
 			FROM files WHERE parent_id IS NULL AND created_by=$1::BIGINT
 		`, creatorID)
 	} else {
 		rows, err = DB.Query(`
-			SELECT uuid, name, extension, mime_type, file_size, created_by, created_at
+			SELECT id, uuid, name, extension, mime_type, file_size, created_by, created_at
 			FROM files
 			WHERE parent_id = (SELECT id FROM folders WHERE uuid = $1)
 			  AND created_by = $2::BIGINT
@@ -118,7 +120,7 @@ func ListChildFile(parentID, creatorID string) ([]File, error) {
 	var files []File
 	for rows.Next() {
 		var f File
-		if err := rows.Scan(&f.ID, &f.Name, &f.Extension, &f.MimeType, &f.FileSize, &f.CreatedBy, &f.CreatedAt); err != nil {
+		if err := rows.Scan(&f.ID, &f.UUID, &f.Name, &f.Extension, &f.MimeType, &f.FileSize, &f.CreatedBy, &f.CreatedAt); err != nil {
 			return nil, err
 		}
 		files = append(files, f)
@@ -133,6 +135,6 @@ func UpdateFile(f File) error {
 			                 ELSE (SELECT id FROM folders WHERE uuid = $6)
 			            END
 		WHERE uuid=$1
-	`, f.ID, f.Name, f.Extension, f.MimeType, f.FileSize, f.Parent)
+	`, f.UUID, f.Name, f.Extension, f.MimeType, f.FileSize, f.Parent)
 	return err
 }

@@ -104,20 +104,20 @@
         <div class="items-list flex flex-col gap-2">
           <div
             v-for="(folder, index) in folders"
-            :key="folder.folder_id"
+            :key="folder.uuid"
             class="folder-item card flex flex-row items-center gap-3 p-3"
           >
             <!-- Checkbox -->
             <input
               type="checkbox"
-              :checked="selectedFolders.has(folder.folder_id)"
-              @click.stop="onFolderCheckboxClick(folder.folder_id, index, $event)"
+              :checked="selectedFolders.has(folder.uuid)"
+              @click.stop="onFolderCheckboxClick(folder.uuid, index, $event)"
             />
 
             <!-- Folder clickable name -->
             <span
               class="folder-info flex-1 flex items-center gap-2 cursor-pointer"
-              @click="changeFolder(folder.folder_id)"
+              @click="changeFolder(folder.uuid)"
             >
               <span class="folder-icon">📁</span>
               <span class="folder-name">{{ folder.name }}</span>
@@ -126,7 +126,7 @@
             <!-- Actions -->
             <span class="folder-actions flex items-center gap-2">
               <span class="file-edit cursor-pointer" @click.stop="openFolderEditModal(folder)">✏️</span>
-              <span class="file-delete cursor-pointer" @click.stop="deleteFolder(folder.folder_id)">🗑️</span>
+              <span class="file-delete cursor-pointer" @click.stop="deleteFolder(folder.uuid)">🗑️</span>
             </span>
           </div>
         </div>
@@ -138,14 +138,14 @@
         <div class="items-list flex flex-col gap-2">
           <div
             v-for="(file, index) in files"
-            :key="file.id"
+            :key="file.uuid"
             class="file-item card flex flex-row items-center gap-3 p-3"
           >
             <!-- Checkbox -->
             <input
               type="checkbox"
-              :checked="selectedFiles.has(file.id)"
-              @click.stop="onFileCheckboxClick(file.id, index, $event)"
+              :checked="selectedFiles.has(file.uuid)"
+              @click.stop="onFileCheckboxClick(file.uuid, index, $event)"
             />
 
             <span class="file-icon">📄</span>
@@ -154,12 +154,12 @@
             <span class="file-extension">{{ file.extension }}</span>
 
             <span class="file-edit cursor-pointer" @click.stop="openFileEditModal(file)">✏️</span>
-            <span class="file-delete cursor-pointer" @click.stop="deleteFile(file.id)">🗑️</span>
+            <span class="file-delete cursor-pointer" @click.stop="deleteFile(file.uuid)">🗑️</span>
             <span class="file-download">
-              <a @click.stop :href="getDownloadURL(file.id)" :download="file.name">⬇️</a>
+              <a @click.stop :href="getDownloadURL(file.uuid)" :download="file.name">⬇️</a>
             </span>
             <span class="cursor-pointer inline-flex items-center gap-0.5" @click.stop="openShareModal(file)" title="Share">
-              🔗<span v-if="sharedFileCounts[file.id]" class="share-count">{{ sharedFileCounts[file.id] }}</span>
+              🔗<span v-if="sharedFileCounts[file.uuid]" class="share-count">{{ sharedFileCounts[file.uuid] }}</span>
             </span>
           </div>
         </div>
@@ -365,7 +365,7 @@ function selectFolderRange(start: number, end: number) {
   for (let i = from; i <= to; i++) {
     const folder = list[i]
     if (!folder) continue
-    selectedFolders.value.add(folder.folder_id)
+    selectedFolders.value.add(folder.uuid)
   }
 }
 
@@ -376,7 +376,7 @@ function selectFileRange(start: number, end: number) {
   for (let i = from; i <= to; i++) {
     const file = list[i]
     if (!file) continue
-    selectedFiles.value.add(file.id)
+    selectedFiles.value.add(file.uuid)
   }
 }
 
@@ -551,7 +551,7 @@ function openShareModal(file: File) {
   shareExpiresAt.value = ''
   shareLinks.value = []
   shareTokenCopied.value = {}
-  loadFileShares(file.id)
+  loadFileShares(file.uuid)
 }
 
 function closeShareModal() {
@@ -571,7 +571,7 @@ async function generateShareLink() {
   }
 
   const response = await api({
-    url: `v1/file/${sharingFile.value.id}/share`,
+    url: `v1/file/${sharingFile.value.uuid}/share`,
     method: 'POST',
     json: body,
   })
@@ -585,7 +585,7 @@ async function generateShareLink() {
       created_at: response.body.created_at,
     })
     shareExpiresAt.value = ''
-    const fileId = sharingFile.value.id
+    const fileId = sharingFile.value.uuid
     sharedFileCounts.value[fileId] = (sharedFileCounts.value[fileId] || 0) + 1
   } else {
     error.value = response.body?.error || 'Failed to create share link'
@@ -597,7 +597,7 @@ async function revokeShareLink(token: string) {
   if (response.ok) {
     shareLinks.value = shareLinks.value.filter(l => l.token !== token)
     if (sharingFile.value) {
-      const fileId = sharingFile.value.id
+      const fileId = sharingFile.value.uuid
       const current = sharedFileCounts.value[fileId] || 0
       if (current <= 1) {
         delete sharedFileCounts.value[fileId]
@@ -622,7 +622,7 @@ async function saveFileName() {
   if (!editingFile.value) return
   // Call API to update the file name on the server
   const response = await api({
-    url: `v1/file/${editingFile.value.id}/${newFileName.value}`,
+    url: `v1/file/${editingFile.value.uuid}/${newFileName.value}`,
     method: 'PATCH',
     json: { name: newFileName.value }
   })
@@ -639,7 +639,7 @@ async function saveFolderName() {
   if (!editingFolder.value) return
   // Call API to update the file name on the server
   const response = await api({
-    url: `v1/folder/${editingFolder.value.folder_id}/${newFolderName.value}`,
+    url: `v1/folder/${editingFolder.value.uuid}/${newFolderName.value}`,
     method: 'PATCH',
     json: { name: newFolderName.value }
   })

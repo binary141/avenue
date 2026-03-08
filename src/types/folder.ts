@@ -1,12 +1,14 @@
 export interface Folder {
-  folder_id: string;
+  id: number;
+  uuid: string;
   name: string;
   parent: string | null;
   owner_id: number;
 }
 
 export interface File {
-  id: string;
+  id: number;
+  uuid: string;
   name: string;
   extension: string;
   file_size: number;
@@ -25,4 +27,3 @@ export interface FolderContents {
   files: File[];
   breadcrumbs: Breadcrumb[];
 }
-

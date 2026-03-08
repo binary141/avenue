@@ -189,6 +189,11 @@ func (s *Server) SetupRoutes() {
 	// -- file routes -- //
 	securedRouterV1.POST("/file", s.Upload)
 	securedRouterV1.POST("/file/:fileID/share", s.CreateShareLink)
+	securedRouterV1.GET("/file/:fileID/shares", s.ListFileShares)
+
+	// -- share routes -- //
+	securedRouterV1.GET("/shares", s.ListUserShares)
+	securedRouterV1.DELETE("/share/:token", s.RevokeShareLink)
 	securedRouterV1.GET("/file/list", s.ListFiles)
 	securedRouterV1.GET("/file/:fileID", s.GetFile)
 	securedRouterV1.PATCH("/file/:fileID/:fileName", s.UpdateFileName)

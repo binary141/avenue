@@ -95,6 +95,68 @@ func (s *Server) GetShareLinkMeta(c *gin.Context) {
 	})
 }
 
+func (s *Server) ListFileShares(c *gin.Context) {
+	userID, err := shared.GetUserIDFromContext(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{Error: err.Error()})
+		return
+	}
+
+	fileID := c.Param("fileID")
+	_, err = db.GetFileByID(fileID, userID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			c.JSON(http.StatusNotFound, Response{Message: "file not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, Response{Error: err.Error()})
+		return
+	}
+
+	links, err := db.ListSharesByFile(fileID, userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{Error: err.Error()})
+		return
+	}
+	if links == nil {
+		links = []db.ShareLink{}
+	}
+	c.JSON(http.StatusOK, links)
+}
+
+func (s *Server) ListUserShares(c *gin.Context) {
+	userID, err := shared.GetUserIDFromContext(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{Error: err.Error()})
+		return
+	}
+
+	links, err := db.ListSharesByUser(userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{Error: err.Error()})
+		return
+	}
+	if links == nil {
+		links = []db.ShareLinkWithFileName{}
+	}
+	c.JSON(http.StatusOK, links)
+}
+
+func (s *Server) RevokeShareLink(c *gin.Context) {
+	userID, err := shared.GetUserIDFromContext(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{Error: err.Error()})
+		return
+	}
+
+	token := c.Param("token")
+	if err := db.DeleteShareLink(token, userID); err != nil {
+		c.JSON(http.StatusInternalServerError, Response{Error: err.Error()})
+		return
+	}
+	c.Status(http.StatusOK)
+}
+
 func (s *Server) DownloadSharedFile(c *gin.Context) {
 	token := c.Param("token")
 

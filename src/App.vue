@@ -28,6 +28,10 @@
               Admin
             </button>
             <button class="text-left px-3 py-2 hover:bg-gray-100 rounded-lg text-black"
+                    @click="goToShares">
+              Shared Links
+            </button>
+            <button class="text-left px-3 py-2 hover:bg-gray-100 rounded-lg text-black"
                     @click="goToProfile">
               Profile Settings
             </button>
@@ -99,6 +103,11 @@ function home() {
 
 function goToAdmin() {
   router.push("/admin")
+  showMenu.value = false
+}
+
+function goToShares() {
+  router.push("/shares")
   showMenu.value = false
 }
 

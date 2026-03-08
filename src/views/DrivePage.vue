@@ -158,7 +158,9 @@
             <span class="file-download">
               <a @click.stop :href="getDownloadURL(file.id)" :download="file.name">⬇️</a>
             </span>
-            <span class="cursor-pointer" @click.stop="openShareModal(file)" title="Share">🔗</span>
+            <span class="cursor-pointer inline-flex items-center gap-0.5" @click.stop="openShareModal(file)" title="Share">
+              🔗<span v-if="sharedFileCounts[file.id]" class="share-count">{{ sharedFileCounts[file.id] }}</span>
+            </span>
           </div>
         </div>
       </div>
@@ -228,48 +230,69 @@
       v-if="sharingFile"
       class="fixed inset-0 flex items-center justify-center bg-black/50 z-50"
     >
-      <div class="bg-white rounded shadow-lg w-[480px] p-6 relative">
+      <div class="bg-white rounded shadow-lg w-[520px] p-6 relative flex flex-col" style="max-height: 80vh;">
         <h3 class="text-lg font-bold mb-1 text-black">Share "{{ sharingFile.name }}"</h3>
-        <p class="text-sm text-gray-500 mb-4">Anyone with the link can download this file.</p>
+        <p class="text-sm text-gray-500 mb-4">Anyone with the link can view and download this file.</p>
 
-        <!-- Expiry -->
-        <div class="mb-4">
-          <label class="block text-sm font-medium text-gray-600 mb-1">Expires (optional)</label>
-          <input
-            v-model="shareExpiresAt"
-            type="datetime-local"
-            class="border border-gray-300 rounded px-3 py-2 w-full text-gray-700 bg-white"
-          />
+        <!-- Loading existing links -->
+        <div v-if="sharesLoading" class="flex justify-center py-6">
+          <svg class="animate-spin h-6 w-6 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+          </svg>
         </div>
 
-        <!-- Generated link -->
-        <div v-if="shareLink" class="mb-4">
-          <label class="block text-sm font-medium text-gray-600 mb-1">Share link</label>
-          <div class="flex gap-2">
+        <template v-else>
+          <!-- Active links list -->
+          <div class="mb-4 overflow-y-auto" style="max-height: 240px;">
+            <p class="text-sm font-semibold text-gray-600 mb-2">
+              Active links<span v-if="shareLinks.length"> ({{ shareLinks.length }})</span>
+            </p>
+            <div v-if="shareLinks.length === 0" class="text-sm text-gray-400 py-2 text-center">
+              No active links for this file.
+            </div>
+            <div v-else class="flex flex-col gap-2">
+              <div
+                v-for="link in shareLinks"
+                :key="link.token"
+                class="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded px-3 py-2 text-sm"
+              >
+                <span class="flex-1 font-mono text-xs text-gray-600 truncate">{{ shareLinkURL(link.token) }}</span>
+                <span class="text-xs text-gray-400 whitespace-nowrap shrink-0">
+                  {{ link.expires_at ? formatExpiry(link.expires_at) : 'Never expires' }}
+                </span>
+                <AppButton @click="copyShareToken(link.token)" class="px-2 py-1 bg-blue-600 text-white text-xs rounded shrink-0">
+                  {{ shareTokenCopied[link.token] ? '✓' : 'Copy' }}
+                </AppButton>
+                <AppButton @click="revokeShareLink(link.token)" class="px-2 py-1 bg-red-100 text-red-600 text-xs rounded shrink-0">
+                  Revoke
+                </AppButton>
+              </div>
+            </div>
+          </div>
+
+          <hr class="mb-4 border-gray-200"/>
+
+          <!-- New link -->
+          <p class="text-sm font-semibold text-gray-600 mb-2">Create new link</p>
+          <div class="mb-4">
+            <label class="block text-xs font-medium text-gray-500 mb-1">Expires (optional)</label>
             <input
-              :value="shareLink"
-              readonly
-              class="border border-gray-300 rounded px-3 py-2 flex-1 text-gray-700 bg-gray-50 text-sm"
+              v-model="shareExpiresAt"
+              type="datetime-local"
+              class="border border-gray-300 rounded px-3 py-2 w-full text-gray-700 bg-white text-sm"
             />
-            <AppButton @click="copyShareLink" class="px-3 py-2 bg-blue-600 text-white rounded text-sm">
-              {{ shareCopied ? 'Copied!' : 'Copy' }}
+          </div>
+
+          <div class="flex justify-end gap-2">
+            <AppButton @click="closeShareModal" class="px-3 py-2 bg-gray-200 text-gray-700 rounded text-sm">Close</AppButton>
+            <AppButton @click="generateShareLink" :disabled="shareGenerating" class="px-3 py-2 bg-blue-600 text-white rounded text-sm">
+              {{ shareGenerating ? 'Generating…' : 'Generate Link' }}
             </AppButton>
           </div>
-        </div>
+        </template>
 
-        <div class="flex justify-end gap-2">
-          <AppButton @click="closeShareModal" class="px-3 py-2 bg-gray-200 text-gray-700 rounded">Close</AppButton>
-          <AppButton @click="createShareLink" :disabled="shareLoading" class="px-3 py-2 bg-blue-600 text-white rounded">
-            {{ shareLink ? 'Generate New Link' : (shareLoading ? 'Generating…' : 'Generate Link') }}
-          </AppButton>
-        </div>
-
-        <button
-          @click="closeShareModal"
-          class="absolute top-2 right-2 text-gray-500 hover:text-gray-700"
-        >
-          ✕
-        </button>
+        <button @click="closeShareModal" class="absolute top-2 right-2 text-gray-500 hover:text-gray-700">✕</button>
       </div>
     </div>
 
@@ -311,15 +334,21 @@ const editingFolder = ref<Folder | null>(null);
 const newFolderName = ref('');
 
 // ----- Share State -----
+interface ShareLinkItem {
+  token: string;
+  expires_at: string | null;
+  created_at: string;
+}
+
 const sharingFile = ref<File | null>(null);
 const shareExpiresAt = ref('');
-const shareToken = ref('');
-const shareLoading = ref(false);
-const shareCopied = ref(false);
+const shareLinks = ref<ShareLinkItem[]>([]);
+const sharesLoading = ref(false);
+const shareGenerating = ref(false);
+const shareTokenCopied = ref<Record<string, boolean>>({});
 
-const shareLink = computed(() =>
-  shareToken.value ? `${window.location.origin}/share/${shareToken.value}` : ''
-);
+// file_id -> count of active links (loaded once on mount)
+const sharedFileCounts = ref<Record<string, number>>({});
 
 const folderName = ref('');
 
@@ -489,24 +518,52 @@ function closeFolderModal() {
   newFolderName.value = ""
 }
 
+function shareLinkURL(token: string): string {
+  return `${window.location.origin}/share/${token}`
+}
+
+function formatExpiry(iso: string): string {
+  return new Date(iso).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })
+}
+
+async function loadAllShares() {
+  const response = await api({ url: 'v1/shares', method: 'GET' })
+  if (response.ok && Array.isArray(response.body)) {
+    const counts: Record<string, number> = {}
+    for (const link of response.body) {
+      counts[link.file_id] = (counts[link.file_id] || 0) + 1
+    }
+    sharedFileCounts.value = counts
+  }
+}
+
+async function loadFileShares(fileId: string) {
+  sharesLoading.value = true
+  const response = await api({ url: `v1/file/${fileId}/shares`, method: 'GET' })
+  sharesLoading.value = false
+  if (response.ok && Array.isArray(response.body)) {
+    shareLinks.value = response.body
+  }
+}
+
 function openShareModal(file: File) {
   sharingFile.value = file
   shareExpiresAt.value = ''
-  shareToken.value = ''
-  shareCopied.value = false
+  shareLinks.value = []
+  shareTokenCopied.value = {}
+  loadFileShares(file.id)
 }
 
 function closeShareModal() {
   sharingFile.value = null
-  shareToken.value = ''
+  shareLinks.value = []
   shareExpiresAt.value = ''
-  shareCopied.value = false
+  shareTokenCopied.value = {}
 }
 
-async function createShareLink() {
+async function generateShareLink() {
   if (!sharingFile.value) return
-  shareLoading.value = true
-  shareCopied.value = false
+  shareGenerating.value = true
 
   const body: { expires_at?: string } = {}
   if (shareExpiresAt.value) {
@@ -519,20 +576,46 @@ async function createShareLink() {
     json: body,
   })
 
-  shareLoading.value = false
+  shareGenerating.value = false
 
   if (response.ok && response.body?.token) {
-    shareToken.value = response.body.token
+    shareLinks.value.unshift({
+      token: response.body.token,
+      expires_at: response.body.expires_at ?? null,
+      created_at: response.body.created_at,
+    })
+    shareExpiresAt.value = ''
+    const fileId = sharingFile.value.id
+    sharedFileCounts.value[fileId] = (sharedFileCounts.value[fileId] || 0) + 1
   } else {
     error.value = response.body?.error || 'Failed to create share link'
   }
 }
 
-async function copyShareLink() {
-  if (!shareLink.value) return
-  await navigator.clipboard.writeText(shareLink.value)
-  shareCopied.value = true
-  setTimeout(() => { shareCopied.value = false }, 2000)
+async function revokeShareLink(token: string) {
+  const response = await api({ url: `v1/share/${token}`, method: 'DELETE' })
+  if (response.ok) {
+    shareLinks.value = shareLinks.value.filter(l => l.token !== token)
+    if (sharingFile.value) {
+      const fileId = sharingFile.value.id
+      const current = sharedFileCounts.value[fileId] || 0
+      if (current <= 1) {
+        delete sharedFileCounts.value[fileId]
+      } else {
+        sharedFileCounts.value[fileId] = current - 1
+      }
+    }
+  } else {
+    error.value = response.body?.error || 'Failed to revoke share link'
+  }
+}
+
+async function copyShareToken(token: string) {
+  await navigator.clipboard.writeText(shareLinkURL(token))
+  shareTokenCopied.value = { ...shareTokenCopied.value, [token]: true }
+  setTimeout(() => {
+    shareTokenCopied.value = { ...shareTokenCopied.value, [token]: false }
+  }, 2000)
 }
 
 async function saveFileName() {
@@ -652,8 +735,8 @@ async function getDashboardInfo() {
 
 onMounted(() => {
   refreshCurrentList();
-
   getDashboardInfo();
+  loadAllShares();
 });
 </script>
 
@@ -727,6 +810,13 @@ onMounted(() => {
 
 .modal-content {
   max-width: 400px;
+}
+
+.share-count {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #3A3F78;
+  line-height: 1;
 }
 </style>
 

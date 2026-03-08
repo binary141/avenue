@@ -49,6 +49,11 @@ const router = createRouter({
             component: () => import('@/views/SharePage.vue'),
             meta: { allowAnonymous: true },
         },
+        {
+            path: '/shares',
+            name: 'shares',
+            component: () => import('@/views/SharesPage.vue'),
+        },
     ],
     scrollBehavior(to, from, savedPosition) {
         if (savedPosition && scrollPositions[to.path] !== undefined) {

@@ -43,6 +43,12 @@ const router = createRouter({
             name: 'admin',
             component: () => import('@/views/AdminPage.vue'),
         },
+        {
+            path: '/share/:token',
+            name: 'share',
+            component: () => import('@/views/SharePage.vue'),
+            meta: { allowAnonymous: true },
+        },
     ],
     scrollBehavior(to, from, savedPosition) {
         if (savedPosition && scrollPositions[to.path] !== undefined) {

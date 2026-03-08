@@ -48,6 +48,18 @@ func GetFileByID(id, creatorID string) (*File, error) {
 	return &f, nil
 }
 
+func GetFileByIDPublic(id string) (*File, error) {
+	var f File
+	err := DB.QueryRow(`
+		SELECT id, name, extension, mime_type, file_size, parent, created_by, created_at
+		FROM files WHERE id=$1
+	`, id).Scan(&f.ID, &f.Name, &f.Extension, &f.MimeType, &f.FileSize, &f.Parent, &f.CreatedBy, &f.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &f, nil
+}
+
 func ListFiles(creatorID string) ([]File, error) {
 	rows, err := DB.Query(`
 		SELECT id, name, extension, mime_type, file_size, parent, created_by, created_at

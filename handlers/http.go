@@ -175,6 +175,8 @@ func (s *Server) SetupRoutes() {
 	unsecuredRouter.POST("/login", s.Login)
 	unsecuredRouter.GET("/loginMeta", s.LoginMeta)
 	unsecuredRouter.POST("/register", s.Register)
+	unsecuredRouter.GET("/share/:token", s.GetShareLinkMeta)
+	unsecuredRouter.GET("/share/:token/download", s.DownloadSharedFile)
 
 	securedRouterV1 := s.router.Group("/v1")
 	securedRouterV1.Use(s.sessionCheck)
@@ -186,6 +188,7 @@ func (s *Server) SetupRoutes() {
 
 	// -- file routes -- //
 	securedRouterV1.POST("/file", s.Upload)
+	securedRouterV1.POST("/file/:fileID/share", s.CreateShareLink)
 	securedRouterV1.GET("/file/list", s.ListFiles)
 	securedRouterV1.GET("/file/:fileID", s.GetFile)
 	securedRouterV1.PATCH("/file/:fileID/:fileName", s.UpdateFileName)

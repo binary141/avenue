@@ -158,6 +158,7 @@
             <span class="file-download">
               <a @click.stop :href="getDownloadURL(file.id)" :download="file.name">⬇️</a>
             </span>
+            <span class="cursor-pointer" @click.stop="openShareModal(file)" title="Share">🔗</span>
           </div>
         </div>
       </div>
@@ -222,6 +223,56 @@
       </div>
     </div>
 
+    <!-- Share File Modal -->
+    <div
+      v-if="sharingFile"
+      class="fixed inset-0 flex items-center justify-center bg-black/50 z-50"
+    >
+      <div class="bg-white rounded shadow-lg w-[480px] p-6 relative">
+        <h3 class="text-lg font-bold mb-1 text-black">Share "{{ sharingFile.name }}"</h3>
+        <p class="text-sm text-gray-500 mb-4">Anyone with the link can download this file.</p>
+
+        <!-- Expiry -->
+        <div class="mb-4">
+          <label class="block text-sm font-medium text-gray-600 mb-1">Expires (optional)</label>
+          <input
+            v-model="shareExpiresAt"
+            type="datetime-local"
+            class="border border-gray-300 rounded px-3 py-2 w-full text-gray-700 bg-white"
+          />
+        </div>
+
+        <!-- Generated link -->
+        <div v-if="shareLink" class="mb-4">
+          <label class="block text-sm font-medium text-gray-600 mb-1">Share link</label>
+          <div class="flex gap-2">
+            <input
+              :value="shareLink"
+              readonly
+              class="border border-gray-300 rounded px-3 py-2 flex-1 text-gray-700 bg-gray-50 text-sm"
+            />
+            <AppButton @click="copyShareLink" class="px-3 py-2 bg-blue-600 text-white rounded text-sm">
+              {{ shareCopied ? 'Copied!' : 'Copy' }}
+            </AppButton>
+          </div>
+        </div>
+
+        <div class="flex justify-end gap-2">
+          <AppButton @click="closeShareModal" class="px-3 py-2 bg-gray-200 text-gray-700 rounded">Close</AppButton>
+          <AppButton @click="createShareLink" :disabled="shareLoading" class="px-3 py-2 bg-blue-600 text-white rounded">
+            {{ shareLink ? 'Generate New Link' : (shareLoading ? 'Generating…' : 'Generate Link') }}
+          </AppButton>
+        </div>
+
+        <button
+          @click="closeShareModal"
+          class="absolute top-2 right-2 text-gray-500 hover:text-gray-700"
+        >
+          ✕
+        </button>
+      </div>
+    </div>
+
   </div>
 </template>
 
@@ -258,6 +309,17 @@ const newFileName = ref('');
 
 const editingFolder = ref<Folder | null>(null);
 const newFolderName = ref('');
+
+// ----- Share State -----
+const sharingFile = ref<File | null>(null);
+const shareExpiresAt = ref('');
+const shareToken = ref('');
+const shareLoading = ref(false);
+const shareCopied = ref(false);
+
+const shareLink = computed(() =>
+  shareToken.value ? `${window.location.origin}/share/${shareToken.value}` : ''
+);
 
 const folderName = ref('');
 
@@ -425,6 +487,52 @@ function closeFileModal() {
 function closeFolderModal() {
   editingFolder.value = null
   newFolderName.value = ""
+}
+
+function openShareModal(file: File) {
+  sharingFile.value = file
+  shareExpiresAt.value = ''
+  shareToken.value = ''
+  shareCopied.value = false
+}
+
+function closeShareModal() {
+  sharingFile.value = null
+  shareToken.value = ''
+  shareExpiresAt.value = ''
+  shareCopied.value = false
+}
+
+async function createShareLink() {
+  if (!sharingFile.value) return
+  shareLoading.value = true
+  shareCopied.value = false
+
+  const body: { expires_at?: string } = {}
+  if (shareExpiresAt.value) {
+    body.expires_at = new Date(shareExpiresAt.value).toISOString()
+  }
+
+  const response = await api({
+    url: `v1/file/${sharingFile.value.id}/share`,
+    method: 'POST',
+    json: body,
+  })
+
+  shareLoading.value = false
+
+  if (response.ok && response.body?.token) {
+    shareToken.value = response.body.token
+  } else {
+    error.value = response.body?.error || 'Failed to create share link'
+  }
+}
+
+async function copyShareLink() {
+  if (!shareLink.value) return
+  await navigator.clipboard.writeText(shareLink.value)
+  shareCopied.value = true
+  setTimeout(() => { shareCopied.value = false }, 2000)
 }
 
 async function saveFileName() {

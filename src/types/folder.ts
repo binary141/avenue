@@ -2,7 +2,7 @@ export interface Folder {
   id: number;
   uuid: string;
   name: string;
-  parent: string | null;
+  parent_id: number;
   owner_id: number;
 }
 

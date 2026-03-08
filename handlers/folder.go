@@ -46,8 +46,9 @@ func (s *Server) CreateFolder(c *gin.Context) {
 		return
 	}
 
+	var parentID int64
 	if req.Parent != "" {
-		_, err = db.GetFolder(req.Parent, userID)
+		parentFolder, err := db.GetFolder(req.Parent, userID)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, Response{
 				Message: "parent folder must exist",
@@ -55,6 +56,7 @@ func (s *Server) CreateFolder(c *gin.Context) {
 			})
 			return
 		}
+		parentID = parentFolder.ID
 	}
 
 	ownerIDInt, err := strconv.ParseInt(userID, 10, 64)
@@ -64,9 +66,9 @@ func (s *Server) CreateFolder(c *gin.Context) {
 	}
 
 	_, err = db.CreateFolder(&db.Folder{
-		Name:    req.Name,
-		OwnerID: ownerIDInt,
-		Parent:  req.Parent,
+		Name:     req.Name,
+		OwnerID:  ownerIDInt,
+		ParentID: parentID,
 	})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, Response{

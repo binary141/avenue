@@ -1,7 +1,6 @@
 package db
 
 import (
-	"fmt"
 	"strconv"
 	"time"
 
@@ -108,24 +107,16 @@ func IsUniqueEmail(email string) bool {
 	return count == 0
 }
 
-func GetUserUsage(id string) (int64, error) {
-	uid, err := strconv.ParseInt(id, 10, 64)
-	if err != nil {
-		return 0, fmt.Errorf("invalid user id: %w", err)
-	}
+func GetUserUsage(id int64) (int64, error) {
 	var spaceUsed int64
-	err = DB.QueryRow(`SELECT space_used FROM users WHERE id=$1 AND deleted_at IS NULL`, uid).Scan(&spaceUsed)
+	err := DB.QueryRow(`SELECT space_used FROM users WHERE id=$1 AND deleted_at IS NULL`, id).Scan(&spaceUsed)
 	return spaceUsed, err
 }
 
-func UpdateUsage(userID string, delta int64) error {
-	uid, err := strconv.ParseInt(userID, 10, 64)
-	if err != nil {
-		return fmt.Errorf("invalid user id: %w", err)
-	}
-	_, err = DB.Exec(`
+func UpdateUsage(userID int64, delta int64) error {
+	_, err := DB.Exec(`
 		UPDATE users SET space_used = GREATEST(0, space_used + $2), updated_at=now() WHERE id=$1
-	`, uid, delta)
+	`, userID, delta)
 	return err
 }
 

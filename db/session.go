@@ -23,7 +23,7 @@ func CreateSession(userId int64) (Session, error) {
 	}
 
 	err := DB.QueryRow(`
-		INSERT INTO sessions (session_id, expires_at, is_valid, user_id)
+		INSERT INTO sessions (uuid, expires_at, is_valid, user_id)
 		VALUES ($1, $2, $3, $4)
 		RETURNING id
 	`, s.SessionID, s.ExpiresAt, s.IsValid, s.UserId).Scan(&s.ID)
@@ -33,7 +33,7 @@ func CreateSession(userId int64) (Session, error) {
 func getSessionByToken(token string) (Session, error) {
 	var s Session
 	err := DB.QueryRow(
-		`SELECT id, session_id, expires_at, is_valid, user_id FROM sessions WHERE session_id = $1`,
+		`SELECT id, uuid, expires_at, is_valid, user_id FROM sessions WHERE uuid = $1`,
 		token,
 	).Scan(&s.ID, &s.SessionID, &s.ExpiresAt, &s.IsValid, &s.UserId)
 	return s, err
@@ -56,6 +56,6 @@ func UpdateSession(session Session) (Session, error) {
 }
 
 func DeleteSession(token string) error {
-	_, err := DB.Exec(`DELETE FROM sessions WHERE session_id=$1`, token)
+	_, err := DB.Exec(`DELETE FROM sessions WHERE uuid=$1`, token)
 	return err
 }

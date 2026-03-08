@@ -11,8 +11,8 @@ const charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
 type ShareLink struct {
 	ID        int64      `json:"id"`
 	Token     string     `json:"token"`
-	FileID    string     `json:"file_id"`
-	CreatedBy string     `json:"created_by"`
+	FileID    string     `json:"file_id"`   // file uuid
+	CreatedBy int64      `json:"created_by"`
 	ExpiresAt *time.Time `json:"expires_at"`
 	CreatedAt time.Time  `json:"created_at"`
 }
@@ -20,9 +20,9 @@ type ShareLink struct {
 type ShareLinkWithFileName struct {
 	ID        int64      `json:"id"`
 	Token     string     `json:"token"`
-	FileID    string     `json:"file_id"`
+	FileID    string     `json:"file_id"`   // file uuid
 	FileName  string     `json:"file_name"`
-	CreatedBy string     `json:"created_by"`
+	CreatedBy int64      `json:"created_by"`
 	ExpiresAt *time.Time `json:"expires_at"`
 	CreatedAt time.Time  `json:"created_at"`
 }
@@ -46,9 +46,14 @@ func CreateShareLink(fileID, createdBy string, expiresAt *time.Time) (ShareLink,
 
 	var link ShareLink
 	err = DB.QueryRow(`
-		INSERT INTO share_links (token, file_id, created_by, expires_at)
-		VALUES ($1, $2, $3, $4)
-		RETURNING id, token, file_id, created_by, expires_at, created_at
+		WITH ins AS (
+			INSERT INTO share_links (token, file_id, created_by, expires_at)
+			VALUES ($1, (SELECT id FROM files WHERE uuid=$2), $3::BIGINT, $4)
+			RETURNING id, token, file_id, created_by, expires_at, created_at
+		)
+		SELECT ins.id, ins.token, f.uuid, ins.created_by, ins.expires_at, ins.created_at
+		FROM ins
+		JOIN files f ON f.id = ins.file_id
 	`, token, fileID, createdBy, expiresAt).Scan(
 		&link.ID, &link.Token, &link.FileID, &link.CreatedBy, &link.ExpiresAt, &link.CreatedAt,
 	)
@@ -61,10 +66,11 @@ func CreateShareLink(fileID, createdBy string, expiresAt *time.Time) (ShareLink,
 func GetShareLink(token string) (ShareLink, error) {
 	var link ShareLink
 	err := DB.QueryRow(`
-		SELECT id, token, file_id, created_by, expires_at, created_at
-		FROM share_links
-		WHERE token = $1
-		  AND (expires_at IS NULL OR expires_at > now())
+		SELECT sl.id, sl.token, f.uuid, sl.created_by, sl.expires_at, sl.created_at
+		FROM share_links sl
+		JOIN files f ON f.id = sl.file_id
+		WHERE sl.token = $1
+		  AND (sl.expires_at IS NULL OR sl.expires_at > now())
 	`, token).Scan(
 		&link.ID, &link.Token, &link.FileID, &link.CreatedBy, &link.ExpiresAt, &link.CreatedAt,
 	)
@@ -76,11 +82,12 @@ func GetShareLink(token string) (ShareLink, error) {
 
 func ListSharesByFile(fileID, createdBy string) ([]ShareLink, error) {
 	rows, err := DB.Query(`
-		SELECT id, token, file_id, created_by, expires_at, created_at
-		FROM share_links
-		WHERE file_id = $1 AND created_by = $2
-		  AND (expires_at IS NULL OR expires_at > now())
-		ORDER BY created_at DESC
+		SELECT sl.id, sl.token, f.uuid, sl.created_by, sl.expires_at, sl.created_at
+		FROM share_links sl
+		JOIN files f ON f.id = sl.file_id
+		WHERE f.uuid = $1 AND sl.created_by = $2::BIGINT
+		  AND (sl.expires_at IS NULL OR sl.expires_at > now())
+		ORDER BY sl.created_at DESC
 	`, fileID, createdBy)
 	if err != nil {
 		return nil, err
@@ -100,10 +107,10 @@ func ListSharesByFile(fileID, createdBy string) ([]ShareLink, error) {
 
 func ListSharesByUser(createdBy string) ([]ShareLinkWithFileName, error) {
 	rows, err := DB.Query(`
-		SELECT sl.id, sl.token, sl.file_id, COALESCE(f.name, ''), sl.created_by, sl.expires_at, sl.created_at
+		SELECT sl.id, sl.token, COALESCE(f.uuid, ''), COALESCE(f.name, ''), sl.created_by, sl.expires_at, sl.created_at
 		FROM share_links sl
 		LEFT JOIN files f ON f.id = sl.file_id
-		WHERE sl.created_by = $1
+		WHERE sl.created_by = $1::BIGINT
 		  AND (sl.expires_at IS NULL OR sl.expires_at > now())
 		ORDER BY sl.created_at DESC
 	`, createdBy)
@@ -124,6 +131,6 @@ func ListSharesByUser(createdBy string) ([]ShareLinkWithFileName, error) {
 }
 
 func DeleteShareLink(token, createdBy string) error {
-	_, err := DB.Exec(`DELETE FROM share_links WHERE token = $1 AND created_by = $2`, token, createdBy)
+	_, err := DB.Exec(`DELETE FROM share_links WHERE token = $1 AND created_by = $2::BIGINT`, token, createdBy)
 	return err
 }

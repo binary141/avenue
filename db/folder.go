@@ -9,29 +9,33 @@ import (
 const rootFolderID = "c32af1cc-aba9-4878-a305-5006dc7a5b76"
 
 type Folder struct {
-	FolderID string `json:"folder_id"`
+	FolderID string `json:"folder_id"` // uuid column
 	Name     string `json:"name"`
-	Parent   string `json:"parent"`
-	OwnerID  string `json:"owner_id"`
+	Parent   string `json:"parent"`   // always "" — parent_id is stored as BIGINT, not returned
+	OwnerID  int64  `json:"owner_id"` // was TEXT, now BIGINT
 }
 
 func CreateFolder(f *Folder) (string, error) {
 	if f.FolderID == "" {
 		f.FolderID = uuid.NewString()
 	}
-	_, err := DB.Exec(
-		`INSERT INTO folders (folder_id, name, parent, owner_id) VALUES ($1, $2, $3, $4)`,
-		f.FolderID, f.Name, f.Parent, f.OwnerID,
-	)
+	_, err := DB.Exec(`
+		INSERT INTO folders (uuid, name, parent_id, owner_id)
+		VALUES ($1, $2,
+			CASE WHEN $3 = '' THEN NULL
+			     ELSE (SELECT id FROM folders WHERE uuid = $3)
+			END,
+			$4)
+	`, f.FolderID, f.Name, f.Parent, f.OwnerID)
 	return f.FolderID, err
 }
 
 func GetFolder(folderID, userID string) (*Folder, error) {
 	var f Folder
 	err := DB.QueryRow(
-		`SELECT folder_id, name, parent, owner_id FROM folders WHERE folder_id=$1 AND owner_id=$2`,
+		`SELECT uuid, name, owner_id FROM folders WHERE uuid=$1 AND owner_id=$2::BIGINT`,
 		folderID, userID,
-	).Scan(&f.FolderID, &f.Name, &f.Parent, &f.OwnerID)
+	).Scan(&f.FolderID, &f.Name, &f.OwnerID)
 	if err != nil {
 		return nil, err
 	}
@@ -40,7 +44,7 @@ func GetFolder(folderID, userID string) (*Folder, error) {
 
 func UpdateFolder(f Folder) error {
 	_, err := DB.Exec(
-		`UPDATE folders SET name=$2 WHERE folder_id=$1 AND owner_id=$3`,
+		`UPDATE folders SET name=$2 WHERE uuid=$1 AND owner_id=$3`,
 		f.FolderID, f.Name, f.OwnerID,
 	)
 	return err
@@ -48,7 +52,7 @@ func UpdateFolder(f Folder) error {
 
 func DeleteFolder(folderID, userID string) error {
 	_, err := DB.Exec(
-		`DELETE FROM folders WHERE folder_id=$1 AND owner_id=$2`,
+		`DELETE FROM folders WHERE uuid=$1 AND owner_id=$2::BIGINT`,
 		folderID, userID,
 	)
 	return err
@@ -60,15 +64,17 @@ func ListChildFolder(parentID, ownerID string) ([]Folder, error) {
 		err  error
 	)
 
-	if parentID != rootFolderID {
+	if parentID == "" || parentID == rootFolderID {
 		rows, err = DB.Query(
-			`SELECT folder_id, name, parent, owner_id FROM folders WHERE parent=$1 AND owner_id=$2`,
-			parentID, ownerID,
+			`SELECT uuid, name, owner_id FROM folders WHERE parent_id IS NULL AND owner_id=$1::BIGINT`,
+			ownerID,
 		)
 	} else {
-		rows, err = DB.Query(
-			`SELECT folder_id, name, parent, owner_id FROM folders WHERE parent='' AND owner_id=$1`,
-			ownerID,
+		rows, err = DB.Query(`
+			SELECT uuid, name, owner_id FROM folders
+			WHERE parent_id = (SELECT id FROM folders WHERE uuid = $1)
+			  AND owner_id = $2::BIGINT`,
+			parentID, ownerID,
 		)
 	}
 	if err != nil {
@@ -79,7 +85,7 @@ func ListChildFolder(parentID, ownerID string) ([]Folder, error) {
 	var folders []Folder
 	for rows.Next() {
 		var f Folder
-		if err := rows.Scan(&f.FolderID, &f.Name, &f.Parent, &f.OwnerID); err != nil {
+		if err := rows.Scan(&f.FolderID, &f.Name, &f.OwnerID); err != nil {
 			return nil, err
 		}
 		folders = append(folders, f)
@@ -89,18 +95,18 @@ func ListChildFolder(parentID, ownerID string) ([]Folder, error) {
 
 func ListFolderParents(folderID, ownerID string) ([]Folder, error) {
 	rows, err := DB.Query(`
-		WITH RECURSIVE folder_breadcrumbs (folder_id, name, parent, owner_id) AS (
-			SELECT folder_id, name, parent, owner_id
+		WITH RECURSIVE folder_breadcrumbs (id, uuid, name, parent_id, owner_id) AS (
+			SELECT id, uuid, name, parent_id, owner_id
 			FROM folders
-			WHERE owner_id = $1 AND folder_id = $2
+			WHERE owner_id = $1::BIGINT AND uuid = $2
 
 			UNION ALL
 
-			SELECT p.folder_id, p.name, p.parent, p.owner_id
+			SELECT p.id, p.uuid, p.name, p.parent_id, p.owner_id
 			FROM folders p
-			INNER JOIN folder_breadcrumbs c ON p.folder_id = c.parent
+			INNER JOIN folder_breadcrumbs c ON p.id = c.parent_id
 		)
-		SELECT folder_id, name, parent, owner_id FROM folder_breadcrumbs
+		SELECT uuid, name, owner_id FROM folder_breadcrumbs
 	`, ownerID, folderID)
 	if err != nil {
 		return nil, err
@@ -110,7 +116,7 @@ func ListFolderParents(folderID, ownerID string) ([]Folder, error) {
 	var folders []Folder
 	for rows.Next() {
 		var f Folder
-		if err := rows.Scan(&f.FolderID, &f.Name, &f.Parent, &f.OwnerID); err != nil {
+		if err := rows.Scan(&f.FolderID, &f.Name, &f.OwnerID); err != nil {
 			return nil, err
 		}
 		folders = append(folders, f)

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"slices"
+	"strconv"
 
 	"avenue/backend/db"
 	"avenue/backend/shared"
@@ -56,9 +57,15 @@ func (s *Server) CreateFolder(c *gin.Context) {
 		}
 	}
 
+	ownerIDInt, err := strconv.ParseInt(userID, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{Error: err.Error()})
+		return
+	}
+
 	_, err = db.CreateFolder(&db.Folder{
 		Name:    req.Name,
-		OwnerID: userID,
+		OwnerID: ownerIDInt,
 		Parent:  req.Parent,
 	})
 	if err != nil {

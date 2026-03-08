@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"avenue/backend/db"
@@ -65,12 +66,18 @@ func (s *Server) Upload(c *gin.Context) {
 		return
 	}
 
+	userIDInt, err := strconv.ParseInt(userID, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{Error: err.Error()})
+		return
+	}
+
 	maxFileSize := shared.GetEnvInt64("MAX_FILE_BYTE_SIZE", shared.DEFAULTMAXFILESIZE)
 	var total int64
 
 	// 0 is unlimited
 	if user.Quota != 0 {
-		totalUsed, err := db.GetUserUsage(userID)
+		totalUsed, err := db.GetUserUsage(userIDInt)
 		if err != nil {
 			log.Printf("error getting user quota: %s", err.Error())
 			c.JSON(http.StatusInternalServerError, Response{
@@ -175,7 +182,7 @@ func (s *Server) Upload(c *gin.Context) {
 				Extension: extension,
 				MimeType:  contentType,
 				Parent:    parent,
-				CreatedBy: userID,
+				CreatedBy: userIDInt,
 			})
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, Response{
@@ -299,7 +306,7 @@ func (s *Server) Upload(c *gin.Context) {
 		return
 	}
 
-	err = db.UpdateUsage(userID, total)
+	err = db.UpdateUsage(userIDInt, total)
 	if err != nil {
 		// todo should we rollback? Or just have a cron that'll reconcile?
 		c.JSON(http.StatusInternalServerError, Response{
@@ -456,6 +463,11 @@ func (s *Server) DeleteFile(c *gin.Context) {
 		})
 		return
 	}
+	userIDInt, err := strconv.ParseInt(userID, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{Error: err.Error()})
+		return
+	}
 	f, err := db.GetFileByID(c.Param("fileID"), userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, Response{
@@ -485,7 +497,7 @@ func (s *Server) DeleteFile(c *gin.Context) {
 		return
 	}
 
-	err = db.UpdateUsage(userID, -f.FileSize)
+	err = db.UpdateUsage(userIDInt, -f.FileSize)
 	if err != nil {
 		// todo should we rollback? Or just have a cron that'll reconcile?
 		c.JSON(http.StatusInternalServerError, Response{

@@ -194,6 +194,9 @@ func (s *Server) SetupRoutes() {
 	unsecuredRouter.POST("/register", s.Register)
 	unsecuredRouter.GET("/share/:token", s.GetShareLinkMeta)
 	unsecuredRouter.GET("/share/:token/download", s.DownloadSharedFile)
+	unsecuredRouter.GET("/share/folder/:token", s.GetSharedFolderContents)
+	unsecuredRouter.GET("/share/folder/:token/browse/:subFolderUUID", s.BrowseSharedSubFolder)
+	unsecuredRouter.GET("/share/folder/:token/file/:fileUUID", s.DownloadSharedFolderFile)
 
 	securedRouterV1 := s.router.Group("/v1")
 	securedRouterV1.Use(s.sessionCheck)
@@ -207,10 +210,14 @@ func (s *Server) SetupRoutes() {
 	securedRouterV1.POST("/file", s.Upload)
 	securedRouterV1.POST("/file/:fileID/share", s.CreateShareLink)
 	securedRouterV1.GET("/file/:fileID/shares", s.ListFileShares)
+	securedRouterV1.POST("/folder/:folderID/share", s.CreateFolderShareLink)
+	securedRouterV1.GET("/folder/:folderID/shares", s.ListFolderShares)
 
 	// -- share routes -- //
 	securedRouterV1.GET("/shares", s.ListUserShares)
 	securedRouterV1.DELETE("/share/:token", s.RevokeShareLink)
+	securedRouterV1.GET("/folder-shares", s.ListUserFolderShares)
+	securedRouterV1.DELETE("/share/folder/:token", s.RevokeShareFolderLink)
 	securedRouterV1.GET("/file/list", s.ListFiles)
 	securedRouterV1.GET("/file/:fileID", s.GetFile)
 	securedRouterV1.PATCH("/file/:fileID/:fileName", s.UpdateFileName)

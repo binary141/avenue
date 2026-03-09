@@ -50,6 +50,12 @@ const router = createRouter({
             meta: { allowAnonymous: true },
         },
         {
+            path: '/share/folder/:token',
+            name: 'share-folder',
+            component: () => import('@/views/ShareFolderPage.vue'),
+            meta: { allowAnonymous: true },
+        },
+        {
             path: '/shares',
             name: 'shares',
             component: () => import('@/views/SharesPage.vue'),

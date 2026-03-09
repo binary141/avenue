@@ -127,6 +127,9 @@
             <span class="folder-actions flex items-center gap-2">
               <span class="file-edit cursor-pointer" @click.stop="openFolderEditModal(folder)">✏️</span>
               <span class="file-delete cursor-pointer" @click.stop="deleteFolder(folder.uuid)">🗑️</span>
+              <span class="cursor-pointer inline-flex items-center gap-0.5" @click.stop="openFolderShareModal(folder)" title="Share folder">
+                🔗<span v-if="sharedFolderCounts[folder.uuid]" class="share-count">{{ sharedFolderCounts[folder.uuid] }}</span>
+              </span>
             </span>
           </div>
         </div>
@@ -306,6 +309,84 @@
       </div>
     </div>
 
+    <!-- Share Folder Modal -->
+    <div
+      v-if="sharingFolder"
+      class="fixed inset-0 flex items-center justify-center bg-black/50 z-50"
+    >
+      <div class="bg-white rounded shadow-lg w-[520px] p-6 relative flex flex-col" style="max-height: 80vh;">
+        <h3 class="text-lg font-bold mb-1 text-black">Share "{{ sharingFolder.name }}"</h3>
+        <p class="text-sm text-gray-500 mb-4">Anyone with the link can browse and download all files in this folder.</p>
+
+        <div v-if="folderSharesLoading" class="flex justify-center py-6">
+          <svg class="animate-spin h-6 w-6 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+          </svg>
+        </div>
+
+        <template v-else>
+          <div class="mb-4 overflow-y-auto" style="max-height: 240px;">
+            <p class="text-sm font-semibold text-gray-600 mb-2">
+              Active links<span v-if="folderShareLinks.length"> ({{ folderShareLinks.length }})</span>
+            </p>
+            <div v-if="folderShareLinks.length === 0" class="text-sm text-gray-400 py-2 text-center">
+              No active links for this folder.
+            </div>
+            <div v-else class="flex flex-col gap-2">
+              <div
+                v-for="link in folderShareLinks"
+                :key="link.token"
+                class="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded px-3 py-2 text-sm"
+              >
+                <span class="flex-1 font-mono text-xs text-gray-600 truncate">{{ folderShareLinkURL(link.token) }}</span>
+                <span class="text-xs text-gray-400 whitespace-nowrap shrink-0">
+                  {{ link.expires_at ? formatExpiry(link.expires_at) : 'Never expires' }}
+                </span>
+                <AppButton @click="copyFolderShareToken(link.token)" class="px-2 py-1 bg-blue-600 text-white text-xs rounded shrink-0">
+                  {{ folderShareTokenCopied[link.token] ? '✓' : 'Copy' }}
+                </AppButton>
+                <AppButton @click="revokeFolderShareLink(link.token)" class="px-2 py-1 bg-red-100 text-red-600 text-xs rounded shrink-0">
+                  Revoke
+                </AppButton>
+              </div>
+            </div>
+          </div>
+
+          <hr class="mb-4 border-gray-200"/>
+
+          <p class="text-sm font-semibold text-gray-600 mb-2">Create new link</p>
+          <div class="mb-4">
+            <label class="block text-xs font-medium text-gray-500 mb-1">Expires (optional)</label>
+            <input
+              v-model="folderShareExpiresAt"
+              type="datetime-local"
+              class="border border-gray-300 rounded px-3 py-2 w-full text-gray-700 bg-white text-sm"
+            />
+          </div>
+
+          <div class="mb-4 flex items-center gap-2">
+            <input
+              id="folderShareRequireLogin"
+              v-model="folderShareRequireLogin"
+              type="checkbox"
+              class="rounded"
+            />
+            <label for="folderShareRequireLogin" class="text-sm text-gray-600 select-none cursor-pointer">Require login to access</label>
+          </div>
+
+          <div class="flex justify-end gap-2">
+            <AppButton @click="closeFolderShareModal" class="px-3 py-2 bg-gray-200 text-gray-700 rounded text-sm">Close</AppButton>
+            <AppButton @click="generateFolderShareLink" :disabled="folderShareGenerating" class="px-3 py-2 bg-blue-600 text-white rounded text-sm">
+              {{ folderShareGenerating ? 'Generating…' : 'Generate Link' }}
+            </AppButton>
+          </div>
+        </template>
+
+        <button @click="closeFolderShareModal" class="absolute top-2 right-2 text-gray-500 hover:text-gray-700">✕</button>
+      </div>
+    </div>
+
   </div>
 </template>
 
@@ -358,8 +439,20 @@ const sharesLoading = ref(false);
 const shareGenerating = ref(false);
 const shareTokenCopied = ref<Record<string, boolean>>({});
 
-// file_id -> count of active links (loaded once on mount)
+// file uuid -> count of active links (loaded once on mount)
 const sharedFileCounts = ref<Record<string, number>>({});
+
+// ----- Folder Share State -----
+const sharingFolder = ref<Folder | null>(null);
+const folderShareExpiresAt = ref('');
+const folderShareRequireLogin = ref(false);
+const folderShareLinks = ref<ShareLinkItem[]>([]);
+const folderSharesLoading = ref(false);
+const folderShareGenerating = ref(false);
+const folderShareTokenCopied = ref<Record<string, boolean>>({});
+
+// folder uuid -> count of active folder share links (loaded once on mount)
+const sharedFolderCounts = ref<Record<string, number>>({});
 
 const folderName = ref('');
 
@@ -546,6 +639,107 @@ async function loadAllShares() {
     }
     sharedFileCounts.value = counts
   }
+}
+
+async function loadAllFolderShares() {
+  const response = await api({ url: 'v1/folder-shares', method: 'GET' })
+  if (response.ok && Array.isArray(response.body)) {
+    const counts: Record<string, number> = {}
+    for (const link of response.body) {
+      counts[link.folder_uuid] = (counts[link.folder_uuid] || 0) + 1
+    }
+    sharedFolderCounts.value = counts
+  }
+}
+
+async function loadFolderShares(folderUUID: string) {
+  folderSharesLoading.value = true
+  const response = await api({ url: `v1/folder/${folderUUID}/shares`, method: 'GET' })
+  folderSharesLoading.value = false
+  if (response.ok && Array.isArray(response.body)) {
+    folderShareLinks.value = response.body
+  }
+}
+
+function openFolderShareModal(folder: Folder) {
+  sharingFolder.value = folder
+  folderShareExpiresAt.value = ''
+  folderShareRequireLogin.value = false
+  folderShareLinks.value = []
+  folderShareTokenCopied.value = {}
+  loadFolderShares(folder.uuid)
+}
+
+function closeFolderShareModal() {
+  sharingFolder.value = null
+  folderShareLinks.value = []
+  folderShareExpiresAt.value = ''
+  folderShareRequireLogin.value = false
+  folderShareTokenCopied.value = {}
+}
+
+function folderShareLinkURL(token: string): string {
+  return `${window.location.origin}/share/folder/${token}`
+}
+
+async function generateFolderShareLink() {
+  if (!sharingFolder.value) return
+  folderShareGenerating.value = true
+
+  const body: { expires_at?: string; require_login?: boolean } = {}
+  if (folderShareExpiresAt.value) {
+    body.expires_at = new Date(folderShareExpiresAt.value).toISOString()
+  }
+  if (folderShareRequireLogin.value) {
+    body.require_login = true
+  }
+
+  const response = await api({
+    url: `v1/folder/${sharingFolder.value.uuid}/share`,
+    method: 'POST',
+    json: body,
+  })
+
+  folderShareGenerating.value = false
+
+  if (response.ok && response.body?.token) {
+    folderShareLinks.value.unshift({
+      token: response.body.token,
+      expires_at: response.body.expires_at ?? null,
+      created_at: response.body.created_at,
+    })
+    folderShareExpiresAt.value = ''
+    const folderUUID = sharingFolder.value.uuid
+    sharedFolderCounts.value[folderUUID] = (sharedFolderCounts.value[folderUUID] || 0) + 1
+  } else {
+    error.value = response.body?.error || 'Failed to create share link'
+  }
+}
+
+async function revokeFolderShareLink(token: string) {
+  const response = await api({ url: `v1/share/folder/${token}`, method: 'DELETE' })
+  if (response.ok) {
+    folderShareLinks.value = folderShareLinks.value.filter(l => l.token !== token)
+    if (sharingFolder.value) {
+      const folderUUID = sharingFolder.value.uuid
+      const current = sharedFolderCounts.value[folderUUID] || 0
+      if (current <= 1) {
+        delete sharedFolderCounts.value[folderUUID]
+      } else {
+        sharedFolderCounts.value[folderUUID] = current - 1
+      }
+    }
+  } else {
+    error.value = response.body?.error || 'Failed to revoke share link'
+  }
+}
+
+async function copyFolderShareToken(token: string) {
+  await navigator.clipboard.writeText(folderShareLinkURL(token))
+  folderShareTokenCopied.value = { ...folderShareTokenCopied.value, [token]: true }
+  setTimeout(() => {
+    folderShareTokenCopied.value = { ...folderShareTokenCopied.value, [token]: false }
+  }, 2000)
 }
 
 async function loadFileShares(fileId: string) {
@@ -753,6 +947,7 @@ onMounted(() => {
   refreshCurrentList();
   getDashboardInfo();
   loadAllShares();
+  loadAllFolderShares();
 });
 </script>
 

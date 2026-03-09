@@ -31,6 +31,13 @@
         >
           <span style="font-size: 1.4rem; flex-shrink: 0;">📄</span>
 
+          <span
+            class="text-xs font-medium px-1.5 py-0.5 rounded shrink-0"
+            :style="share.require_login
+              ? 'background: #e8eaf6; color: #3A3F78;'
+              : 'background: #e8f5e9; color: #2e7d32;'"
+          >{{ share.require_login ? 'Internal' : 'Public' }}</span>
+
           <div class="flex-1 min-w-0">
             <p class="font-medium text-sm truncate">
               {{ share.file_name || '(deleted file)' }}
@@ -71,6 +78,13 @@
           class="card flex flex-row items-center gap-3 p-4"
         >
           <span style="font-size: 1.4rem; flex-shrink: 0;">📁</span>
+
+          <span
+            class="text-xs font-medium px-1.5 py-0.5 rounded shrink-0"
+            :style="share.require_login
+              ? 'background: #e8eaf6; color: #3A3F78;'
+              : 'background: #e8f5e9; color: #2e7d32;'"
+          >{{ share.require_login ? 'Internal' : 'Public' }}</span>
 
           <div class="flex-1 min-w-0">
             <p class="font-medium text-sm truncate">
@@ -120,6 +134,7 @@ interface ShareWithFile {
   expires_at: string | null;
   created_at: string;
   last_accessed: string | null;
+  require_login: boolean;
 }
 
 interface FolderShareLink {
@@ -129,6 +144,7 @@ interface FolderShareLink {
   expires_at: string | null;
   created_at: string;
   last_accessed: string | null;
+  require_login: boolean;
 }
 
 const loading = ref(true);

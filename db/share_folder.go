@@ -126,6 +126,33 @@ func ListShareFoldersByUser(createdBy string) ([]ShareFolderLink, error) {
 	return links, rows.Err()
 }
 
+func ListExpiredShareFoldersByUser(createdBy string) ([]ShareFolderLink, error) {
+	rows, err := DB.Query(`
+		SELECT sl.id, sl.token, sl.folder_id, COALESCE(fo.uuid, ''), COALESCE(fo.name, ''),
+		       sl.created_by, sl.expires_at, sl.created_at, sl.require_login, sl.last_accessed
+		FROM share_folder_links sl
+		LEFT JOIN folders fo ON fo.id = sl.folder_id
+		WHERE sl.created_by = $1::BIGINT
+		  AND sl.expires_at IS NOT NULL AND sl.expires_at <= now()
+		ORDER BY sl.expires_at DESC
+	`, createdBy)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var links []ShareFolderLink
+	for rows.Next() {
+		var l ShareFolderLink
+		if err := rows.Scan(&l.ID, &l.Token, &l.FolderIntID, &l.FolderUUID, &l.FolderName,
+			&l.CreatedBy, &l.ExpiresAt, &l.CreatedAt, &l.RequireLogin, &l.LastAccessed); err != nil {
+			return nil, err
+		}
+		links = append(links, l)
+	}
+	return links, rows.Err()
+}
+
 func DeleteShareFolderLink(token, createdBy string) error {
 	_, err := DB.Exec(`DELETE FROM share_folder_links WHERE token = $1 AND created_by = $2::BIGINT`, token, createdBy)
 	return err

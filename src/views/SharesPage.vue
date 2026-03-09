@@ -116,6 +116,63 @@
           </AppButton>
         </div>
       </div>
+
+      <!-- Expired links -->
+      <div v-if="expiredShares.length > 0 || expiredFolderShares.length > 0" class="flex flex-col gap-3">
+        <h2 class="text-sm font-semibold uppercase tracking-wide" style="color: var(--text-secondary);">Expired</h2>
+
+        <div
+          v-for="share in expiredShares"
+          :key="share.token"
+          class="card flex flex-row items-center gap-3 p-4 opacity-60"
+        >
+          <span style="font-size: 1.4rem; flex-shrink: 0;">📄</span>
+
+          <div class="flex-1 min-w-0">
+            <p class="font-medium text-sm truncate">{{ share.file_name || '(deleted file)' }}</p>
+            <p class="font-mono text-xs truncate" style="color: var(--text-secondary);">{{ shareLinkURL(share.token) }}</p>
+          </div>
+
+          <div class="text-xs shrink-0 text-right" style="color: var(--text-secondary);">
+            <p>Created {{ formatDate(share.created_at) }}</p>
+            <p>Expired {{ formatDate(share.expires_at!) }}</p>
+            <p>{{ share.last_accessed ? 'Last accessed ' + formatDate(share.last_accessed) : 'Never accessed' }}</p>
+          </div>
+
+          <AppButton
+            @click="revoke(share.token)"
+            class="px-3 py-1 bg-red-100 text-red-600 text-sm rounded shrink-0"
+          >
+            Delete
+          </AppButton>
+        </div>
+
+        <div
+          v-for="share in expiredFolderShares"
+          :key="share.token"
+          class="card flex flex-row items-center gap-3 p-4 opacity-60"
+        >
+          <span style="font-size: 1.4rem; flex-shrink: 0;">📁</span>
+
+          <div class="flex-1 min-w-0">
+            <p class="font-medium text-sm truncate">{{ share.folder_name || '(deleted folder)' }}</p>
+            <p class="font-mono text-xs truncate" style="color: var(--text-secondary);">{{ folderShareLinkURL(share.token) }}</p>
+          </div>
+
+          <div class="text-xs shrink-0 text-right" style="color: var(--text-secondary);">
+            <p>Created {{ formatDate(share.created_at) }}</p>
+            <p>Expired {{ formatDate(share.expires_at!) }}</p>
+            <p>{{ share.last_accessed ? 'Last accessed ' + formatDate(share.last_accessed) : 'Never accessed' }}</p>
+          </div>
+
+          <AppButton
+            @click="revokeFolderShare(share.token)"
+            class="px-3 py-1 bg-red-100 text-red-600 text-sm rounded shrink-0"
+          >
+            Delete
+          </AppButton>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -151,6 +208,8 @@ const loading = ref(true);
 const error = ref('');
 const shares = ref<ShareWithFile[]>([]);
 const folderShares = ref<FolderShareLink[]>([]);
+const expiredShares = ref<ShareWithFile[]>([]);
+const expiredFolderShares = ref<FolderShareLink[]>([]);
 const copied = ref<Record<string, boolean>>({});
 
 function shareLinkURL(token: string): string {
@@ -167,9 +226,11 @@ function formatDate(iso: string): string {
 
 async function loadShares() {
   loading.value = true;
-  const [fileRes, folderRes] = await Promise.all([
+  const [fileRes, folderRes, expiredFileRes, expiredFolderRes] = await Promise.all([
     api({ url: 'v1/shares', method: 'GET' }),
     api({ url: 'v1/folder-shares', method: 'GET' }),
+    api({ url: 'v1/shares/expired', method: 'GET' }),
+    api({ url: 'v1/folder-shares/expired', method: 'GET' }),
   ]);
   loading.value = false;
   if (fileRes.ok && Array.isArray(fileRes.body)) {
@@ -181,6 +242,12 @@ async function loadShares() {
     folderShares.value = folderRes.body;
   } else {
     error.value = error.value ? error.value + '; failed to load folder shares' : 'Failed to load folder shares';
+  }
+  if (expiredFileRes.ok && Array.isArray(expiredFileRes.body)) {
+    expiredShares.value = expiredFileRes.body;
+  }
+  if (expiredFolderRes.ok && Array.isArray(expiredFolderRes.body)) {
+    expiredFolderShares.value = expiredFolderRes.body;
   }
 }
 
@@ -197,6 +264,7 @@ async function revoke(token: string) {
   const response = await api({ url: `v1/share/${token}`, method: 'DELETE' });
   if (response.ok) {
     shares.value = shares.value.filter(s => s.token !== token);
+    expiredShares.value = expiredShares.value.filter(s => s.token !== token);
   } else {
     error.value = 'Failed to revoke link';
   }
@@ -206,6 +274,7 @@ async function revokeFolderShare(token: string) {
   const response = await api({ url: `v1/share/folder/${token}`, method: 'DELETE' });
   if (response.ok) {
     folderShares.value = folderShares.value.filter(s => s.token !== token);
+    expiredFolderShares.value = expiredFolderShares.value.filter(s => s.token !== token);
   } else {
     error.value = 'Failed to revoke folder share link';
   }

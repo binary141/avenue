@@ -215,8 +215,10 @@ func (s *Server) SetupRoutes() {
 
 	// -- share routes -- //
 	securedRouterV1.GET("/shares", s.ListUserShares)
+	securedRouterV1.GET("/shares/expired", s.ListExpiredUserShares)
 	securedRouterV1.DELETE("/share/:token", s.RevokeShareLink)
 	securedRouterV1.GET("/folder-shares", s.ListUserFolderShares)
+	securedRouterV1.GET("/folder-shares/expired", s.ListExpiredUserFolderShares)
 	securedRouterV1.DELETE("/share/folder/:token", s.RevokeShareFolderLink)
 	securedRouterV1.GET("/file/list", s.ListFiles)
 	securedRouterV1.GET("/file/:fileID", s.GetFile)

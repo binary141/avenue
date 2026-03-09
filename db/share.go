@@ -139,6 +139,31 @@ func ListSharesByUser(createdBy string) ([]ShareLinkWithFileName, error) {
 	return links, rows.Err()
 }
 
+func ListExpiredSharesByUser(createdBy string) ([]ShareLinkWithFileName, error) {
+	rows, err := DB.Query(`
+		SELECT sl.id, sl.token, COALESCE(f.uuid, ''), COALESCE(f.name, ''), sl.created_by, sl.expires_at, sl.created_at, sl.require_login, sl.last_accessed
+		FROM share_links sl
+		LEFT JOIN files f ON f.id = sl.file_id
+		WHERE sl.created_by = $1::BIGINT
+		  AND sl.expires_at IS NOT NULL AND sl.expires_at <= now()
+		ORDER BY sl.expires_at DESC
+	`, createdBy)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var links []ShareLinkWithFileName
+	for rows.Next() {
+		var l ShareLinkWithFileName
+		if err := rows.Scan(&l.ID, &l.Token, &l.FileID, &l.FileName, &l.CreatedBy, &l.ExpiresAt, &l.CreatedAt, &l.RequireLogin, &l.LastAccessed); err != nil {
+			return nil, err
+		}
+		links = append(links, l)
+	}
+	return links, rows.Err()
+}
+
 func DeleteShareLink(token, createdBy string) error {
 	_, err := DB.Exec(`DELETE FROM share_links WHERE token = $1 AND created_by = $2::BIGINT`, token, createdBy)
 	return err

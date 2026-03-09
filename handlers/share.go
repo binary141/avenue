@@ -148,6 +148,24 @@ func (s *Server) ListUserShares(c *gin.Context) {
 	c.JSON(http.StatusOK, links)
 }
 
+func (s *Server) ListExpiredUserShares(c *gin.Context) {
+	userID, err := shared.GetUserIDFromContext(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{Error: err.Error()})
+		return
+	}
+
+	links, err := db.ListExpiredSharesByUser(userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{Error: err.Error()})
+		return
+	}
+	if links == nil {
+		links = []db.ShareLinkWithFileName{}
+	}
+	c.JSON(http.StatusOK, links)
+}
+
 func (s *Server) RevokeShareLink(c *gin.Context) {
 	userID, err := shared.GetUserIDFromContext(c.Request.Context())
 	if err != nil {

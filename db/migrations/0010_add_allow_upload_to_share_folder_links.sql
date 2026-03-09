@@ -1,0 +1,1 @@
+ALTER TABLE share_folder_links ADD COLUMN allow_upload BOOLEAN NOT NULL DEFAULT FALSE;

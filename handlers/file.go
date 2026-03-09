@@ -358,7 +358,7 @@ func (s *Server) UpdateFileName(c *gin.Context) {
 		return
 	}
 
-	file, err := db.GetFileByID(c.Param("fileID"), userID)
+	file, err := db.GetFileByIDForUser(c.Param("fileID"), userID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			c.JSON(http.StatusNotFound, Response{
@@ -399,7 +399,7 @@ func (s *Server) GetFile(c *gin.Context) {
 		return
 	}
 
-	file, err := db.GetFileByID(c.Param("fileID"), userID)
+	file, err := db.GetFileByIDForUser(c.Param("fileID"), userID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			c.JSON(http.StatusNotFound, Response{
@@ -416,7 +416,7 @@ func (s *Server) GetFile(c *gin.Context) {
 		return
 	}
 
-	path := fmt.Sprintf("/%s/%s", userID, file.UUID)
+	path := fmt.Sprintf("/%d/%s", file.CreatedBy, file.UUID)
 	fileData, err := s.fs.Open(path)
 	if err != nil {
 		if errors.Is(err, afero.ErrFileNotFound) {
@@ -463,12 +463,7 @@ func (s *Server) DeleteFile(c *gin.Context) {
 		})
 		return
 	}
-	userIDInt, err := strconv.ParseInt(userID, 10, 64)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, Response{Error: err.Error()})
-		return
-	}
-	f, err := db.GetFileByID(c.Param("fileID"), userID)
+	f, err := db.GetFileByIDForUser(c.Param("fileID"), userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, Response{
 			Message: "error getting file",
@@ -477,7 +472,7 @@ func (s *Server) DeleteFile(c *gin.Context) {
 		return
 	}
 
-	if err = s.fs.Remove(fmt.Sprintf("/%s/%s", userID, f.UUID)); err != nil {
+	if err = s.fs.Remove(fmt.Sprintf("/%d/%s", f.CreatedBy, f.UUID)); err != nil {
 		// only error if the file was found
 		// if the file wasn't found, we still want to delete from the system
 		if !errors.Is(err, afero.ErrFileNotFound) {
@@ -489,7 +484,7 @@ func (s *Server) DeleteFile(c *gin.Context) {
 		}
 	}
 
-	if err = db.DeleteFile(c.Param("fileID"), userID); err != nil {
+	if err = db.DeleteFileForUser(c.Param("fileID"), userID); err != nil {
 		c.JSON(http.StatusInternalServerError, Response{
 			Message: "error deleting file from db",
 			Error:   err.Error(),
@@ -497,7 +492,7 @@ func (s *Server) DeleteFile(c *gin.Context) {
 		return
 	}
 
-	err = db.UpdateUsage(userIDInt, -f.FileSize)
+	err = db.UpdateUsage(f.CreatedBy, -f.FileSize)
 	if err != nil {
 		// todo should we rollback? Or just have a cron that'll reconcile?
 		c.JSON(http.StatusInternalServerError, Response{

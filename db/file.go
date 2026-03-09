@@ -55,6 +55,22 @@ func GetFileByID(id, creatorID string) (*File, error) {
 	return &f, nil
 }
 
+// GetFileByIDForUser returns a file if the user is either its creator or owns
+// the folder it lives in. Used where folder owners need to manage uploaded files.
+func GetFileByIDForUser(id, userID string) (*File, error) {
+	var f File
+	err := DB.QueryRow(`
+		SELECT id, uuid, name, extension, mime_type, file_size, created_by, created_at
+		FROM files WHERE uuid=$1
+		  AND (created_by=$2::BIGINT
+		       OR parent_id IN (SELECT id FROM folders WHERE owner_id=$2::BIGINT))
+	`, id, userID).Scan(&f.ID, &f.UUID, &f.Name, &f.Extension, &f.MimeType, &f.FileSize, &f.CreatedBy, &f.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &f, nil
+}
+
 func GetFileByIDPublic(id string) (*File, error) {
 	var f File
 	err := DB.QueryRow(`
@@ -93,24 +109,59 @@ func DeleteFile(id, creatorID string) error {
 	return err
 }
 
-func ListChildFile(parentID, creatorID string) ([]File, error) {
+// DeleteFileForUser deletes a file if the user is its creator or owns its parent folder.
+func DeleteFileForUser(id, userID string) error {
+	_, err := DB.Exec(`
+		DELETE FROM files WHERE uuid=$1
+		  AND (created_by=$2::BIGINT
+		       OR parent_id IN (SELECT id FROM folders WHERE owner_id=$2::BIGINT))
+	`, id, userID)
+	return err
+}
+
+// ListChildFilePublic lists all files in a folder regardless of who created them.
+// Used by public shared folder endpoints.
+func ListChildFilePublic(parentID string) ([]File, error) {
+	rows, err := DB.Query(`
+		SELECT id, uuid, name, extension, mime_type, file_size, created_by, created_at
+		FROM files
+		WHERE parent_id = (SELECT id FROM folders WHERE uuid = $1)
+	`, parentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var files []File
+	for rows.Next() {
+		var f File
+		if err := rows.Scan(&f.ID, &f.UUID, &f.Name, &f.Extension, &f.MimeType, &f.FileSize, &f.CreatedBy, &f.CreatedAt); err != nil {
+			return nil, err
+		}
+		files = append(files, f)
+	}
+	return files, rows.Err()
+}
+
+func ListChildFile(parentID, ownerID string) ([]File, error) {
 	var (
 		rows *sql.Rows
 		err  error
 	)
 
 	if parentID == "" {
+		// Root: only files the user themselves created with no parent
 		rows, err = DB.Query(`
 			SELECT id, uuid, name, extension, mime_type, file_size, created_by, created_at
 			FROM files WHERE parent_id IS NULL AND created_by=$1::BIGINT
-		`, creatorID)
+		`, ownerID)
 	} else {
+		// Folder: all files inside a folder owned by this user, regardless of uploader
 		rows, err = DB.Query(`
 			SELECT id, uuid, name, extension, mime_type, file_size, created_by, created_at
 			FROM files
-			WHERE parent_id = (SELECT id FROM folders WHERE uuid = $1)
-			  AND created_by = $2::BIGINT
-		`, parentID, creatorID)
+			WHERE parent_id = (SELECT id FROM folders WHERE uuid = $1 AND owner_id = $2::BIGINT)
+		`, parentID, ownerID)
 	}
 	if err != nil {
 		return nil, err

@@ -79,6 +79,28 @@ func (s *Server) ServeUI(uiFS embed.FS) {
 	})
 }
 
+// getAuthenticatedUserID extracts the user ID from a token without requiring
+// the session middleware. Returns (userID, true) if valid, (0, false) if not.
+func (s *Server) getAuthenticatedUserID(c *gin.Context) (int64, bool) {
+	h := c.GetHeader(AUTHHEADER)
+	if h == "" {
+		q := c.Query("token")
+		if q == "" {
+			return 0, false
+		}
+		h = fmt.Sprintf("Token %s", q)
+	}
+	parts := strings.Split(h, "Token ")
+	if len(parts) != 2 {
+		return 0, false
+	}
+	session, valid := db.IsValidSession(parts[1])
+	if !valid {
+		return 0, false
+	}
+	return session.UserId, true
+}
+
 func (s *Server) isAuthenticated(c *gin.Context) bool {
 	h := c.GetHeader(AUTHHEADER)
 	if h == "" {
@@ -197,6 +219,7 @@ func (s *Server) SetupRoutes() {
 	unsecuredRouter.GET("/share/folder/:token", s.GetSharedFolderContents)
 	unsecuredRouter.GET("/share/folder/:token/browse/:subFolderUUID", s.BrowseSharedSubFolder)
 	unsecuredRouter.GET("/share/folder/:token/file/:fileUUID", s.DownloadSharedFolderFile)
+	unsecuredRouter.POST("/share/folder/:token/upload", s.UploadToSharedFolder)
 
 	securedRouterV1 := s.router.Group("/v1")
 	securedRouterV1.Use(s.sessionCheck)

@@ -378,6 +378,27 @@
             <label for="folderShareRequireLogin" class="text-sm text-gray-600 select-none cursor-pointer">Require login to access</label>
           </div>
 
+          <div class="mb-4 flex items-center gap-2">
+            <input
+              id="folderShareAllowUpload"
+              v-model="folderShareAllowUpload"
+              type="checkbox"
+              class="rounded"
+            />
+            <label for="folderShareAllowUpload" class="text-sm text-gray-600 select-none cursor-pointer">Allow file uploads</label>
+          </div>
+
+          <div v-if="folderShareAllowUpload" class="mb-4">
+            <label class="block text-xs font-medium text-gray-500 mb-1">Max upload size in MB (0 = server default)</label>
+            <input
+              v-model.number="folderShareMaxFileSizeMB"
+              type="number"
+              min="0"
+              placeholder="0"
+              class="border border-gray-300 rounded px-3 py-2 w-full text-gray-700 bg-white text-sm"
+            />
+          </div>
+
           <div class="flex justify-end gap-2">
             <AppButton @click="closeFolderShareModal" class="px-3 py-2 bg-gray-200 text-gray-700 rounded text-sm">Close</AppButton>
             <AppButton @click="generateFolderShareLink" :disabled="folderShareGenerating" class="px-3 py-2 bg-blue-600 text-white rounded text-sm">
@@ -450,6 +471,8 @@ const sharedFileCounts = ref<Record<string, number>>({});
 const sharingFolder = ref<Folder | null>(null);
 const folderShareExpiresAt = ref('');
 const folderShareRequireLogin = ref(false);
+const folderShareAllowUpload = ref(false);
+const folderShareMaxFileSizeMB = ref(0);
 const folderShareLinks = ref<ShareLinkItem[]>([]);
 const folderSharesLoading = ref(false);
 const folderShareGenerating = ref(false);
@@ -669,6 +692,8 @@ function openFolderShareModal(folder: Folder) {
   sharingFolder.value = folder
   folderShareExpiresAt.value = ''
   folderShareRequireLogin.value = false
+  folderShareAllowUpload.value = false
+  folderShareMaxFileSizeMB.value = 0
   folderShareLinks.value = []
   folderShareTokenCopied.value = {}
   loadFolderShares(folder.uuid)
@@ -679,6 +704,8 @@ function closeFolderShareModal() {
   folderShareLinks.value = []
   folderShareExpiresAt.value = ''
   folderShareRequireLogin.value = false
+  folderShareAllowUpload.value = false
+  folderShareMaxFileSizeMB.value = 0
   folderShareTokenCopied.value = {}
 }
 
@@ -690,12 +717,18 @@ async function generateFolderShareLink() {
   if (!sharingFolder.value) return
   folderShareGenerating.value = true
 
-  const body: { expires_at?: string; require_login?: boolean } = {}
+  const body: { expires_at?: string; require_login?: boolean; allow_upload?: boolean; max_file_size?: number } = {}
   if (folderShareExpiresAt.value) {
     body.expires_at = new Date(folderShareExpiresAt.value).toISOString()
   }
   if (folderShareRequireLogin.value) {
     body.require_login = true
+  }
+  if (folderShareAllowUpload.value) {
+    body.allow_upload = true
+  }
+  if (folderShareAllowUpload.value && folderShareMaxFileSizeMB.value > 0) {
+    body.max_file_size = folderShareMaxFileSizeMB.value * 1024 * 1024
   }
 
   const response = await api({

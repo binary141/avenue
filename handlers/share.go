@@ -18,6 +18,8 @@ import (
 type createShareLinkReq struct {
 	ExpiresAt    *time.Time `json:"expires_at"`
 	RequireLogin bool       `json:"require_login"`
+	AllowUpload  bool       `json:"allow_upload"`
+	MaxFileSize  int64      `json:"max_file_size"`
 }
 
 type shareLinkResponse struct {

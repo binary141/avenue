@@ -1,11 +1,14 @@
 package handlers
 
 import (
+	"bytes"
 	"database/sql"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"path/filepath"
+	"strings"
 
 	"avenue/backend/db"
 	"avenue/backend/shared"
@@ -15,10 +18,12 @@ import (
 )
 
 type sharedFolderContentsResponse struct {
-	FolderName string       `json:"folder_name"`
-	FolderUUID string       `json:"folder_uuid"`
-	Files      []db.File    `json:"files"`
-	Folders    []db.Folder  `json:"folders"`
+	FolderName  string      `json:"folder_name"`
+	FolderUUID  string      `json:"folder_uuid"`
+	Files       []db.File   `json:"files"`
+	Folders     []db.Folder `json:"folders"`
+	AllowUpload bool        `json:"allow_upload"`
+	MaxFileSize int64       `json:"max_file_size"`
 }
 
 // CreateFolderShareLink — POST /v1/folder/:folderID/share
@@ -46,7 +51,7 @@ func (s *Server) CreateFolderShareLink(c *gin.Context) {
 		return
 	}
 
-	link, err := db.CreateShareFolderLink(folderID, userID, req.ExpiresAt, req.RequireLogin)
+	link, err := db.CreateShareFolderLink(folderID, userID, req.ExpiresAt, req.RequireLogin, req.AllowUpload, req.MaxFileSize)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, Response{Error: err.Error()})
 		return
@@ -150,12 +155,12 @@ func (s *Server) GetSharedFolderContents(c *gin.Context) {
 		return
 	}
 
-	ownerID := fmt.Sprint(link.CreatedBy)
-	files, err := db.ListChildFile(link.FolderUUID, ownerID)
+	files, err := db.ListChildFilePublic(link.FolderUUID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, Response{Error: err.Error()})
 		return
 	}
+	ownerID := fmt.Sprint(link.CreatedBy)
 	folders, err := db.ListChildFolder(link.FolderUUID, ownerID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, Response{Error: err.Error()})
@@ -170,10 +175,12 @@ func (s *Server) GetSharedFolderContents(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, sharedFolderContentsResponse{
-		FolderName: link.FolderName,
-		FolderUUID: link.FolderUUID,
-		Files:      files,
-		Folders:    folders,
+		FolderName:  link.FolderName,
+		FolderUUID:  link.FolderUUID,
+		Files:       files,
+		Folders:     folders,
+		AllowUpload: link.AllowUpload,
+		MaxFileSize: effectiveMaxFileSize(link.MaxFileSize),
 	})
 }
 
@@ -198,7 +205,7 @@ func (s *Server) BrowseSharedSubFolder(c *gin.Context) {
 		return
 	}
 
-	files, err := db.ListChildFile(subFolderUUID, ownerID)
+	files, err := db.ListChildFilePublic(subFolderUUID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, Response{Error: err.Error()})
 		return
@@ -217,11 +224,178 @@ func (s *Server) BrowseSharedSubFolder(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, sharedFolderContentsResponse{
-		FolderName: subFolder.Name,
-		FolderUUID: subFolder.UUID,
-		Files:      files,
-		Folders:    folders,
+		FolderName:  subFolder.Name,
+		FolderUUID:  subFolder.UUID,
+		Files:       files,
+		Folders:     folders,
+		AllowUpload: link.AllowUpload,
+		MaxFileSize: effectiveMaxFileSize(link.MaxFileSize),
 	})
+}
+
+// UploadToSharedFolder — POST /share/folder/:token/upload
+func (s *Server) UploadToSharedFolder(c *gin.Context) {
+	link, ok := s.resolveShareFolderLink(c)
+	if !ok {
+		return
+	}
+
+	if !link.AllowUpload {
+		c.JSON(http.StatusForbidden, Response{Message: "uploads are not allowed for this share link"})
+		return
+	}
+
+	// Determine creator: authenticated user or folder owner
+	creatorID, authed := s.getAuthenticatedUserID(c)
+	if !authed {
+		creatorID = link.CreatedBy
+	}
+	creatorIDStr := fmt.Sprint(creatorID)
+
+	creator, err := db.GetUserByIDStr(creatorIDStr)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{Error: err.Error()})
+		return
+	}
+
+	maxFileSize := effectiveMaxFileSize(link.MaxFileSize)
+
+	if creator.Quota != 0 {
+		totalUsed, err := db.GetUserUsage(creatorID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, Response{Error: err.Error()})
+			return
+		}
+		if totalUsed >= creator.Quota {
+			c.JSON(http.StatusUnprocessableEntity, Response{Error: "creator quota reached"})
+			return
+		}
+		remaining := creator.Quota - totalUsed
+		if remaining < maxFileSize {
+			maxFileSize = remaining
+		}
+	}
+
+	// Determine target folder (query param ?folder=<uuid>, must be in shared subtree)
+	targetFolderUUID := c.Query("folder")
+	if targetFolderUUID == "" {
+		targetFolderUUID = link.FolderUUID
+	} else {
+		inTree, err := db.IsFolderInSubtree(link.FolderIntID, targetFolderUUID)
+		if err != nil || !inTree {
+			c.JSON(http.StatusNotFound, Response{Message: "target folder not found in shared tree"})
+			return
+		}
+	}
+
+	if err := ensureDir(s.fs, fmt.Sprintf("/%s", creatorIDStr)); err != nil {
+		c.JSON(http.StatusInternalServerError, Response{Error: err.Error()})
+		return
+	}
+
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxFileSize)
+
+	mr, err := c.Request.MultipartReader()
+	if err != nil {
+		c.JSON(http.StatusBadRequest, Response{Error: err.Error()})
+		return
+	}
+
+	var fileID string
+	var filename, extension string
+	var total int64
+	contentType := "application/octet-stream"
+
+	for {
+		part, err := mr.NextPart()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			c.JSON(http.StatusBadRequest, Response{Error: err.Error()})
+			return
+		}
+
+		if part.FormName() == "file" {
+			filename = filepath.Base(part.FileName())
+			extension = strings.ToLower(strings.TrimPrefix(filepath.Ext(filename), "."))
+
+			buf := make([]byte, 512)
+			n, err := io.ReadAtLeast(part, buf, 1)
+			if err != nil && err != io.ErrUnexpectedEOF {
+				c.JSON(http.StatusInternalServerError, Response{Error: err.Error()})
+				return
+			}
+			contentType = http.DetectContentType(buf[:n])
+
+			fileID, err = db.CreateFile(&db.File{
+				Name:      filename,
+				Extension: extension,
+				MimeType:  contentType,
+				Parent:    targetFolderUUID,
+				CreatedBy: creatorID,
+			})
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, Response{Error: err.Error()})
+				return
+			}
+
+			dst, err := s.fs.Create(fmt.Sprintf("/%s/%s", creatorIDStr, fileID))
+			if err != nil {
+				_ = db.DeleteFile(fileID, creatorIDStr)
+				c.JSON(http.StatusInternalServerError, Response{Error: err.Error()})
+				return
+			}
+
+			written, err := io.Copy(dst, bytes.NewReader(buf[:n]))
+			if err != nil {
+				_ = db.DeleteFile(fileID, creatorIDStr)
+				c.JSON(http.StatusInternalServerError, Response{Error: err.Error()})
+				return
+			}
+			total += written
+
+			written, err = io.Copy(dst, part)
+			_ = dst.Close()
+			if err != nil {
+				_ = db.DeleteFile(fileID, creatorIDStr)
+				var maxErr *http.MaxBytesError
+				if errors.As(err, &maxErr) || errors.Is(err, http.ErrBodyReadAfterClose) {
+					c.JSON(http.StatusRequestEntityTooLarge, Response{Error: "file too large"})
+					return
+				}
+				c.JSON(http.StatusInternalServerError, Response{Error: err.Error()})
+				return
+			}
+			total += written
+		}
+
+		_ = part.Close()
+	}
+
+	if fileID == "" {
+		c.JSON(http.StatusBadRequest, Response{Message: "no file provided"})
+		return
+	}
+
+	if err := db.UpdateFile(db.File{
+		UUID:      fileID,
+		FileSize:  total,
+		Extension: extension,
+		Name:      filename,
+		MimeType:  contentType,
+		Parent:    targetFolderUUID,
+	}); err != nil {
+		c.JSON(http.StatusInternalServerError, Response{Error: err.Error()})
+		return
+	}
+
+	if err := db.UpdateUsage(creatorID, total); err != nil {
+		c.JSON(http.StatusInternalServerError, Response{Error: err.Error()})
+		return
+	}
+
+	c.Status(http.StatusCreated)
 }
 
 // DownloadSharedFolderFile — GET /share/folder/:token/file/:fileUUID
@@ -265,6 +439,14 @@ func (s *Server) DownloadSharedFolderFile(c *gin.Context) {
 	if _, err := io.Copy(c.Writer, fileData); err != nil {
 		c.Status(http.StatusInternalServerError)
 	}
+}
+
+// effectiveMaxFileSize returns linkMax if it is non-zero, otherwise the server default.
+func effectiveMaxFileSize(linkMax int64) int64 {
+	if linkMax > 0 {
+		return linkMax
+	}
+	return shared.GetEnvInt64("MAX_FILE_BYTE_SIZE", shared.DEFAULTMAXFILESIZE)
 }
 
 // resolveShareFolderLink is a helper that fetches the share folder link, handles

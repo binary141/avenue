@@ -15,6 +15,7 @@ export interface File {
   parent: string | null;
   created_at: string;
   delete_time: string;
+  created_by: number;
 }
 
 export interface Breadcrumb {

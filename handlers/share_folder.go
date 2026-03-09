@@ -180,7 +180,7 @@ func (s *Server) GetSharedFolderContents(c *gin.Context) {
 		Files:       files,
 		Folders:     folders,
 		AllowUpload: link.AllowUpload,
-		MaxFileSize: effectiveMaxFileSize(link.MaxFileSize),
+		MaxFileSize: uploadLimitForLink(link),
 	})
 }
 
@@ -229,7 +229,7 @@ func (s *Server) BrowseSharedSubFolder(c *gin.Context) {
 		Files:       files,
 		Folders:     folders,
 		AllowUpload: link.AllowUpload,
-		MaxFileSize: effectiveMaxFileSize(link.MaxFileSize),
+		MaxFileSize: uploadLimitForLink(link),
 	})
 }
 
@@ -447,6 +447,32 @@ func effectiveMaxFileSize(linkMax int64) int64 {
 		return linkMax
 	}
 	return shared.GetEnvInt64("MAX_FILE_BYTE_SIZE", shared.DEFAULTMAXFILESIZE)
+}
+
+// uploadLimitForLink returns the smallest of: the link's configured max (or server
+// default) and the folder owner's remaining quota. Falls back to effectiveMaxFileSize
+// if quota information cannot be retrieved.
+func uploadLimitForLink(link db.ShareFolderLink) int64 {
+	limit := effectiveMaxFileSize(link.MaxFileSize)
+
+	owner, err := db.GetUserByIDStr(fmt.Sprint(link.CreatedBy))
+	if err != nil || owner.Quota == 0 {
+		return limit
+	}
+
+	used, err := db.GetUserUsage(link.CreatedBy)
+	if err != nil {
+		return limit
+	}
+
+	remaining := owner.Quota - used
+	if remaining <= 0 {
+		return 0
+	}
+	if remaining < limit {
+		return remaining
+	}
+	return limit
 }
 
 // resolveShareFolderLink is a helper that fetches the share folder link, handles

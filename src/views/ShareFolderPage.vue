@@ -64,9 +64,9 @@
             @dragleave="handleDragLeave"
             @click="fileInputRef?.click()"
           >
-            <input ref="fileInputRef" type="file" class="hidden" @change="onFileSelected" />
+            <input ref="fileInputRef" type="file" multiple class="hidden" @change="onFileSelected" />
 
-            <div v-if="!selectedFile" class="flex flex-col items-center gap-2">
+            <div v-if="selectedFiles.length === 0" class="flex flex-col items-center gap-2">
               <svg class="w-12 h-12 text-slate-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
               </svg>
@@ -76,44 +76,50 @@
               <p class="text-xs text-slate-400">Any file type (Max {{ formatFileSize(maxUploadSize) }})</p>
             </div>
 
-            <div v-else class="flex items-center justify-between p-3 bg-white border border-slate-200 rounded-md" @click.stop>
-              <div class="flex items-center gap-3 flex-1 min-w-0">
-                <svg class="w-8 h-8 text-slate-500 shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-                </svg>
-                <div class="flex-1 min-w-0 text-left">
-                  <p class="text-sm font-medium text-slate-800 truncate">{{ selectedFile.name }}</p>
-                  <p class="text-xs text-slate-500">{{ formatFileSize(selectedFile.size) }}</p>
+            <div v-else class="flex flex-col gap-2" @click.stop>
+              <div
+                v-for="(file, index) in selectedFiles"
+                :key="index"
+                class="flex items-center justify-between p-3 bg-white border border-slate-200 rounded-md"
+              >
+                <div class="flex items-center gap-3 flex-1 min-w-0">
+                  <svg class="w-8 h-8 text-slate-500 shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                  </svg>
+                  <div class="flex-1 min-w-0 text-left">
+                    <p class="text-sm font-medium text-slate-800 truncate">{{ file.name }}</p>
+                    <p class="text-xs text-slate-500">{{ formatFileSize(file.size) }}</p>
+                  </div>
                 </div>
+                <button v-if="!uploading" @click.stop="removeFile(index)" class="p-1 text-slate-500 hover:text-red-500 transition-colors">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" class="w-5 h-5">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                  </svg>
+                </button>
               </div>
-              <button v-if="!uploading" @click.stop="clearSelectedFile" class="p-1 text-slate-500 hover:text-red-500 transition-colors">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" class="w-5 h-5">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-                </svg>
-              </button>
             </div>
           </div>
 
           <!-- Progress bar -->
           <div v-if="uploading" class="relative w-full h-8 bg-slate-200 rounded overflow-hidden">
-            <div class="absolute inset-0 bg-blue-500"></div>
-            <span class="absolute inset-0 flex items-center justify-center text-sm font-semibold text-white">Uploading…</span>
+            <div class="absolute inset-y-0 left-0 bg-blue-500 transition-all duration-300" :style="{ width: `${uploadProgress}%` }"></div>
+            <span class="absolute inset-0 flex items-center justify-center text-sm font-semibold text-slate-800">{{ uploadProgress }}%</span>
           </div>
 
           <!-- Upload button -->
           <button
-            v-if="selectedFile && !uploading"
-            @click="uploadFile"
+            v-if="selectedFiles.length > 0 && !uploading"
+            @click="uploadFiles"
             class="w-full py-3 text-white rounded text-sm font-semibold transition-colors"
             style="background-color: #3b82f6;"
             @mouseenter="$event.currentTarget.style.backgroundColor = '#2563eb'"
             @mouseleave="$event.currentTarget.style.backgroundColor = '#3b82f6'"
           >
-            Upload file
+            Upload {{ selectedFiles.length }} {{ selectedFiles.length === 1 ? 'file' : 'files' }}
           </button>
 
           <p v-if="uploadError" class="text-sm text-red-600">{{ uploadError }}</p>
-          <p v-if="uploadSuccess" class="text-sm text-green-600">File uploaded successfully.</p>
+          <p v-if="uploadSuccess" class="text-sm text-green-600">Files uploaded successfully.</p>
         </div>
 
         <!-- Contents card -->
@@ -146,6 +152,12 @@
               <span class="text-xl shrink-0">📄</span>
               <span class="flex-1 font-medium text-gray-800 truncate">{{ file.name }}</span>
               <span class="text-sm text-gray-400 shrink-0">{{ formatFileSize(file.file_size) }}</span>
+              <button
+                v-if="usersStore.token && file.created_by === currentUserId"
+                @click.stop="deleteFile(file.uuid)"
+                class="shrink-0 text-red-400 hover:text-red-600 transition-colors p-1"
+                title="Delete"
+              >🗑️</button>
               <a
                 :href="fileDownloadURL(file.uuid)"
                 class="shrink-0 px-3 py-1 rounded text-sm font-medium text-white"
@@ -192,8 +204,9 @@ const contents = ref<FolderContents | null>(null);
 const breadcrumbs = ref<Crumb[]>([]);
 
 const fileInputRef = ref<HTMLInputElement | null>(null);
-const selectedFile = ref<File_ | null>(null);
+const selectedFiles = ref<File_[]>([]);
 const uploading = ref(false);
+const uploadProgress = ref(0);
 const uploadError = ref('');
 const uploadSuccess = ref(false);
 const maxUploadSize = ref(0);
@@ -205,6 +218,7 @@ type File_ = globalThis.File;
 const apiRoot = import.meta.env.VITE_APP_API_URL || '';
 const token = computed(() => route.params.token as string);
 const subFolderUUID = computed(() => route.query.sub as string | undefined);
+const currentUserId = computed(() => usersStore.userData.data.id);
 
 function authHeaders(): Record<string, string> {
   return usersStore.token ? { Authorization: `Token ${usersStore.token}` } : {};
@@ -223,26 +237,33 @@ function formatFileSize(bytes: number): string {
   return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
 }
 
-function validateAndSetFile(file: File_ | null) {
+function validateAndAddFiles(list: FileList | File_[]) {
   uploadError.value = '';
   uploadSuccess.value = false;
-  if (!file) return;
-  if (maxUploadSize.value > 0 && file.size > maxUploadSize.value) {
-    uploadError.value = `File exceeds maximum size of ${formatFileSize(maxUploadSize.value)}`;
-    return;
+  const oversized: string[] = [];
+  const valid: File_[] = [];
+  for (const file of Array.from(list)) {
+    if (maxUploadSize.value > 0 && file.size > maxUploadSize.value) {
+      oversized.push(file.name);
+    } else {
+      valid.push(file);
+    }
   }
-  selectedFile.value = file;
+  if (oversized.length) {
+    uploadError.value = `${oversized.map(n => `"${n}"`).join(', ')} exceed${oversized.length === 1 ? 's' : ''} the maximum size of ${formatFileSize(maxUploadSize.value)}`;
+  }
+  selectedFiles.value = [...selectedFiles.value, ...valid];
 }
 
 function onFileSelected(e: Event) {
   const input = e.target as HTMLInputElement;
-  validateAndSetFile(input.files?.[0] ?? null);
+  if (input.files?.length) validateAndAddFiles(input.files);
   input.value = '';
 }
 
 function handleDrop(e: DragEvent) {
   isDragging.value = false;
-  validateAndSetFile(e.dataTransfer?.files?.[0] ?? null);
+  if (e.dataTransfer?.files?.length) validateAndAddFiles(e.dataTransfer.files);
 }
 
 function handleDragOver() {
@@ -253,47 +274,66 @@ function handleDragLeave() {
   isDragging.value = false;
 }
 
-function clearSelectedFile() {
-  selectedFile.value = null;
+function removeFile(index: number) {
+  selectedFiles.value = selectedFiles.value.filter((_, i) => i !== index);
   uploadError.value = '';
   uploadSuccess.value = false;
 }
 
-async function uploadFile() {
-  if (!selectedFile.value) return;
+async function uploadFiles() {
+  if (selectedFiles.value.length === 0) return;
   uploading.value = true;
   uploadError.value = '';
   uploadSuccess.value = false;
-
-  const formData = new FormData();
-  formData.append('file', selectedFile.value);
+  uploadProgress.value = 0;
 
   const sub = subFolderUUID.value;
   const url = sub
     ? `${apiRoot}share/folder/${token.value}/upload?folder=${sub}`
     : `${apiRoot}share/folder/${token.value}/upload`;
 
-  try {
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: authHeaders(),
-      body: formData,
-    });
+  const total = selectedFiles.value.length;
+  let uploaded = 0;
 
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      uploadError.value = body.error || body.message || 'Upload failed';
-    } else {
-      uploadSuccess.value = true;
-      selectedFile.value = null;
-      if (fileInputRef.value) fileInputRef.value.value = '';
-      await fetchContents();
+  try {
+    for (const file of [...selectedFiles.value]) {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        uploadError.value = `Failed to upload "${file.name}": ${body.error || body.message || 'Upload failed'}`;
+        uploading.value = false;
+        return;
+      }
+
+      selectedFiles.value = selectedFiles.value.filter(f => f !== file);
+      uploaded++;
+      uploadProgress.value = Math.round((uploaded / total) * 100);
     }
+
+    uploadSuccess.value = true;
+    if (fileInputRef.value) fileInputRef.value.value = '';
+    await fetchContents();
   } catch {
     uploadError.value = 'Upload failed';
   } finally {
     uploading.value = false;
   }
+}
+
+async function deleteFile(fileUUID: string) {
+  await fetch(`${apiRoot}v1/file/${fileUUID}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  });
+  await fetchContents();
 }
 
 async function fetchContents() {

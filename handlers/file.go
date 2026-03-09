@@ -216,6 +216,8 @@ func (s *Server) Upload(c *gin.Context) {
 			r := bytes.NewReader(buf)
 			written, err := io.Copy(dst, r)
 			if err != nil {
+				dst.Close()
+				_ = s.fs.Remove(dstPath)
 				deleteErr := db.DeleteFile(fileID, userID)
 				if deleteErr != nil {
 					log.Println(deleteErr)
@@ -236,6 +238,8 @@ func (s *Server) Upload(c *gin.Context) {
 
 			written, err = io.Copy(dst, part)
 			if err != nil {
+				dst.Close()
+				_ = s.fs.Remove(dstPath)
 				deleteErr := db.DeleteFile(fileID, userID)
 				if deleteErr != nil {
 					log.Println(deleteErr)

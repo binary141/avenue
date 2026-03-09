@@ -79,7 +79,18 @@
             </div>
           </div>
           <button
-            v-if="!isUploading"
+            v-if="isUploading && uploadingFileIndex === index"
+            type="button"
+            class="file-item__cancel"
+            title="Cancel upload"
+            @click.stop="cancelUpload"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+          <button
+            v-else-if="!isUploading"
             type="button"
             class="file-item__remove"
             @click.stop="removeFile(index)"
@@ -154,6 +165,8 @@ const formattedSize = ref('')
 const uploadingFileIndex = ref(-1)
 const currentFileProgress = ref(0)
 const currentFileSpeed = ref('')
+const currentXHR = ref<XMLHttpRequest | null>(null)
+let cancelRequested = false
 
 const formatFileSize = (bytes: number): string => {
   if (bytes === 0) return '0 Bytes'
@@ -228,9 +241,10 @@ const removeFile = (index: number) => {
   selectedFiles.value.splice(index, 1)
 }
 
-function uploadFileXHR(file: File, formData: FormData, onProgress: (pct: number, speedStr: string) => void): Promise<{ ok: boolean; status: number; body: any }> {
+function uploadFileXHR(file: File, formData: FormData, onProgress: (pct: number, speedStr: string) => void): Promise<{ ok: boolean; status: number; body: any; aborted: boolean }> {
   return new Promise((resolve) => {
     const xhr = new XMLHttpRequest()
+    currentXHR.value = xhr
     const startTime = Date.now()
 
     xhr.upload.onprogress = (e) => {
@@ -246,11 +260,11 @@ function uploadFileXHR(file: File, formData: FormData, onProgress: (pct: number,
     xhr.onload = () => {
       let body: any = null
       try { body = JSON.parse(xhr.responseText) } catch { /* ignore */ }
-      resolve({ ok: xhr.status >= 200 && xhr.status < 300, status: xhr.status, body })
+      resolve({ ok: xhr.status >= 200 && xhr.status < 300, status: xhr.status, body, aborted: false })
     }
 
-    xhr.onerror = () => resolve({ ok: false, status: 0, body: null })
-    xhr.onabort = () => resolve({ ok: false, status: 0, body: null })
+    xhr.onerror = () => resolve({ ok: false, status: 0, body: null, aborted: false })
+    xhr.onabort = () => resolve({ ok: false, status: 0, body: null, aborted: true })
 
     const apiRoot = import.meta.env.VITE_APP_API_URL || ''
     xhr.open('POST', `${apiRoot}v1/file`)
@@ -263,6 +277,20 @@ function uploadFileXHR(file: File, formData: FormData, onProgress: (pct: number,
   })
 }
 
+const cancelUpload = () => {
+  cancelRequested = true
+  currentXHR.value?.abort()
+}
+
+const resetUploadState = () => {
+  isUploading.value = false
+  uploadingFileIndex.value = -1
+  currentFileProgress.value = 0
+  currentFileSpeed.value = ''
+  uploadProgress.value = 0
+  currentXHR.value = null
+}
+
 const uploadFiles = async () => {
   if (selectedFiles.value.length === 0) {
     emit('error', 'No files selected')
@@ -271,6 +299,7 @@ const uploadFiles = async () => {
 
   isUploading.value = true
   uploadProgress.value = 0
+  cancelRequested = false
 
   try {
     const totalFiles = selectedFiles.value.length
@@ -293,11 +322,16 @@ const uploadFiles = async () => {
         currentFileSpeed.value = speedStr
       })
 
+      if (response.aborted) {
+        resetUploadState()
+        cancelRequested = false
+        return
+      }
+
       if (!response.ok) {
         const errorMessage = response.body?.error || response.body?.message || 'Upload failed'
         emit('error', `Failed to upload "${file.name}": ${errorMessage}`)
-        isUploading.value = false
-        uploadingFileIndex.value = -1
+        resetUploadState()
         return
       }
 
@@ -307,15 +341,10 @@ const uploadFiles = async () => {
 
     emit('upload', selectedFiles.value)
     selectedFiles.value = []
-    uploadProgress.value = 0
-    isUploading.value = false
-    uploadingFileIndex.value = -1
-    currentFileProgress.value = 0
-    currentFileSpeed.value = ''
+    resetUploadState()
   } catch (error) {
     emit('error', error instanceof Error ? error.message : 'Upload failed')
-    isUploading.value = false
-    uploadingFileIndex.value = -1
+    resetUploadState()
   }
 }
 
@@ -469,7 +498,8 @@ const hasFiles = computed(() => selectedFiles.value.length > 0)
   margin: 2px 0 0;
 }
 
-.file-item__remove {
+.file-item__remove,
+.file-item__cancel {
   padding: 0.25rem;
   background: none;
   border: none;
@@ -483,7 +513,12 @@ const hasFiles = computed(() => selectedFiles.value.length > 0)
   color: #ef4444;
 }
 
-.file-item__remove svg {
+.file-item__cancel:hover {
+  color: #ef4444;
+}
+
+.file-item__remove svg,
+.file-item__cancel svg {
   width: 1.25rem;
   height: 1.25rem;
 }

@@ -43,6 +43,20 @@
         </div>
       </div>
 
+      <div
+        v-if="isLoggedIn && route.path !== '/' && route.path !== '/drive'"
+        class="w-full"
+        style="max-width: 700px;"
+      >
+        <button
+          @click="home"
+          class="flex items-center gap-1 text-sm font-medium"
+          style="color: var(--text-secondary);"
+        >
+          ← Drive
+        </button>
+      </div>
+
       <RouterView @close-menu="showMenu = false"/>
     </div>
   </template>

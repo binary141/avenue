@@ -231,9 +231,10 @@
     <!-- Share File Modal -->
     <div
       v-if="sharingFile"
-      class="fixed inset-0 flex items-center justify-center bg-black/50 z-50"
+      class="fixed inset-0 overflow-y-auto bg-black/50 z-50"
     >
-      <div class="bg-white rounded shadow-lg w-[520px] p-6 relative flex flex-col" style="max-height: 80vh;">
+      <div class="flex min-h-full items-center justify-center p-4">
+      <div class="bg-white rounded shadow-lg w-[520px] p-6 relative flex flex-col">
         <h3 class="text-lg font-bold mb-1 text-black">Share "{{ sharingFile.name }}"</h3>
         <p class="text-sm text-gray-500 mb-4">Anyone with the link can view and download this file.</p>
 
@@ -247,7 +248,7 @@
 
         <template v-else>
           <!-- Active links list -->
-          <div class="mb-4 overflow-y-auto" style="max-height: 240px;">
+          <div class="mb-4">
             <p class="text-sm font-semibold text-gray-600 mb-2">
               Active links<span v-if="shareLinks.length"> ({{ shareLinks.length }})</span>
             </p>
@@ -307,14 +308,16 @@
 
         <button @click="closeShareModal" class="absolute top-2 right-2 text-gray-500 hover:text-gray-700">✕</button>
       </div>
+      </div>
     </div>
 
     <!-- Share Folder Modal -->
     <div
       v-if="sharingFolder"
-      class="fixed inset-0 flex items-center justify-center bg-black/50 z-50"
+      class="fixed inset-0 overflow-y-auto bg-black/50 z-50"
     >
-      <div class="bg-white rounded shadow-lg w-[520px] p-6 relative flex flex-col" style="max-height: 80vh;">
+      <div class="flex min-h-full items-center justify-center p-4">
+      <div class="bg-white rounded shadow-lg w-[520px] p-6 relative flex flex-col">
         <h3 class="text-lg font-bold mb-1 text-black">Share "{{ sharingFolder.name }}"</h3>
         <p class="text-sm text-gray-500 mb-4">Anyone with the link can browse and download all files in this folder.</p>
 
@@ -326,7 +329,7 @@
         </div>
 
         <template v-else>
-          <div class="mb-4 overflow-y-auto" style="max-height: 240px;">
+          <div class="mb-4">
             <p class="text-sm font-semibold text-gray-600 mb-2">
               Active links<span v-if="folderShareLinks.length"> ({{ folderShareLinks.length }})</span>
             </p>
@@ -384,6 +387,7 @@
         </template>
 
         <button @click="closeFolderShareModal" class="absolute top-2 right-2 text-gray-500 hover:text-gray-700">✕</button>
+      </div>
       </div>
     </div>
 

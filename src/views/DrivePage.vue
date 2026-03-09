@@ -432,7 +432,14 @@ const route = useRoute();
 const emit = defineEmits(['close-menu']);
 const router = useRouter();
 const loading = ref(false);
-const maxFileSize = ref(0);
+const serverMax = ref(0);
+const maxFileSize = computed(() => {
+  if (serverMax.value === 0) return 0;
+  const { quota, spaceUsed } = usersStore.userData.data;
+  if (quota === 0) return serverMax.value;
+  const remaining = quota - spaceUsed;
+  return remaining < serverMax.value ? remaining : serverMax.value;
+});
 const error = ref<string | undefined>();
 const folders = ref<Folder[]>([]);
 const files = ref<File[]>([]);
@@ -968,12 +975,7 @@ async function getDashboardInfo() {
 
   // 200MiB
   const defaultSize = 209715200;
-
-  maxFileSize.value = defaultSize;
-
-  if (response.body.maxFileSize) {
-    maxFileSize.value = response.body.maxFileSize;
-  }
+  serverMax.value = response.body.maxFileSize || defaultSize;
 }
 
 onMounted(() => {

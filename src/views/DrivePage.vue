@@ -127,7 +127,7 @@
             <span class="folder-actions flex items-center gap-2">
               <span class="file-edit cursor-pointer" @click.stop="openFolderEditModal(folder)">✏️</span>
               <span class="file-delete cursor-pointer" @click.stop="deleteFolder(folder.uuid)">🗑️</span>
-              <span class="cursor-pointer inline-flex items-center gap-0.5" @click.stop="openFolderShareModal(folder)" title="Share folder">
+              <span v-if="folderSharingEnabled" class="cursor-pointer inline-flex items-center gap-0.5" @click.stop="openFolderShareModal(folder)" title="Share folder">
                 🔗<span v-if="sharedFolderCounts[folder.uuid]" class="share-count">{{ sharedFolderCounts[folder.uuid] }}</span>
               </span>
             </span>
@@ -161,7 +161,7 @@
             <span class="file-download">
               <a @click.stop :href="getDownloadURL(file.uuid)" :download="file.name">⬇️</a>
             </span>
-            <span class="cursor-pointer inline-flex items-center gap-0.5" @click.stop="openShareModal(file)" title="Share">
+            <span v-if="fileSharingEnabled" class="cursor-pointer inline-flex items-center gap-0.5" @click.stop="openShareModal(file)" title="Share">
               🔗<span v-if="sharedFileCounts[file.uuid]" class="share-count">{{ sharedFileCounts[file.uuid] }}</span>
             </span>
           </div>
@@ -433,6 +433,8 @@ const emit = defineEmits(['close-menu']);
 const router = useRouter();
 const loading = ref(false);
 const serverMax = ref(0);
+const fileSharingEnabled = computed(() => usersStore.fileSharingEnabled);
+const folderSharingEnabled = computed(() => usersStore.folderSharingEnabled);
 const maxFileSize = computed(() => {
   if (serverMax.value === 0) return 0;
   const { quota, spaceUsed } = usersStore.userData.data;
@@ -976,13 +978,19 @@ async function getDashboardInfo() {
   // 200MiB
   const defaultSize = 209715200;
   serverMax.value = response.body.maxFileSize || defaultSize;
+  usersStore.fileSharingEnabled = response.body.fileSharingEnabled !== false;
+  usersStore.folderSharingEnabled = response.body.folderSharingEnabled !== false;
 }
 
-onMounted(() => {
+onMounted(async () => {
   refreshCurrentList();
-  getDashboardInfo();
-  loadAllShares();
-  loadAllFolderShares();
+  await getDashboardInfo();
+  if (fileSharingEnabled.value) {
+    loadAllShares();
+  }
+  if (folderSharingEnabled.value) {
+    loadAllFolderShares();
+  }
 });
 </script>
 

@@ -17,6 +17,8 @@ services:
       - postgres
     environment:
       MAX_FILE_BYTE_SIZE: 1073741824
+      ENABLE_FOLDER_SHARING: true
+      ENABLE_FILE_SHARING: true
       UPLOAD_DIR: "/avenue/uploads"
       REGISTRATION_ENABLED: "true"
       APP_ENV: "dev"

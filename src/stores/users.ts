@@ -35,6 +35,8 @@ export const useUsersStore = defineStore('users', () => {
     })
     const loggedIn = ref(false);
     const token = ref<string | null>(parseStoredToken());
+    const fileSharingEnabled = ref(false);
+    const folderSharingEnabled = ref(false);
 
     function setToken(value: string | null) {
         token.value = value;
@@ -157,6 +159,8 @@ export const useUsersStore = defineStore('users', () => {
         createUser,
         loggedIn,
         token,
+        fileSharingEnabled,
+        folderSharingEnabled,
         logIn,
         logInAPI,
         logOut,

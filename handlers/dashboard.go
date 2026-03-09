@@ -24,6 +24,8 @@ func (s *Server) DashboardInfo(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"maxFileSize": maxFileSize,
+		"maxFileSize":          maxFileSize,
+		"fileSharingEnabled":   shared.GetEnvBool("ENABLE_FILE_SHARING", false),
+		"folderSharingEnabled": shared.GetEnvBool("ENABLE_FOLDER_SHARING", false),
 	})
 }

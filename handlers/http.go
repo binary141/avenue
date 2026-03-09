@@ -196,6 +196,22 @@ func (s *Server) sessionCheck(c *gin.Context) {
 	c.Next()
 }
 
+func (s *Server) fileSharingRequired(c *gin.Context) {
+	if !shared.GetEnvBool("ENABLE_FILE_SHARING", false) {
+		c.AbortWithStatus(http.StatusNotFound)
+		return
+	}
+	c.Next()
+}
+
+func (s *Server) folderSharingRequired(c *gin.Context) {
+	if !shared.GetEnvBool("ENABLE_FOLDER_SHARING", false) {
+		c.AbortWithStatus(http.StatusNotFound)
+		return
+	}
+	c.Next()
+}
+
 func (s *Server) SetupRoutes() {
 	c := cors.Config{
 		AllowOrigins:     []string{shared.GetEnv("ALLOW_ORIGIN", "http://localhost:5173"), "http://localhost:8080"},
@@ -214,12 +230,16 @@ func (s *Server) SetupRoutes() {
 	unsecuredRouter.POST("/login", s.Login)
 	unsecuredRouter.GET("/loginMeta", s.LoginMeta)
 	unsecuredRouter.POST("/register", s.Register)
-	unsecuredRouter.GET("/share/:token", s.GetShareLinkMeta)
-	unsecuredRouter.GET("/share/:token/download", s.DownloadSharedFile)
-	unsecuredRouter.GET("/share/folder/:token", s.GetSharedFolderContents)
-	unsecuredRouter.GET("/share/folder/:token/browse/:subFolderUUID", s.BrowseSharedSubFolder)
-	unsecuredRouter.GET("/share/folder/:token/file/:fileUUID", s.DownloadSharedFolderFile)
-	unsecuredRouter.POST("/share/folder/:token/upload", s.UploadToSharedFolder)
+	publicFileShare := unsecuredRouter.Group("/share")
+	publicFileShare.Use(s.fileSharingRequired)
+	publicFileShare.GET("/:token", s.GetShareLinkMeta)
+	publicFileShare.GET("/:token/download", s.DownloadSharedFile)
+	publicFolderShare := unsecuredRouter.Group("/share/folder")
+	publicFolderShare.Use(s.folderSharingRequired)
+	publicFolderShare.GET("/:token", s.GetSharedFolderContents)
+	publicFolderShare.GET("/:token/browse/:subFolderUUID", s.BrowseSharedSubFolder)
+	publicFolderShare.GET("/:token/file/:fileUUID", s.DownloadSharedFolderFile)
+	publicFolderShare.POST("/:token/upload", s.UploadToSharedFolder)
 
 	securedRouterV1 := s.router.Group("/v1")
 	securedRouterV1.Use(s.sessionCheck)
@@ -231,18 +251,22 @@ func (s *Server) SetupRoutes() {
 
 	// -- file routes -- //
 	securedRouterV1.POST("/file", s.Upload)
-	securedRouterV1.POST("/file/:fileID/share", s.CreateShareLink)
-	securedRouterV1.GET("/file/:fileID/shares", s.ListFileShares)
-	securedRouterV1.POST("/folder/:folderID/share", s.CreateFolderShareLink)
-	securedRouterV1.GET("/folder/:folderID/shares", s.ListFolderShares)
+	secureFileShare := securedRouterV1.Group("")
+	secureFileShare.Use(s.fileSharingRequired)
+	secureFileShare.POST("/file/:fileID/share", s.CreateShareLink)
+	secureFileShare.GET("/file/:fileID/shares", s.ListFileShares)
+	secureFileShare.GET("/shares", s.ListUserShares)
+	secureFileShare.GET("/shares/expired", s.ListExpiredUserShares)
+	secureFileShare.DELETE("/share/:token", s.RevokeShareLink)
 
-	// -- share routes -- //
-	securedRouterV1.GET("/shares", s.ListUserShares)
-	securedRouterV1.GET("/shares/expired", s.ListExpiredUserShares)
-	securedRouterV1.DELETE("/share/:token", s.RevokeShareLink)
-	securedRouterV1.GET("/folder-shares", s.ListUserFolderShares)
-	securedRouterV1.GET("/folder-shares/expired", s.ListExpiredUserFolderShares)
-	securedRouterV1.DELETE("/share/folder/:token", s.RevokeShareFolderLink)
+	secureFolderShare := securedRouterV1.Group("")
+	secureFolderShare.Use(s.folderSharingRequired)
+	secureFolderShare.POST("/folder/:folderID/share", s.CreateFolderShareLink)
+	secureFolderShare.GET("/folder/:folderID/shares", s.ListFolderShares)
+	secureFolderShare.GET("/folder-shares", s.ListUserFolderShares)
+	secureFolderShare.GET("/folder-shares/expired", s.ListExpiredUserFolderShares)
+	secureFolderShare.DELETE("/share/folder/:token", s.RevokeShareFolderLink)
+
 	securedRouterV1.GET("/file/list", s.ListFiles)
 	securedRouterV1.GET("/file/:fileID", s.GetFile)
 	securedRouterV1.PATCH("/file/:fileID/:fileName", s.UpdateFileName)

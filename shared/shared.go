@@ -18,6 +18,18 @@ const (
 	DEFAULTMAXFILESIZE int64     = 209715200
 )
 
+func GetEnvBool(key string, defaultVal bool) bool {
+	envKey := os.Getenv(key)
+	if envKey == "" {
+		return defaultVal
+	}
+	val, err := strconv.ParseBool(envKey)
+	if err != nil {
+		return defaultVal
+	}
+	return val
+}
+
 func GetEnvInt64(key string, defaultVal int64) int64 {
 	envKey := os.Getenv(key)
 

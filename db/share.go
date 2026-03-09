@@ -168,3 +168,8 @@ func DeleteShareLink(token, createdBy string) error {
 	_, err := DB.Exec(`DELETE FROM share_links WHERE token = $1 AND created_by = $2::BIGINT`, token, createdBy)
 	return err
 }
+
+func DeleteShareLinksByFileID(fileID int64) error {
+	_, err := DB.Exec(`DELETE FROM share_links WHERE file_id = $1`, fileID)
+	return err
+}

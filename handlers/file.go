@@ -492,6 +492,10 @@ func (s *Server) DeleteFile(c *gin.Context) {
 		return
 	}
 
+	if err = db.DeleteShareLinksByFileID(f.ID); err != nil {
+		log.Printf("error deleting share links for file %s: %s", f.UUID, err.Error())
+	}
+
 	err = db.UpdateUsage(f.CreatedBy, -f.FileSize)
 	if err != nil {
 		// todo should we rollback? Or just have a cron that'll reconcile?

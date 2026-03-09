@@ -43,6 +43,7 @@
           <div class="text-xs shrink-0 text-right" style="color: var(--text-secondary);">
             <p>Created {{ formatDate(share.created_at) }}</p>
             <p>{{ share.expires_at ? 'Expires ' + formatDate(share.expires_at) : 'Never expires' }}</p>
+            <p>{{ share.last_accessed ? 'Last accessed ' + formatDate(share.last_accessed) : 'Never accessed' }}</p>
           </div>
 
           <AppButton
@@ -83,6 +84,7 @@
           <div class="text-xs shrink-0 text-right" style="color: var(--text-secondary);">
             <p>Created {{ formatDate(share.created_at) }}</p>
             <p>{{ share.expires_at ? 'Expires ' + formatDate(share.expires_at) : 'Never expires' }}</p>
+            <p>{{ share.last_accessed ? 'Last accessed ' + formatDate(share.last_accessed) : 'Never accessed' }}</p>
           </div>
 
           <AppButton
@@ -117,6 +119,7 @@ interface ShareWithFile {
   file_name: string;
   expires_at: string | null;
   created_at: string;
+  last_accessed: string | null;
 }
 
 interface FolderShareLink {
@@ -125,6 +128,7 @@ interface FolderShareLink {
   folder_name: string;
   expires_at: string | null;
   created_at: string;
+  last_accessed: string | null;
 }
 
 const loading = ref(true);

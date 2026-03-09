@@ -16,6 +16,7 @@ type ShareLink struct {
 	ExpiresAt    *time.Time `json:"expires_at"`
 	CreatedAt    time.Time  `json:"created_at"`
 	RequireLogin bool       `json:"require_login"`
+	LastAccessed *time.Time `json:"last_accessed"`
 }
 
 type ShareLinkWithFileName struct {
@@ -27,6 +28,7 @@ type ShareLinkWithFileName struct {
 	ExpiresAt    *time.Time `json:"expires_at"`
 	CreatedAt    time.Time  `json:"created_at"`
 	RequireLogin bool       `json:"require_login"`
+	LastAccessed *time.Time `json:"last_accessed"`
 }
 
 func generateToken() (string, error) {
@@ -65,26 +67,31 @@ func CreateShareLink(fileID, createdBy string, expiresAt *time.Time, requireLogi
 	return link, nil
 }
 
+func touchShareLink(token string) {
+	_, _ = DB.Exec(`UPDATE share_links SET last_accessed = now() WHERE token = $1`, token)
+}
+
 func GetShareLink(token string) (ShareLink, error) {
 	var link ShareLink
 	err := DB.QueryRow(`
-		SELECT sl.id, sl.token, f.uuid, sl.created_by, sl.expires_at, sl.created_at, sl.require_login
+		SELECT sl.id, sl.token, f.uuid, sl.created_by, sl.expires_at, sl.created_at, sl.require_login, sl.last_accessed
 		FROM share_links sl
 		JOIN files f ON f.id = sl.file_id
 		WHERE sl.token = $1
 		  AND (sl.expires_at IS NULL OR sl.expires_at > now())
 	`, token).Scan(
-		&link.ID, &link.Token, &link.FileID, &link.CreatedBy, &link.ExpiresAt, &link.CreatedAt, &link.RequireLogin,
+		&link.ID, &link.Token, &link.FileID, &link.CreatedBy, &link.ExpiresAt, &link.CreatedAt, &link.RequireLogin, &link.LastAccessed,
 	)
 	if err != nil {
 		return ShareLink{}, sql.ErrNoRows
 	}
+	touchShareLink(token)
 	return link, nil
 }
 
 func ListSharesByFile(fileID, createdBy string) ([]ShareLink, error) {
 	rows, err := DB.Query(`
-		SELECT sl.id, sl.token, f.uuid, sl.created_by, sl.expires_at, sl.created_at, sl.require_login
+		SELECT sl.id, sl.token, f.uuid, sl.created_by, sl.expires_at, sl.created_at, sl.require_login, sl.last_accessed
 		FROM share_links sl
 		JOIN files f ON f.id = sl.file_id
 		WHERE f.uuid = $1 AND sl.created_by = $2::BIGINT
@@ -99,7 +106,7 @@ func ListSharesByFile(fileID, createdBy string) ([]ShareLink, error) {
 	var links []ShareLink
 	for rows.Next() {
 		var l ShareLink
-		if err := rows.Scan(&l.ID, &l.Token, &l.FileID, &l.CreatedBy, &l.ExpiresAt, &l.CreatedAt, &l.RequireLogin); err != nil {
+		if err := rows.Scan(&l.ID, &l.Token, &l.FileID, &l.CreatedBy, &l.ExpiresAt, &l.CreatedAt, &l.RequireLogin, &l.LastAccessed); err != nil {
 			return nil, err
 		}
 		links = append(links, l)
@@ -109,7 +116,7 @@ func ListSharesByFile(fileID, createdBy string) ([]ShareLink, error) {
 
 func ListSharesByUser(createdBy string) ([]ShareLinkWithFileName, error) {
 	rows, err := DB.Query(`
-		SELECT sl.id, sl.token, COALESCE(f.uuid, ''), COALESCE(f.name, ''), sl.created_by, sl.expires_at, sl.created_at, sl.require_login
+		SELECT sl.id, sl.token, COALESCE(f.uuid, ''), COALESCE(f.name, ''), sl.created_by, sl.expires_at, sl.created_at, sl.require_login, sl.last_accessed
 		FROM share_links sl
 		LEFT JOIN files f ON f.id = sl.file_id
 		WHERE sl.created_by = $1::BIGINT
@@ -124,7 +131,7 @@ func ListSharesByUser(createdBy string) ([]ShareLinkWithFileName, error) {
 	var links []ShareLinkWithFileName
 	for rows.Next() {
 		var l ShareLinkWithFileName
-		if err := rows.Scan(&l.ID, &l.Token, &l.FileID, &l.FileName, &l.CreatedBy, &l.ExpiresAt, &l.CreatedAt, &l.RequireLogin); err != nil {
+		if err := rows.Scan(&l.ID, &l.Token, &l.FileID, &l.FileName, &l.CreatedBy, &l.ExpiresAt, &l.CreatedAt, &l.RequireLogin, &l.LastAccessed); err != nil {
 			return nil, err
 		}
 		links = append(links, l)

@@ -69,7 +69,13 @@
             </svg>
             <div class="file-item__details">
               <p class="file-item__name">{{ file.name }}</p>
-              <p class="file-item__size">{{ formatFileSize(file.size) }}</p>
+              <template v-if="isUploading && uploadingFileIndex === index">
+                <div class="file-item__progress-track">
+                  <div class="file-item__progress-fill" :style="{ width: `${currentFileProgress}%` }"></div>
+                </div>
+                <p class="file-item__speed">{{ currentFileProgress }}% · {{ currentFileSpeed }}</p>
+              </template>
+              <p v-else class="file-item__size">{{ formatFileSize(file.size) }}</p>
             </div>
           </div>
           <button
@@ -96,9 +102,9 @@
       </div>
     </div>
 
-    <div v-if="isUploading" class="progress-bar">
+    <div v-if="isUploading && selectedFiles.length > 1" class="progress-bar">
       <div class="progress-bar__fill" :style="{ width: `${uploadProgress}%` }"></div>
-      <span class="progress-bar__text">{{ uploadProgress }}%</span>
+      <span class="progress-bar__text">{{ uploadProgress }}% overall</span>
     </div>
 
     <button
@@ -115,7 +121,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watchEffect } from 'vue'
-import api from '@/utils/api'
+import { GLOBAL_HEADERS } from '@/utils/api'
 
 interface Props {
   accept?: string
@@ -144,6 +150,10 @@ const selectedFiles = ref<File[]>([])
 const uploadProgress = ref<number>(0)
 const isUploading = ref(false)
 const formattedSize = ref('')
+
+const uploadingFileIndex = ref(-1)
+const currentFileProgress = ref(0)
+const currentFileSpeed = ref('')
 
 const formatFileSize = (bytes: number): string => {
   if (bytes === 0) return '0 Bytes'
@@ -218,6 +228,41 @@ const removeFile = (index: number) => {
   selectedFiles.value.splice(index, 1)
 }
 
+function uploadFileXHR(file: File, formData: FormData, onProgress: (pct: number, speedStr: string) => void): Promise<{ ok: boolean; status: number; body: any }> {
+  return new Promise((resolve) => {
+    const xhr = new XMLHttpRequest()
+    const startTime = Date.now()
+
+    xhr.upload.onprogress = (e) => {
+      if (!e.lengthComputable) return
+      const pct = Math.round((e.loaded / e.total) * 100)
+      const elapsed = (Date.now() - startTime) / 1000
+      const speedStr = elapsed > 0
+        ? (e.loaded / elapsed / (1024 * 1024)).toFixed(1) + ' MB/s'
+        : ''
+      onProgress(pct, speedStr)
+    }
+
+    xhr.onload = () => {
+      let body: any = null
+      try { body = JSON.parse(xhr.responseText) } catch { /* ignore */ }
+      resolve({ ok: xhr.status >= 200 && xhr.status < 300, status: xhr.status, body })
+    }
+
+    xhr.onerror = () => resolve({ ok: false, status: 0, body: null })
+    xhr.onabort = () => resolve({ ok: false, status: 0, body: null })
+
+    const apiRoot = import.meta.env.VITE_APP_API_URL || ''
+    xhr.open('POST', `${apiRoot}v1/file`)
+
+    for (const [key, value] of Object.entries(GLOBAL_HEADERS)) {
+      if (value !== undefined) xhr.setRequestHeader(key, value)
+    }
+
+    xhr.send(formData)
+  })
+}
+
 const uploadFiles = async () => {
   if (selectedFiles.value.length === 0) {
     emit('error', 'No files selected')
@@ -228,53 +273,49 @@ const uploadFiles = async () => {
   uploadProgress.value = 0
 
   try {
-    // Upload files one by one
     const totalFiles = selectedFiles.value.length
     let uploadedCount = 0
 
-    for (const file of selectedFiles.value) {
-      try {
-        // Create FormData for file upload
-        const formData = new FormData()
-        formData.append('file', file)
+    for (let i = 0; i < selectedFiles.value.length; i++) {
+      const file = selectedFiles.value[i]
+      uploadingFileIndex.value = i
+      currentFileProgress.value = 0
+      currentFileSpeed.value = ''
 
-        // Add parent folder ID if provided
-        if (props.parent) {
-          formData.append('parent', props.parent)
-        }
+      const formData = new FormData()
+      formData.append('file', file)
+      if (props.parent) {
+        formData.append('parent', props.parent)
+      }
 
-        // Make API call with FormData
-        const response = await api({
-          url: 'v1/file',
-          method: 'POST',
-          body: formData
-          // Don't set Content-Type header - browser will set it with boundary for multipart/form-data
-        })
+      const response = await uploadFileXHR(file, formData, (pct, speedStr) => {
+        currentFileProgress.value = pct
+        currentFileSpeed.value = speedStr
+      })
 
-        if (!response.ok) {
-          const errorMessage = response.body?.error || response.body?.message || 'Upload failed'
-          emit('error', `Failed to upload "${file.name}": ${errorMessage}`)
-          isUploading.value = false
-          return
-        }
-
-        uploadedCount++
-        uploadProgress.value = Math.round((uploadedCount / totalFiles) * 100)
-      } catch (fileError) {
-        emit('error', `Failed to upload "${file.name}": ${fileError instanceof Error ? fileError.message : 'Unknown error'}`)
+      if (!response.ok) {
+        const errorMessage = response.body?.error || response.body?.message || 'Upload failed'
+        emit('error', `Failed to upload "${file.name}": ${errorMessage}`)
         isUploading.value = false
+        uploadingFileIndex.value = -1
         return
       }
+
+      uploadedCount++
+      uploadProgress.value = Math.round((uploadedCount / totalFiles) * 100)
     }
 
-    // All files uploaded successfully
     emit('upload', selectedFiles.value)
     selectedFiles.value = []
     uploadProgress.value = 0
     isUploading.value = false
+    uploadingFileIndex.value = -1
+    currentFileProgress.value = 0
+    currentFileSpeed.value = ''
   } catch (error) {
     emit('error', error instanceof Error ? error.message : 'Upload failed')
     isUploading.value = false
+    uploadingFileIndex.value = -1
   }
 }
 
@@ -406,6 +447,26 @@ const hasFiles = computed(() => selectedFiles.value.length > 0)
   font-size: 0.75rem;
   color: #64748b;
   margin: 0;
+}
+
+.file-item__progress-track {
+  height: 4px;
+  background-color: #e2e8f0;
+  border-radius: 2px;
+  overflow: hidden;
+  margin-top: 4px;
+}
+
+.file-item__progress-fill {
+  height: 100%;
+  background-color: #3b82f6;
+  transition: width 0.15s ease;
+}
+
+.file-item__speed {
+  font-size: 0.7rem;
+  color: #64748b;
+  margin: 2px 0 0;
 }
 
 .file-item__remove {

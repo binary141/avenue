@@ -598,11 +598,7 @@ async function createFolder() {
 }
 
 function changeFolder(folderId: string) {
-  currentFolderId.value = folderId
-
   router.push({ path: '/', query: { folderId: folderId }})
-
-  refreshCurrentList();
 }
 
 function getDownloadURL(fileId: string): string {

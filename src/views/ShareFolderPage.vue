@@ -215,7 +215,7 @@ const isDragging = ref(false);
 // Use browser's native File type to avoid conflict with our File interface
 type File_ = globalThis.File;
 
-const apiRoot = import.meta.env.VITE_APP_API_URL || '';
+const apiRoot = (import.meta.env.VITE_APP_API_URL || '').replace(/\/$/, '');
 const token = computed(() => route.params.token as string);
 const subFolderUUID = computed(() => route.query.sub as string | undefined);
 const currentUserId = computed(() => usersStore.userData.data.id);
@@ -225,7 +225,7 @@ function authHeaders(): Record<string, string> {
 }
 
 function fileDownloadURL(fileUUID: string): string {
-  const base = `${apiRoot}api/share/folder/${token.value}/file/${fileUUID}`;
+  const base = `${apiRoot}/api/share/folder/${token.value}/file/${fileUUID}`;
   return usersStore.token ? `${base}?token=${usersStore.token}` : base;
 }
 
@@ -289,8 +289,8 @@ async function uploadFiles() {
 
   const sub = subFolderUUID.value;
   const url = sub
-    ? `${apiRoot}api/share/folder/${token.value}/upload?folder=${sub}`
-    : `${apiRoot}api/share/folder/${token.value}/upload`;
+    ? `${apiRoot}/api/share/folder/${token.value}/upload?folder=${sub}`
+    : `${apiRoot}/api/share/folder/${token.value}/upload`;
 
   const total = selectedFiles.value.length;
   let uploaded = 0;
@@ -343,8 +343,8 @@ async function fetchContents() {
 
   const sub = subFolderUUID.value;
   const url = sub
-    ? `${apiRoot}api/share/folder/${token.value}/browse/${sub}`
-    : `${apiRoot}api/share/folder/${token.value}`;
+    ? `${apiRoot}/api/share/folder/${token.value}/browse/${sub}`
+    : `${apiRoot}/api/share/folder/${token.value}`;
 
   try {
     const res = await fetch(url, { headers: authHeaders() });

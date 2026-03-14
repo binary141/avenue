@@ -79,7 +79,7 @@ const apiRoot = import.meta.env.VITE_APP_API_URL || '';
 
 const downloadURL = computed(() => {
   if (!meta.value) return '';
-  const base = `${apiRoot}share/${meta.value.token}/download`;
+  const base = `${apiRoot}api/share/${meta.value.token}/download`;
   return usersStore.token ? `${base}?token=${usersStore.token}` : base;
 });
 
@@ -102,7 +102,7 @@ onMounted(async () => {
     headers['Authorization'] = `Token ${usersStore.token}`;
   }
   try {
-    const res = await fetch(`${apiRoot}share/${token}`, { headers });
+    const res = await fetch(`${apiRoot}api/share/${token}`, { headers });
     if (res.status === 401) {
       loginRequired.value = true;
     } else if (!res.ok) {

@@ -225,7 +225,7 @@ function authHeaders(): Record<string, string> {
 }
 
 function fileDownloadURL(fileUUID: string): string {
-  const base = `${apiRoot}share/folder/${token.value}/file/${fileUUID}`;
+  const base = `${apiRoot}api/share/folder/${token.value}/file/${fileUUID}`;
   return usersStore.token ? `${base}?token=${usersStore.token}` : base;
 }
 
@@ -289,8 +289,8 @@ async function uploadFiles() {
 
   const sub = subFolderUUID.value;
   const url = sub
-    ? `${apiRoot}share/folder/${token.value}/upload?folder=${sub}`
-    : `${apiRoot}share/folder/${token.value}/upload`;
+    ? `${apiRoot}api/share/folder/${token.value}/upload?folder=${sub}`
+    : `${apiRoot}api/share/folder/${token.value}/upload`;
 
   const total = selectedFiles.value.length;
   let uploaded = 0;
@@ -343,8 +343,8 @@ async function fetchContents() {
 
   const sub = subFolderUUID.value;
   const url = sub
-    ? `${apiRoot}share/folder/${token.value}/browse/${sub}`
-    : `${apiRoot}share/folder/${token.value}`;
+    ? `${apiRoot}api/share/folder/${token.value}/browse/${sub}`
+    : `${apiRoot}api/share/folder/${token.value}`;
 
   try {
     const res = await fetch(url, { headers: authHeaders() });

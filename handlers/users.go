@@ -369,9 +369,6 @@ func (s *Server) UpdateProfile(c *gin.Context) {
 		updatingUser.LastName = *req.LastName
 	}
 
-	log.Println(req)
-	log.Println(updatingUser)
-
 	if req.Password != nil {
 		hashed, err := bcrypt.GenerateFromPassword([]byte(*req.Password), bcrypt.DefaultCost)
 		if err != nil {

@@ -16,7 +16,12 @@ services:
     depends_on:
       - postgres
     environment:
-      MAX_FILE_BYTE_SIZE: 1073741824
+      # 1GiB
+      # MAX_FILE_BYTE_SIZE: 1073741824
+
+      # 20Gib
+      MAX_FILE_BYTE_SIZE: 21474836480
+
       ENABLE_FOLDER_SHARING: true
       ENABLE_FILE_SHARING: true
       UPLOAD_DIR: "/avenue/uploads"

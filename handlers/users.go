@@ -82,17 +82,13 @@ func (s *Server) Logout(c *gin.Context) {
 	// expire the cookie
 	c.SetCookie(string(shared.USERCOOKIENAME), "", -1, "/", "localhost", false, true)
 
-	ctx := c.Request.Context()
-
-	sessID := ctx.Value(shared.SESSIONCOOKIENAME)
-
-	sessIDStr, ok := sessID.(string)
-	if !ok {
-		c.Status(http.StatusBadRequest)
+	sessID, err := c.Cookie(string(shared.SESSIONCOOKIENAME))
+	if err != nil {
+		c.Status(http.StatusOK)
 		return
 	}
 
-	err := db.DeleteSession(sessIDStr)
+	err = db.DeleteSession(sessID)
 	if err != nil {
 		c.Status(http.StatusInternalServerError)
 		return

@@ -158,8 +158,10 @@ async function getUserAndLogin() {
         isAdmin.value = isAdminLocal;
       }
     } else if (response.status == 401) {
-      usersStore.logOut();
+      await usersStore.logOut();
+      isLoggedIn.value = false;
       status.value = "loaded";
+      router.push({ name: "login", query: { next: route.fullPath } });
     } else {
       status.value = "error";
     }

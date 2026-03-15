@@ -88,8 +88,9 @@ async function handleLogin() {
   if (response.status === 200) {
     usersStore.setToken(response.body.session_id);
     usersStore.logIn(response.body.user_data);
-    const redirect = route.query.redirect as string | undefined;
-    router.replace(redirect || { name: "home" });
+    const redirect = (route.query.next || route.query.redirect) as string | undefined;
+    const saferedirect = redirect && !redirect.startsWith('/logout') ? redirect : undefined;
+    router.replace(saferedirect || { name: "home" });
   } else {
     error.value = response.body.error;
   }

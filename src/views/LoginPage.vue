@@ -31,9 +31,12 @@
       </div>
 
 
-      <ErrorMessage :msg=error @clear="error = ''"/>
+      <ErrorMessage :msg="error" @clear="error = ''" />
+      <SuccessMessage :msg="success" @clear="success = ''" />
 
       <AppButton type="submit">LOGIN</AppButton>
+
+      <p class="forgot-link"><RouterLink :to="{ name: 'forgot-password' }" class="text-link">Forgot your password?</RouterLink></p>
     </form>
 
     <p v-if="canRegister">Already have an account? <RouterLink :to="{ name: 'signup' }" class="text-link">Sign Up</RouterLink> instead.</p>
@@ -46,6 +49,7 @@ import AppButton from './components/AppButton.vue'
 import { useUsersStore } from '@/stores/users';
 import { useRouter, useRoute } from 'vue-router';
 import ErrorMessage from './components/ErrorMessage.vue';
+import SuccessMessage from './components/SuccessMessage.vue';
 import api from '@/utils/api'
 
 const usersStore = useUsersStore();
@@ -56,6 +60,7 @@ const email = ref('')
 const password = ref('')
 
 const error = ref<string | undefined>();
+const success = ref('');
 const submitting = ref(false);
 const showPassword = ref(false);
 const canRegister = ref(false);
@@ -76,6 +81,9 @@ async function loginMeta() {
 
 onMounted(() => {
   loginMeta()
+  if (route.query.reset === '1') {
+    success.value = 'Your password has been reset. You can now log in.'
+  }
 })
 
 async function handleLogin() {
@@ -112,5 +120,10 @@ async function handleLogin() {
 }
 .text-link:hover {
   color: rgb(141, 141, 255);
+}
+
+.forgot-link {
+  text-align: center;
+  font-size: 13px;
 }
 </style>

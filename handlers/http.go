@@ -231,6 +231,8 @@ func (s *Server) SetupRoutes() {
 	unsecuredRouter.POST("/login", s.Login)
 	unsecuredRouter.GET("/loginMeta", s.LoginMeta)
 	unsecuredRouter.POST("/register", s.Register)
+	unsecuredRouter.POST("/forgot-password", s.ForgotPassword)
+	unsecuredRouter.POST("/reset-password", s.ResetPassword)
 	publicFileShare := unsecuredRouter.Group("/api/share")
 	publicFileShare.Use(s.fileSharingRequired)
 	publicFileShare.GET("/:token", s.GetShareLinkMeta)

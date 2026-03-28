@@ -5,6 +5,7 @@ import (
 	"log"
 
 	"avenue/backend/db"
+	"avenue/backend/email"
 	"avenue/backend/handlers"
 	"avenue/backend/shared"
 
@@ -24,6 +25,13 @@ func main() {
 
 	if err := db.UpsertRootUser(); err != nil {
 		log.Printf("upsert root user: %v", err)
+	}
+
+	sender, err := email.NewSESSender()
+	if err != nil {
+		log.Printf("Warning: email sender not configured: %v", err)
+	} else {
+		email.Default = sender
 	}
 
 	server := handlers.SetupServer()

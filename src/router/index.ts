@@ -56,6 +56,18 @@ const router = createRouter({
             meta: { allowAnonymous: true },
         },
         {
+            path: '/forgot-password',
+            name: 'forgot-password',
+            component: () => import('@/views/ForgotPasswordPage.vue'),
+            meta: { allowAnonymous: true },
+        },
+        {
+            path: '/reset-password',
+            name: 'reset-password',
+            component: () => import('@/views/ResetPasswordPage.vue'),
+            meta: { allowAnonymous: true },
+        },
+        {
             path: '/shares',
             name: 'shares',
             component: () => import('@/views/SharesPage.vue'),

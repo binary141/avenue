@@ -32,6 +32,13 @@ services:
       DB_PASSWORD: secret
       DB_DATABASE: avenue
 
+      # emails
+      SES_FROM: ${SES_FROM:-}
+      AWS_REGION: ${AWS_REGION:-}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY:  ${AWS_SECRET_ACCESS_KEY:-}
+      GLOBAL_EMAIL_TO:  ${GLOBAL_EMAIL_TO:-}
+
   postgres:
     image: postgres:16.3
     volumes:

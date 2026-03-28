@@ -107,6 +107,36 @@ func IsUniqueEmail(email string) bool {
 	return count == 0
 }
 
+// UpdatePassword sets a new (already-hashed) password for the given user.
+func UpdatePassword(userID int64, hashedPassword string) error {
+	_, err := DB.Exec(
+		`UPDATE users SET password=$2, updated_at=now() WHERE id=$1 AND deleted_at IS NULL`,
+		userID, hashedPassword,
+	)
+	return err
+}
+
+// CreatePasswordResetToken inserts a new password reset token for the user and returns the token UUID string.
+func CreatePasswordResetToken(userID int64) (string, error) {
+	var token string
+	err := DB.QueryRow(
+		`INSERT INTO password_reset_tokens (user_id) VALUES ($1) RETURNING token::text`,
+		userID,
+	).Scan(&token)
+	return token, err
+}
+
+// ConsumePasswordResetToken validates the token, deletes it, and returns the associated user ID.
+// Returns an error if the token is not found or has expired.
+func ConsumePasswordResetToken(token string) (int64, error) {
+	var userID int64
+	err := DB.QueryRow(
+		`DELETE FROM password_reset_tokens WHERE token = $1 AND expires_at > now() RETURNING user_id`,
+		token,
+	).Scan(&userID)
+	return userID, err
+}
+
 func GetUserUsage(id int64) (int64, error) {
 	var spaceUsed int64
 	err := DB.QueryRow(`SELECT space_used FROM users WHERE id=$1 AND deleted_at IS NULL`, id).Scan(&spaceUsed)

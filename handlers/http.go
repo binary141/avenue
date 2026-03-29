@@ -297,6 +297,7 @@ func (s *Server) SetupRoutes() {
 	securedRouterV1.PUT("/user/profile", s.UpdateProfile)
 	securedRouterV1.PATCH("/user/:userID", s.UpdateProfile)
 	securedRouterV1.PATCH("/user/password", s.UpdatePassword)
+	securedRouterV1.POST("/user/:userID/send-reset-email", s.AdminSendPasswordReset)
 
 }
 

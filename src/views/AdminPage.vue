@@ -171,6 +171,19 @@
             </div>
           </div>
 
+          <div v-if="modalMode === 'edit'">
+            <ErrorMessage :msg="resetEmailError" @clear="resetEmailError = ''" />
+            <SuccessMessage :msg="resetEmailSuccess" @clear="resetEmailSuccess = ''" />
+            <AppButton
+              type="button"
+              :disabled="sendingResetEmail"
+              class="w-full px-3 py-2 bg-grey-200 rounded text-sm"
+              @click="sendResetEmail"
+            >
+              {{ sendingResetEmail ? 'Sending…' : 'Send Password Reset Email' }}
+            </AppButton>
+          </div>
+
           <ErrorMessage :msg="error" @clear="error = ''" />
 
           <div class="flex justify-end gap-3 pt-4">
@@ -200,7 +213,9 @@ import { onMounted, ref, reactive } from 'vue'
 import AppButton from './components/AppButton.vue'
 import { useUsersStore } from '@/stores/users'
 import ErrorMessage from './components/ErrorMessage.vue'
+import SuccessMessage from './components/SuccessMessage.vue'
 import type { User } from '@/types/users'
+import api from '@/utils/api'
 
 const usersStore = useUsersStore()
 const emit = defineEmits(['close-menu'])
@@ -211,6 +226,9 @@ const modalMode = ref<'create' | 'edit'>('create')
 const editingUserId = ref<number | null>(null)
 const error = ref<string>('')
 const showPassword = ref(false)
+const sendingResetEmail = ref(false)
+const resetEmailError = ref('')
+const resetEmailSuccess = ref('')
 
 interface UserForm {
   firstName: string
@@ -295,6 +313,28 @@ function openEditModal(user: User) {
 function closeModal() {
   showModal.value = false
   showPassword.value = false
+  resetEmailError.value = ''
+  resetEmailSuccess.value = ''
+}
+
+async function sendResetEmail() {
+  if (editingUserId.value === null) return
+  resetEmailError.value = ''
+  resetEmailSuccess.value = ''
+  sendingResetEmail.value = true
+
+  const res = await api({
+    url: `v1/user/${editingUserId.value}/send-reset-email`,
+    method: 'POST',
+  })
+
+  sendingResetEmail.value = false
+
+  if (res.ok || res.status === 204) {
+    resetEmailSuccess.value = 'Password reset email sent.'
+  } else {
+    resetEmailError.value = res.body?.error ?? 'Failed to send reset email.'
+  }
 }
 
 /* ---------------- API ---------------- */

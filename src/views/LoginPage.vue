@@ -76,7 +76,7 @@ async function loginMeta() {
     return
   }
 
-  canRegister.value = response.body.registration_enabled !== "false" ?? false
+  canRegister.value = response.body.registration_enabled !== "false"
 }
 
 onMounted(() => {

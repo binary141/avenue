@@ -7,10 +7,12 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
+	"strconv"
 
 	"avenue/backend/db"
 	"avenue/backend/email"
 	"avenue/backend/logger"
+	"avenue/backend/shared"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
@@ -123,5 +125,66 @@ func (s *Server) ResetPassword(c *gin.Context) {
 		logger.Errorf("email(reset password confirmation): %v", err)
 	}
 
+	c.Status(http.StatusNoContent)
+}
+
+func (s *Server) AdminSendPasswordReset(c *gin.Context) {
+	ctx := c.Request.Context()
+	callerID, err := shared.GetUserIDFromContext(ctx)
+	if err != nil {
+		respond(c, http.StatusForbidden, fmt.Errorf("user id not found: %w", err))
+		return
+	}
+
+	caller, err := db.GetUserByIDStr(callerID)
+	if err != nil {
+		respond(c, http.StatusInternalServerError, fmt.Errorf("get user: %w", err))
+		return
+	}
+
+	if !caller.IsAdmin {
+		respond(c, http.StatusUnauthorized, errors.New("you are not an admin"))
+		return
+	}
+
+	targetID, err := strconv.ParseInt(c.Param("userID"), 10, 64)
+	if err != nil {
+		respond(c, http.StatusBadRequest, errors.New("invalid user id"))
+		return
+	}
+
+	target, err := db.GetUserByID(targetID)
+	if err != nil {
+		respond(c, http.StatusNotFound, errors.New("user not found"))
+		return
+	}
+
+	token, err := db.CreatePasswordResetToken(target.ID)
+	if err != nil {
+		respond(c, http.StatusInternalServerError, fmt.Errorf("create reset token: %w", err))
+		return
+	}
+
+	scheme := "https"
+	if c.Request.TLS == nil {
+		scheme = "http"
+	}
+	resetURL := scheme + "://" + c.Request.Host + "/reset-password?token=" + token
+
+	if err := email.Send(email.Message{
+		To:      target.Email,
+		Subject: "Reset your Avenue password",
+		HTML:    forgotPasswordHTML(resetURL),
+		Text:    "An administrator has sent you a password reset for your Avenue account.\n\nClick the link below to set a new password:\n\n" + resetURL + "\n\nThis link expires in 1 hour.",
+	}); err != nil {
+		if errors.Is(err, email.NotConfigured) {
+			respond(c, http.StatusServiceUnavailable, errors.New("email is not configured"))
+			return
+		}
+		respond(c, http.StatusInternalServerError, fmt.Errorf("send email: %w", err))
+		return
+	}
+
+	logger.Infof("admin password reset email sent: target=%d by=%d", target.ID, caller.ID)
 	c.Status(http.StatusNoContent)
 }

@@ -3,10 +3,11 @@ package db
 import (
 	"embed"
 	"fmt"
-	"log"
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"avenue/backend/logger"
 )
 
 //go:embed migrations/*.sql
@@ -52,7 +53,7 @@ func RunMigrations() error {
 			return fmt.Errorf("migrations: apply %s: %w", name, err)
 		}
 
-		log.Printf("migration applied: %s", name)
+		logger.Infof("migration applied: %s", name)
 	}
 
 	return nil

@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"math"
 	"net/http"
 	"os"
@@ -15,6 +14,7 @@ import (
 	"strings"
 
 	"avenue/backend/db"
+	"avenue/backend/logger"
 	"avenue/backend/shared"
 
 	"github.com/gin-gonic/gin"
@@ -59,7 +59,7 @@ func (s *Server) Upload(c *gin.Context) {
 
 	user, err := db.GetUserByIDStr(userID)
 	if err != nil {
-		log.Printf("error getting user: %s", err.Error())
+		logger.Errorf("error getting user: %s", err.Error())
 		c.JSON(http.StatusInternalServerError, Response{
 			Error: err.Error(),
 		})
@@ -79,7 +79,7 @@ func (s *Server) Upload(c *gin.Context) {
 	if user.Quota != 0 {
 		totalUsed, err := db.GetUserUsage(userIDInt)
 		if err != nil {
-			log.Printf("error getting user quota: %s", err.Error())
+			logger.Errorf("error getting user quota: %s", err.Error())
 			c.JSON(http.StatusInternalServerError, Response{
 				Error: err.Error(),
 			})
@@ -198,7 +198,7 @@ func (s *Server) Upload(c *gin.Context) {
 			if err != nil {
 				deleteErr := db.DeleteFile(fileID, userID)
 				if deleteErr != nil {
-					log.Println(deleteErr)
+					logger.Errorf("delete file: %v", deleteErr)
 					c.JSON(http.StatusInternalServerError, Response{
 						Message: "could not delete file in db",
 						Error:   deleteErr.Error(),
@@ -220,7 +220,7 @@ func (s *Server) Upload(c *gin.Context) {
 				_ = s.fs.Remove(dstPath)
 				deleteErr := db.DeleteFile(fileID, userID)
 				if deleteErr != nil {
-					log.Println(deleteErr)
+					logger.Errorf("delete file: %v", deleteErr)
 					c.JSON(http.StatusInternalServerError, Response{
 						Message: "could not delete file in db",
 						Error:   deleteErr.Error(),
@@ -242,7 +242,7 @@ func (s *Server) Upload(c *gin.Context) {
 				_ = s.fs.Remove(dstPath)
 				deleteErr := db.DeleteFile(fileID, userID)
 				if deleteErr != nil {
-					log.Println(deleteErr)
+					logger.Errorf("delete file: %v", deleteErr)
 					c.JSON(http.StatusInternalServerError, Response{
 						Message: "could not delete file in db",
 						Error:   deleteErr.Error(),
@@ -274,14 +274,14 @@ func (s *Server) Upload(c *gin.Context) {
 
 			err = dst.Close()
 			if err != nil {
-				log.Println(err.Error())
+				logger.Errorf("close upload dest: %v", err)
 			}
 			total += written
 		}
 
 		err = part.Close()
 		if err != nil {
-			log.Println(err)
+			logger.Errorf("close upload part: %v", err)
 		}
 	}
 
@@ -497,7 +497,7 @@ func (s *Server) DeleteFile(c *gin.Context) {
 	}
 
 	if err = db.DeleteShareLinksByFileID(f.ID); err != nil {
-		log.Printf("error deleting share links for file %s: %s", f.UUID, err.Error())
+		logger.Errorf("error deleting share links for file %s: %s", f.UUID, err.Error())
 	}
 
 	err = db.UpdateUsage(f.CreatedBy, -f.FileSize)

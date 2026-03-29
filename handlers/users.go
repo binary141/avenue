@@ -8,12 +8,12 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
-	"log"
 	"net/http"
 	"strings"
 
 	"avenue/backend/db"
 	"avenue/backend/email"
+	"avenue/backend/logger"
 	"avenue/backend/shared"
 
 	"github.com/gin-gonic/gin"
@@ -90,7 +90,7 @@ func (s *Server) authorize(email, password string) (db.User, error) {
 		return user, err
 	}
 
-	log.Println(user.Password)
+	logger.Debugf("user password hash: %s", user.Password)
 
 	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password))
 	if err != nil {
@@ -139,7 +139,7 @@ func (s *Server) Register(c *gin.Context) {
 	var req RegisterRequest
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		log.Print(err)
+		logger.Errorf("bind register request: %v", err)
 		c.AbortWithStatusJSON(http.StatusBadRequest, Response{
 			Error: err.Error(),
 		})
@@ -164,7 +164,7 @@ func (s *Server) Register(c *gin.Context) {
 
 	hashedPass, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
-		log.Println(err.Error())
+		logger.Errorf("hash password: %v", err)
 		c.AbortWithStatusJSON(http.StatusUnprocessableEntity, Response{
 			Error: err.Error(),
 		})
@@ -173,7 +173,7 @@ func (s *Server) Register(c *gin.Context) {
 
 	u, err := db.CreateUser(req.Email, string(hashedPass), req.FirstName, req.LastName, isAdmin)
 	if err != nil {
-		log.Print(err)
+		logger.Errorf("create user: %v", err)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{
 			Error: err.Error(),
 		})
@@ -186,7 +186,7 @@ func (s *Server) Register(c *gin.Context) {
 			Subject: "Welcome to Avenue",
 			Text:    "Your Avenue account has been created. You can now log in at any time.",
 		}); err != nil && !errors.Is(err, email.NotConfigured) {
-			log.Printf("email(register): %v", err)
+			logger.Errorf("email(register): %v", err)
 		}
 	}(u.Email)
 
@@ -228,7 +228,7 @@ func (s *Server) CreateUser(c *gin.Context) {
 	var req CreateUserRequest
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		log.Print(err)
+		logger.Errorf("bind create user request: %v", err)
 		c.AbortWithStatusJSON(http.StatusUnauthorized, Response{Error: err.Error()})
 		return
 	}
@@ -263,7 +263,7 @@ func (s *Server) CreateUser(c *gin.Context) {
 
 	hashed, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
-		log.Println(err.Error())
+		logger.Errorf("hash password: %v", err)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{
 			Error: err.Error(),
 		})
@@ -278,7 +278,7 @@ func (s *Server) CreateUser(c *gin.Context) {
 		return
 	}
 
-	log.Printf("New User: %+v\n", nu)
+	logger.Infof("new user created: id=%d email=%s", nu.ID, nu.Email)
 
 	if req.SendEmail {
 		// Capture request fields before entering the goroutine — gin may recycle the context.
@@ -290,7 +290,7 @@ func (s *Server) CreateUser(c *gin.Context) {
 		go func(userID int64, userEmail, scheme, host string) {
 			token, err := db.CreatePasswordResetToken(userID)
 			if err != nil {
-				log.Printf("email(user created): create reset token: %v", err)
+				logger.Errorf("email(user created): create reset token: %v", err)
 				return
 			}
 			setPasswordURL := scheme + "://" + host + "/reset-password?token=" + token
@@ -300,7 +300,7 @@ func (s *Server) CreateUser(c *gin.Context) {
 				HTML:    userCreatedHTML(setPasswordURL),
 				Text:    "An administrator has created an Avenue account for you.\n\nClick the link below to set your password:\n\n" + setPasswordURL + "\n\nThis link expires in 1 hour.",
 			}); err != nil && !errors.Is(err, email.NotConfigured) {
-				log.Printf("email(user created): %v", err)
+				logger.Errorf("email(user created): %v", err)
 			}
 		}(nu.ID, nu.Email, scheme, host)
 	}
@@ -447,7 +447,7 @@ func (s *Server) UpdateProfile(c *gin.Context) {
 	if req.Password != nil {
 		hashed, err := bcrypt.GenerateFromPassword([]byte(*req.Password), bcrypt.DefaultCost)
 		if err != nil {
-			log.Println(err.Error())
+			logger.Errorf("hash password: %v", err)
 			c.AbortWithStatusJSON(http.StatusInternalServerError, Response{
 				Error: err.Error(),
 			})
@@ -500,7 +500,7 @@ func (s *Server) UpdatePassword(c *gin.Context) {
 	var req UpdatePasswordRequest
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		log.Print(err)
+		logger.Errorf("bind update password request: %v", err)
 		c.Status(http.StatusBadRequest)
 		return
 	}
@@ -515,7 +515,7 @@ func (s *Server) UpdatePassword(c *gin.Context) {
 
 	hashed, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
-		log.Println(err.Error())
+		logger.Errorf("hash password: %v", err)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{
 			Error: err.Error(),
 		})

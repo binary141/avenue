@@ -2,11 +2,11 @@ package main
 
 import (
 	"embed"
-	"log"
 
 	"avenue/backend/db"
 	"avenue/backend/email"
 	"avenue/backend/handlers"
+	"avenue/backend/logger"
 	"avenue/backend/shared"
 
 	"github.com/gin-gonic/gin"
@@ -16,20 +16,22 @@ var frontendFS embed.FS
 
 func main() {
 	if err := db.Connect(); err != nil {
-		log.Fatalf("db connect: %v", err)
+		logger.Errorf("db connect: %v", err)
+		return
 	}
 
 	if err := db.RunMigrations(); err != nil {
-		log.Fatalf("db migrations: %v", err)
+		logger.Errorf("db migrations: %v", err)
+		return
 	}
 
 	if err := db.UpsertRootUser(); err != nil {
-		log.Printf("upsert root user: %v", err)
+		logger.Warnf("upsert root user: %v", err)
 	}
 
 	sender, err := email.NewSESSender()
 	if err != nil {
-		log.Printf("Warning: email sender not configured: %v", err)
+		logger.Warnf("email sender not configured: %v", err)
 	} else {
 		email.Default = sender
 	}

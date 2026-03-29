@@ -2,8 +2,9 @@ package db
 
 import (
 	"fmt"
-	"log"
 	"os"
+
+	"avenue/backend/logger"
 
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
@@ -33,7 +34,7 @@ func Connect() error {
 		return fmt.Errorf("db: ping: %w", err)
 	}
 
-	log.Printf("connected to postgres at %s:%s/%s", host, port, dbname)
+	logger.Infof("connected to postgres at %s:%s/%s", host, port, dbname)
 	return nil
 }
 

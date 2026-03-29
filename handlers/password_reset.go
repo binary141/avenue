@@ -5,11 +5,11 @@ import (
 	"embed"
 	"errors"
 	"html/template"
-	"log"
 	"net/http"
 
 	"avenue/backend/db"
 	"avenue/backend/email"
+	"avenue/backend/logger"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
@@ -77,7 +77,7 @@ func (s *Server) ForgotPassword(c *gin.Context) {
 		Text:    "You requested a password reset for your Avenue account.\n\nClick the link below to set a new password:\n\n" + resetURL + "\n\nThis link expires in 1 hour. If you did not request this, you can safely ignore this email.",
 	}); err != nil {
 		if !errors.Is(err, email.NotConfigured) {
-			log.Printf("email(forgot password): %v", err)
+			logger.Errorf("email(forgot password): %v", err)
 		}
 	}
 
@@ -119,7 +119,7 @@ func (s *Server) ResetPassword(c *gin.Context) {
 		Subject: "Your password was changed",
 		Text:    "Your Avenue account password was just changed via a password reset. If you did not make this change, please contact your administrator immediately.",
 	}); err != nil {
-		log.Printf("email(reset password confirmation): %v", err)
+		logger.Errorf("email(reset password confirmation): %v", err)
 	}
 
 	c.Status(http.StatusNoContent)

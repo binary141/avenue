@@ -5,12 +5,12 @@ import (
 	"embed"
 	"fmt"
 	"io/fs"
-	"log"
 	"net/http"
 	"strings"
 	"time"
 
 	"avenue/backend/db"
+	"avenue/backend/logger"
 	"avenue/backend/shared"
 
 	"github.com/gin-contrib/cors"
@@ -157,7 +157,7 @@ func (s *Server) sessionCheck(c *gin.Context) {
 	parts := strings.Split(h, "Token ")
 
 	if len(parts) != 2 {
-		log.Print("Not enough parts")
+		logger.Warnf("sessionCheck: malformed Authorization header")
 		c.AbortWithStatus(http.StatusUnauthorized)
 		return
 	}
@@ -300,7 +300,7 @@ func (s *Server) Run(address string) error {
 // pingHandler is a simple handler to check if the server is running.
 func (s *Server) pingHandler(c *gin.Context) {
 	ctx := c.Request.Context()
-	log.Printf("ctx val: %s", ctx.Value(shared.USERCOOKIENAME))
+	logger.Debugf("ctx val: %s", ctx.Value(shared.USERCOOKIENAME))
 	c.JSON(200, gin.H{
 		"message": "pong",
 	})

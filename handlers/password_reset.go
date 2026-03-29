@@ -60,7 +60,7 @@ func (s *Server) ForgotPassword(c *gin.Context) {
 
 	token, err := db.CreatePasswordResetToken(user.ID)
 	if err != nil {
-		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{Error: "could not create reset token"})
+		respond(c, http.StatusInternalServerError, errors.New("could not create reset token"))
 		return
 	}
 
@@ -93,24 +93,24 @@ func (s *Server) ResetPassword(c *gin.Context) {
 
 	userID, err := db.ConsumePasswordResetToken(req.Token)
 	if err != nil {
-		c.AbortWithStatusJSON(http.StatusBadRequest, Response{Error: "invalid or expired reset token"})
+		respond(c, http.StatusBadRequest, errors.New("invalid or expired reset token"))
 		return
 	}
 
 	user, err := db.GetUserByID(userID)
 	if err != nil {
-		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{Error: "user not found"})
+		respond(c, http.StatusInternalServerError, errors.New("user not found"))
 		return
 	}
 
 	hashed, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
 	if err != nil {
-		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{Error: "could not hash password"})
+		respond(c, http.StatusInternalServerError, err)
 		return
 	}
 
 	if err := db.UpdatePassword(userID, string(hashed)); err != nil {
-		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{Error: "could not update password"})
+		respond(c, http.StatusInternalServerError, err)
 		return
 	}
 

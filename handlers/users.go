@@ -41,9 +41,7 @@ type LoginRequest struct {
 }
 
 func (s *Server) LoginMeta(c *gin.Context) {
-
 	enabled := shared.GetEnv("REGISTRATION_ENABLED", "false")
-
 	c.JSON(http.StatusOK, gin.H{"registration_enabled": enabled})
 }
 
@@ -57,19 +55,13 @@ func (s *Server) Login(c *gin.Context) {
 
 	u, err := s.authorize(req.Email, req.Password)
 	if err != nil {
-		// for now send the error in the response 🤔
-		c.AbortWithStatusJSON(http.StatusUnauthorized, Response{
-			Error: err.Error(),
-		})
+		respond(c, http.StatusUnauthorized, err)
 		return
 	}
 
 	session, err := db.CreateSession(u.ID)
 	if err != nil {
-		// for now send the error in the response 🤔
-		c.AbortWithStatusJSON(http.StatusUnauthorized, Response{
-			Error: err.Error(),
-		})
+		respond(c, http.StatusInternalServerError, err)
 		return
 	}
 
@@ -101,7 +93,6 @@ func (s *Server) authorize(email, password string) (db.User, error) {
 }
 
 func (s *Server) Logout(c *gin.Context) {
-	// expire the cookie
 	c.SetCookie(string(shared.USERCOOKIENAME), "", -1, "/", "localhost", false, true)
 
 	sessID, err := c.Cookie(string(shared.SESSIONCOOKIENAME))
@@ -110,9 +101,8 @@ func (s *Server) Logout(c *gin.Context) {
 		return
 	}
 
-	err = db.DeleteSession(sessID)
-	if err != nil {
-		c.Status(http.StatusInternalServerError)
+	if err = db.DeleteSession(sessID); err != nil {
+		respond(c, http.StatusInternalServerError, err)
 		return
 	}
 
@@ -130,53 +120,37 @@ func (s *Server) Register(c *gin.Context) {
 	enabled := strings.ToLower(shared.GetEnv("REGISTRATION_ENABLED", "false"))
 
 	if enabled == "false" {
-		c.AbortWithStatusJSON(http.StatusBadRequest, Response{
-			Error: "Registration is not enabled",
-		})
+		respond(c, http.StatusBadRequest, errors.New("registration is not enabled"))
 		return
 	}
 
 	var req RegisterRequest
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		logger.Errorf("bind register request: %v", err)
-		c.AbortWithStatusJSON(http.StatusBadRequest, Response{
-			Error: err.Error(),
-		})
+		respond(c, http.StatusBadRequest, err)
 		return
 	}
 
 	if !shared.IsValidEmail(req.Email) {
-		c.AbortWithStatusJSON(http.StatusBadRequest, Response{
-			Error: "Email is not valid",
-		})
+		respond(c, http.StatusBadRequest, errors.New("email is not valid"))
 		return
 	}
 
 	if !db.IsUniqueEmail(req.Email) {
-		c.AbortWithStatusJSON(http.StatusConflict, Response{
-			Error: "Email already exists",
-		})
+		respond(c, http.StatusConflict, errors.New("email already exists"))
+		return
+	}
+
+	hashedPass, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if err != nil {
+		respond(c, http.StatusInternalServerError, err)
 		return
 	}
 
 	isAdmin := false
-
-	hashedPass, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
-	if err != nil {
-		logger.Errorf("hash password: %v", err)
-		c.AbortWithStatusJSON(http.StatusUnprocessableEntity, Response{
-			Error: err.Error(),
-		})
-		return
-	}
-
 	u, err := db.CreateUser(req.Email, string(hashedPass), req.FirstName, req.LastName, isAdmin)
 	if err != nil {
-		logger.Errorf("create user: %v", err)
-		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{
-			Error: err.Error(),
-		})
+		respond(c, http.StatusInternalServerError, err)
 		return
 	}
 
@@ -206,44 +180,35 @@ func (s *Server) CreateUser(c *gin.Context) {
 	ctx := c.Request.Context()
 	userID, err := shared.GetUserIDFromContext(ctx)
 	if err != nil {
-		c.AbortWithStatusJSON(http.StatusForbidden, Response{
-			Error: fmt.Sprintf("User Id not found: %s", err.Error()),
-		})
+		respond(c, http.StatusForbidden, fmt.Errorf("user id not found: %w", err))
 		return
 	}
 
 	u, err := db.GetUserByIDStr(userID)
 	if err != nil {
-		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{
-			Error: err.Error(),
-		})
+		respond(c, http.StatusInternalServerError, err)
 		return
 	}
 
 	if !u.IsAdmin {
-		c.AbortWithStatusJSON(http.StatusUnauthorized, Response{Error: "You are not an admin"})
+		respond(c, http.StatusUnauthorized, errors.New("you are not an admin"))
 		return
 	}
 
 	var req CreateUserRequest
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		logger.Errorf("bind create user request: %v", err)
-		c.AbortWithStatusJSON(http.StatusUnauthorized, Response{Error: err.Error()})
+		respond(c, http.StatusBadRequest, err)
 		return
 	}
 
 	if !req.SendEmail && req.Password == nil {
-		c.AbortWithStatusJSON(http.StatusBadRequest, Response{
-			Error: "password is required when not sending an invite email",
-		})
+		respond(c, http.StatusBadRequest, errors.New("password is required when not sending an invite email"))
 		return
 	}
 
 	if !db.IsUniqueEmail(req.Email) {
-		c.AbortWithStatusJSON(http.StatusConflict, Response{
-			Error: "Email already exists",
-		})
+		respond(c, http.StatusConflict, errors.New("email already exists"))
 		return
 	}
 
@@ -255,7 +220,7 @@ func (s *Server) CreateUser(c *gin.Context) {
 	} else {
 		b := make([]byte, 32)
 		if _, err := rand.Read(b); err != nil {
-			c.AbortWithStatusJSON(http.StatusInternalServerError, Response{Error: "could not generate password"})
+			respond(c, http.StatusInternalServerError, err)
 			return
 		}
 		password = hex.EncodeToString(b)
@@ -263,18 +228,13 @@ func (s *Server) CreateUser(c *gin.Context) {
 
 	hashed, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
-		logger.Errorf("hash password: %v", err)
-		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{
-			Error: err.Error(),
-		})
+		respond(c, http.StatusInternalServerError, err)
 		return
 	}
 
 	nu, err := db.CreateUser(req.Email, string(hashed), req.FirstName, req.LastName, req.IsAdmin)
 	if err != nil {
-		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{
-			Error: err.Error(),
-		})
+		respond(c, http.StatusInternalServerError, err)
 		return
 	}
 
@@ -308,9 +268,7 @@ func (s *Server) CreateUser(c *gin.Context) {
 	// todo allow pagination
 	us, err := db.GetUsers()
 	if err != nil {
-		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{
-			Error: err.Error(),
-		})
+		respond(c, http.StatusInternalServerError, err)
 		return
 	}
 
@@ -321,31 +279,25 @@ func (s *Server) GetUsers(c *gin.Context) {
 	ctx := c.Request.Context()
 	userID, err := shared.GetUserIDFromContext(ctx)
 	if err != nil {
-		c.AbortWithStatusJSON(http.StatusBadRequest, Response{
-			Error: fmt.Sprintf("User Id not found: %s", err.Error()),
-		})
+		respond(c, http.StatusBadRequest, fmt.Errorf("user id not found: %w", err))
 		return
 	}
 
 	u, err := db.GetUserByIDStr(userID)
 	if err != nil {
-		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{
-			Error: err.Error(),
-		})
+		respond(c, http.StatusInternalServerError, err)
 		return
 	}
 
 	if !u.IsAdmin {
-		c.AbortWithStatusJSON(http.StatusUnauthorized, Response{})
+		respond(c, http.StatusUnauthorized, errors.New("unauthorized"))
 		return
 	}
 
 	// todo allow pagination
 	us, err := db.GetUsers()
 	if err != nil {
-		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{
-			Error: err.Error(),
-		})
+		respond(c, http.StatusInternalServerError, err)
 		return
 	}
 
@@ -356,17 +308,13 @@ func (s *Server) GetProfile(c *gin.Context) {
 	ctx := c.Request.Context()
 	userID, err := shared.GetUserIDFromContext(ctx)
 	if err != nil {
-		c.AbortWithStatusJSON(http.StatusBadRequest, Response{
-			Error: fmt.Sprintf("User Id not found: %s", err.Error()),
-		})
+		respond(c, http.StatusBadRequest, fmt.Errorf("user id not found: %w", err))
 		return
 	}
 
 	u, err := db.GetUserByIDStr(userID)
 	if err != nil {
-		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{
-			Error: err.Error(),
-		})
+		respond(c, http.StatusInternalServerError, err)
 		return
 	}
 
@@ -387,49 +335,37 @@ func (s *Server) UpdateProfile(c *gin.Context) {
 	ctx := c.Request.Context()
 	userID, err := shared.GetUserIDFromContext(ctx)
 	if err != nil {
-		c.AbortWithStatusJSON(http.StatusBadRequest, Response{
-			Error: "User Id not found",
-		})
+		respond(c, http.StatusBadRequest, errors.New("user id not found"))
 		return
 	}
 
 	var req UpdateProfileRequest
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.AbortWithStatusJSON(http.StatusBadRequest, Response{
-			Error: err.Error(),
-		})
+		respond(c, http.StatusBadRequest, err)
 		return
 	}
 
 	u, err := db.GetUserByIDStr(userID)
 	if err != nil {
-		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{
-			Error: err.Error(),
-		})
+		respond(c, http.StatusInternalServerError, err)
 		return
 	}
 
 	if fmt.Sprintf("%d", req.ID) != userID && !u.IsAdmin {
-		c.AbortWithStatusJSON(http.StatusBadRequest, Response{
-			Error: "Only admin users can edit another users information",
-		})
+		respond(c, http.StatusBadRequest, errors.New("only admin users can edit another user's information"))
 		return
 	}
 
 	updatingUser, err := db.GetUserByID(req.ID)
 	if err != nil {
-		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{
-			Error: err.Error(),
-		})
+		respond(c, http.StatusInternalServerError, err)
 		return
 	}
 
 	if req.Email != nil && *req.Email != updatingUser.Email {
 		if !db.IsUniqueEmail(*req.Email) {
-			c.AbortWithStatusJSON(http.StatusConflict, Response{
-				Error: "Email already exists",
-			})
+			respond(c, http.StatusConflict, errors.New("email already exists"))
 			return
 		}
 
@@ -447,10 +383,7 @@ func (s *Server) UpdateProfile(c *gin.Context) {
 	if req.Password != nil {
 		hashed, err := bcrypt.GenerateFromPassword([]byte(*req.Password), bcrypt.DefaultCost)
 		if err != nil {
-			logger.Errorf("hash password: %v", err)
-			c.AbortWithStatusJSON(http.StatusInternalServerError, Response{
-				Error: err.Error(),
-			})
+			respond(c, http.StatusInternalServerError, err)
 			return
 		}
 		updatingUser.Password = string(hashed)
@@ -459,9 +392,7 @@ func (s *Server) UpdateProfile(c *gin.Context) {
 	if req.IsAdmin != nil && u.IsAdmin {
 		otherAdmins, _ := db.HasOtherAdmins(updatingUser)
 		if !otherAdmins && !*req.IsAdmin {
-			c.AbortWithStatusJSON(http.StatusBadRequest, Response{
-				Error: "Application requires at least one Admin user",
-			})
+			respond(c, http.StatusBadRequest, errors.New("application requires at least one admin user"))
 			return
 		}
 
@@ -474,9 +405,7 @@ func (s *Server) UpdateProfile(c *gin.Context) {
 
 	updatingUser, err = db.UpdateUser(updatingUser)
 	if err != nil {
-		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{
-			Error: err.Error(),
-		})
+		respond(c, http.StatusInternalServerError, err)
 		return
 	}
 
@@ -491,43 +420,33 @@ func (s *Server) UpdatePassword(c *gin.Context) {
 	ctx := c.Request.Context()
 	userID, err := shared.GetUserIDFromContext(ctx)
 	if err != nil {
-		c.AbortWithStatusJSON(http.StatusBadRequest, Response{
-			Error: "User Id not found",
-		})
+		respond(c, http.StatusBadRequest, errors.New("user id not found"))
 		return
 	}
 
 	var req UpdatePasswordRequest
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		logger.Errorf("bind update password request: %v", err)
-		c.Status(http.StatusBadRequest)
+		respond(c, http.StatusBadRequest, err)
 		return
 	}
 
 	u, err := db.GetUserByIDStr(userID)
 	if err != nil {
-		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{
-			Error: err.Error(),
-		})
+		respond(c, http.StatusInternalServerError, err)
 		return
 	}
 
 	hashed, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
-		logger.Errorf("hash password: %v", err)
-		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{
-			Error: err.Error(),
-		})
+		respond(c, http.StatusInternalServerError, err)
 		return
 	}
 	u.Password = string(hashed)
 
 	u, err = db.UpdateUser(u)
 	if err != nil {
-		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{
-			Error: err.Error(),
-		})
+		respond(c, http.StatusInternalServerError, err)
 		return
 	}
 

@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"embed"
+	"errors"
 	"fmt"
 	"io/fs"
 	"net/http"
@@ -179,7 +180,7 @@ func (s *Server) sessionCheck(c *gin.Context) {
 	// update the session to be a rolling timeout
 	_, err := db.UpdateSession(session)
 	if err != nil {
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respond(c, http.StatusInternalServerError, errors.New("could not update session"))
 		return
 	}
 

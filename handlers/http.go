@@ -26,9 +26,15 @@ type Server struct {
 }
 
 func SetupServer() Server {
-	r := gin.Default()
-	if shared.GetEnv("APP_ENV", "dev") == "production" {
+	prod := shared.GetEnv("APP_ENV", "dev") == "production"
+	if prod {
 		gin.SetMode(gin.ReleaseMode)
+	}
+
+	r := gin.New()
+	r.Use(gin.Recovery())
+	if !prod {
+		r.Use(gin.Logger())
 	}
 
 	fs := afero.NewOsFs()

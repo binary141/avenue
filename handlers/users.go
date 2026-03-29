@@ -61,7 +61,7 @@ func (s *Server) Login(c *gin.Context) {
 
 	session, err := db.CreateSession(u.ID)
 	if err != nil {
-		respond(c, http.StatusInternalServerError, err)
+		respond(c, http.StatusInternalServerError, fmt.Errorf("create session: %w", err))
 		return
 	}
 
@@ -102,7 +102,7 @@ func (s *Server) Logout(c *gin.Context) {
 	}
 
 	if err = db.DeleteSession(sessID); err != nil {
-		respond(c, http.StatusInternalServerError, err)
+		respond(c, http.StatusInternalServerError, fmt.Errorf("delete session: %w", err))
 		return
 	}
 
@@ -143,14 +143,14 @@ func (s *Server) Register(c *gin.Context) {
 
 	hashedPass, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
-		respond(c, http.StatusInternalServerError, err)
+		respond(c, http.StatusInternalServerError, fmt.Errorf("hash password: %w", err))
 		return
 	}
 
 	isAdmin := false
 	u, err := db.CreateUser(req.Email, string(hashedPass), req.FirstName, req.LastName, isAdmin)
 	if err != nil {
-		respond(c, http.StatusInternalServerError, err)
+		respond(c, http.StatusInternalServerError, fmt.Errorf("create user: %w", err))
 		return
 	}
 
@@ -186,7 +186,7 @@ func (s *Server) CreateUser(c *gin.Context) {
 
 	u, err := db.GetUserByIDStr(userID)
 	if err != nil {
-		respond(c, http.StatusInternalServerError, err)
+		respond(c, http.StatusInternalServerError, fmt.Errorf("get user: %w", err))
 		return
 	}
 
@@ -220,7 +220,7 @@ func (s *Server) CreateUser(c *gin.Context) {
 	} else {
 		b := make([]byte, 32)
 		if _, err := rand.Read(b); err != nil {
-			respond(c, http.StatusInternalServerError, err)
+			respond(c, http.StatusInternalServerError, fmt.Errorf("generate password: %w", err))
 			return
 		}
 		password = hex.EncodeToString(b)
@@ -228,13 +228,13 @@ func (s *Server) CreateUser(c *gin.Context) {
 
 	hashed, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
-		respond(c, http.StatusInternalServerError, err)
+		respond(c, http.StatusInternalServerError, fmt.Errorf("hash password: %w", err))
 		return
 	}
 
 	nu, err := db.CreateUser(req.Email, string(hashed), req.FirstName, req.LastName, req.IsAdmin)
 	if err != nil {
-		respond(c, http.StatusInternalServerError, err)
+		respond(c, http.StatusInternalServerError, fmt.Errorf("create user: %w", err))
 		return
 	}
 
@@ -268,7 +268,7 @@ func (s *Server) CreateUser(c *gin.Context) {
 	// todo allow pagination
 	us, err := db.GetUsers()
 	if err != nil {
-		respond(c, http.StatusInternalServerError, err)
+		respond(c, http.StatusInternalServerError, fmt.Errorf("list users: %w", err))
 		return
 	}
 
@@ -285,7 +285,7 @@ func (s *Server) GetUsers(c *gin.Context) {
 
 	u, err := db.GetUserByIDStr(userID)
 	if err != nil {
-		respond(c, http.StatusInternalServerError, err)
+		respond(c, http.StatusInternalServerError, fmt.Errorf("get user: %w", err))
 		return
 	}
 
@@ -297,7 +297,7 @@ func (s *Server) GetUsers(c *gin.Context) {
 	// todo allow pagination
 	us, err := db.GetUsers()
 	if err != nil {
-		respond(c, http.StatusInternalServerError, err)
+		respond(c, http.StatusInternalServerError, fmt.Errorf("list users: %w", err))
 		return
 	}
 
@@ -314,7 +314,7 @@ func (s *Server) GetProfile(c *gin.Context) {
 
 	u, err := db.GetUserByIDStr(userID)
 	if err != nil {
-		respond(c, http.StatusInternalServerError, err)
+		respond(c, http.StatusInternalServerError, fmt.Errorf("get user: %w", err))
 		return
 	}
 
@@ -348,7 +348,7 @@ func (s *Server) UpdateProfile(c *gin.Context) {
 
 	u, err := db.GetUserByIDStr(userID)
 	if err != nil {
-		respond(c, http.StatusInternalServerError, err)
+		respond(c, http.StatusInternalServerError, fmt.Errorf("get user: %w", err))
 		return
 	}
 
@@ -359,7 +359,7 @@ func (s *Server) UpdateProfile(c *gin.Context) {
 
 	updatingUser, err := db.GetUserByID(req.ID)
 	if err != nil {
-		respond(c, http.StatusInternalServerError, err)
+		respond(c, http.StatusInternalServerError, fmt.Errorf("get target user: %w", err))
 		return
 	}
 
@@ -383,7 +383,7 @@ func (s *Server) UpdateProfile(c *gin.Context) {
 	if req.Password != nil {
 		hashed, err := bcrypt.GenerateFromPassword([]byte(*req.Password), bcrypt.DefaultCost)
 		if err != nil {
-			respond(c, http.StatusInternalServerError, err)
+			respond(c, http.StatusInternalServerError, fmt.Errorf("hash password: %w", err))
 			return
 		}
 		updatingUser.Password = string(hashed)
@@ -405,7 +405,7 @@ func (s *Server) UpdateProfile(c *gin.Context) {
 
 	updatingUser, err = db.UpdateUser(updatingUser)
 	if err != nil {
-		respond(c, http.StatusInternalServerError, err)
+		respond(c, http.StatusInternalServerError, fmt.Errorf("update user: %w", err))
 		return
 	}
 
@@ -433,20 +433,20 @@ func (s *Server) UpdatePassword(c *gin.Context) {
 
 	u, err := db.GetUserByIDStr(userID)
 	if err != nil {
-		respond(c, http.StatusInternalServerError, err)
+		respond(c, http.StatusInternalServerError, fmt.Errorf("get user: %w", err))
 		return
 	}
 
 	hashed, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
-		respond(c, http.StatusInternalServerError, err)
+		respond(c, http.StatusInternalServerError, fmt.Errorf("hash password: %w", err))
 		return
 	}
 	u.Password = string(hashed)
 
 	u, err = db.UpdateUser(u)
 	if err != nil {
-		respond(c, http.StatusInternalServerError, err)
+		respond(c, http.StatusInternalServerError, fmt.Errorf("update password: %w", err))
 		return
 	}
 

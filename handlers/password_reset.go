@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"embed"
 	"errors"
+	"fmt"
 	"html/template"
 	"net/http"
 
@@ -105,12 +106,12 @@ func (s *Server) ResetPassword(c *gin.Context) {
 
 	hashed, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
 	if err != nil {
-		respond(c, http.StatusInternalServerError, err)
+		respond(c, http.StatusInternalServerError, fmt.Errorf("hash password: %w", err))
 		return
 	}
 
 	if err := db.UpdatePassword(userID, string(hashed)); err != nil {
-		respond(c, http.StatusInternalServerError, err)
+		respond(c, http.StatusInternalServerError, fmt.Errorf("update password: %w", err))
 		return
 	}
 

@@ -64,7 +64,7 @@ export const useUsersStore = defineStore('users', () => {
         return response;
     }
 
-    async function createUser(userData: { email: string; firstName: string; lastName: string; password: string | null; quota: number; }) {
+    async function createUser(userData: { email: string; firstName: string; lastName: string; password?: string | null; quota: number; isAdmin?: boolean; sendEmail?: boolean }) {
         const response = await api({
             url: "v1/user",
             method: "POST",

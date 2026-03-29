@@ -73,12 +73,12 @@
         <form @submit.prevent="submitUser" class="space-y-4">
           <div>
             <label class="block text-sm font-medium mb-1">First Name</label>
-            <input v-model="form.firstName" type="text" class="input" />
+            <input v-model="form.firstName" type="text" class="input" :required="modalMode === 'create'" />
           </div>
 
           <div>
             <label class="block text-sm font-medium mb-1">Last Name</label>
-            <input v-model="form.lastName" type="text" class="input" />
+            <input v-model="form.lastName" type="text" class="input" :required="modalMode === 'create'" />
           </div>
 
           <div>
@@ -131,21 +131,44 @@
             </p>
           </div>
 
+          <!-- Send invite email (create only) -->
+          <div v-if="modalMode === 'create'" class="flex items-center gap-2">
+            <input
+              id="sendEmail"
+              type="checkbox"
+              v-model="form.sendEmail"
+              class="h-4 w-4 rounded border-grey-300"
+            />
+            <label for="sendEmail" class="text-sm font-medium">
+              Send invite email to set password
+            </label>
+          </div>
+
           <!-- Password -->
-          <div>
+          <div v-if="modalMode === 'edit' || !form.sendEmail">
             <label class="block text-sm font-medium mb-1">
               Password
               <span v-if="modalMode === 'edit'" class="text-xs opacity-60">
                 (leave blank to keep unchanged)
               </span>
             </label>
-            <input
-              v-model="form.password"
-              type="password"
-              class="input"
-              autocomplete="new-password"
-              :required="modalMode === 'create'"
-            />
+            <div class="relative">
+              <input
+                v-model="form.password"
+                :type="showPassword ? 'text' : 'password'"
+                class="input"
+                autocomplete="new-password"
+                :required="modalMode === 'create'"
+              />
+              <button
+                type="button"
+                @click="showPassword = !showPassword"
+                class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400"
+              >
+                <span v-if="showPassword" class="text-2xl">🐵</span>
+                <span v-else class="text-2xl">🙈</span>
+              </button>
+            </div>
           </div>
 
           <ErrorMessage :msg="error" @clear="error = ''" />
@@ -187,6 +210,7 @@ const showModal = ref(false)
 const modalMode = ref<'create' | 'edit'>('create')
 const editingUserId = ref<number | null>(null)
 const error = ref<string>('')
+const showPassword = ref(false)
 
 interface UserForm {
   firstName: string
@@ -196,6 +220,7 @@ interface UserForm {
   isAdmin: boolean
   quotaValue: number
   quotaUnit: 'MiB' | 'GiB'
+  sendEmail: boolean
 }
 
 const form = reactive<UserForm>({
@@ -206,6 +231,7 @@ const form = reactive<UserForm>({
   isAdmin: false,
   quotaValue: 0,
   quotaUnit: 'GiB',
+  sendEmail: false,
 })
 
 onMounted(fetchUsers)
@@ -268,6 +294,7 @@ function openEditModal(user: User) {
 
 function closeModal() {
   showModal.value = false
+  showPassword.value = false
 }
 
 /* ---------------- API ---------------- */
@@ -275,10 +302,18 @@ function closeModal() {
 async function submitUser() {
   if (modalMode.value === 'create') {
     const res = await usersStore.createUser({
-      ...form,
+      email: form.email,
+      firstName: form.firstName,
+      lastName: form.lastName,
+      isAdmin: form.isAdmin,
       quota: quotaToBytes(),
+      sendEmail: form.sendEmail,
+      ...(form.sendEmail ? {} : { password: form.password }),
     })
-    if (!res.ok) return
+    if (!res.ok) {
+      error.value = res.body?.error ?? 'Failed to create user'
+      return
+    }
   } else if (editingUserId.value !== null) {
     const req = {
       id: editingUserId.value,
@@ -315,6 +350,7 @@ function resetForm() {
   form.isAdmin = false
   form.quotaValue = 0
   form.quotaUnit = 'GiB'
+  form.sendEmail = false
 }
 </script>
 

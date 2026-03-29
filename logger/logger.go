@@ -9,8 +9,18 @@ import (
 var log *slog.Logger
 
 func init() {
+	level := slog.LevelDebug
+	switch os.Getenv("LOG_LEVEL") {
+	case "info":
+		level = slog.LevelInfo
+	case "warn":
+		level = slog.LevelWarn
+	case "error":
+		level = slog.LevelError
+	}
+
 	log = slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-		Level: slog.LevelDebug,
+		Level: level,
 	}))
 }
 

@@ -151,8 +151,8 @@
               @click.stop="onFileCheckboxClick(file.uuid, index, $event)"
             />
 
-            <span class="file-icon">📄</span>
-            <span class="file-name">{{ formatFileName(file.name) }}</span>
+            <span class="file-icon cursor-pointer" @click.stop="viewingFile = file">📄</span>
+            <span class="file-name cursor-pointer" @click.stop="viewingFile = file">{{ formatFileName(file.name) }}</span>
             <span class="file-size">{{ formatFileSize(file.file_size) }}</span>
             <span class="file-extension">{{ file.extension }}</span>
 

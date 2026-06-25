@@ -1,33 +1,24 @@
 <template>
-  <div class="fixed inset-0 bg-black/75 z-50 flex flex-col" @click.self="emit('close')">
+  <div class="viewer-backdrop fixed inset-0 z-50 flex flex-col" @click.self="emit('close')">
     <!-- Header -->
-    <div class="flex items-center justify-between px-4 py-3 bg-white border-b shadow-sm shrink-0">
-      <span class="font-semibold text-gray-800 truncate max-w-[60%]">{{ file.name }}</span>
+    <div class="viewer-header flex items-center justify-between px-4 py-3 shrink-0">
+      <span class="viewer-filename truncate">{{ file.name }}</span>
       <div class="flex items-center gap-3">
-        <a
-          :href="downloadUrl"
-          :download="file.name"
-          class="text-sm px-3 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700"
-        >
-          Download
+        <a :href="downloadUrl" :download="file.name">
+          <AppButton>Download</AppButton>
         </a>
-        <button
-          @click="emit('close')"
-          class="text-gray-500 hover:text-gray-800 text-2xl leading-none"
-        >
-          &times;
-        </button>
+        <button class="viewer-close" @click="emit('close')" aria-label="Close">&times;</button>
       </div>
     </div>
 
     <!-- Content area -->
-    <div class="flex-1 overflow-hidden flex items-center justify-center bg-gray-100">
-      <div v-if="loading" class="flex flex-col items-center gap-3 text-gray-500">
-        <SpinnerView />
-        <span class="text-sm">Loading preview...</span>
+    <div class="viewer-content flex-1 overflow-hidden flex items-center justify-center">
+      <div v-if="loading" class="flex flex-col items-center gap-3">
+        <SpinnerView :size="36" color="var(--text-secondary)" />
+        <span class="viewer-loading-text">Loading preview...</span>
       </div>
 
-      <p v-else-if="loadError" class="text-red-600">{{ loadError }}</p>
+      <p v-else-if="loadError" class="viewer-error">{{ loadError }}</p>
 
       <!-- Image -->
       <img
@@ -46,19 +37,15 @@
       />
 
       <!-- Text -->
-      <div v-else-if="viewType === 'text'" class="w-full h-full overflow-auto p-6">
-        <pre class="text-sm text-gray-800 whitespace-pre-wrap break-words font-mono">{{ textContent }}</pre>
+      <div v-else-if="viewType === 'text'" class="viewer-text-wrap w-full h-full overflow-auto p-6">
+        <pre class="viewer-pre">{{ textContent }}</pre>
       </div>
 
       <!-- Unsupported -->
-      <div v-else class="text-center space-y-4 p-8">
-        <p class="text-gray-600">No preview available for this file type.</p>
-        <a
-          :href="downloadUrl"
-          :download="file.name"
-          class="inline-block px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-        >
-          Download to view
+      <div v-else class="flex flex-col items-center gap-4">
+        <p class="viewer-unsupported-msg">No preview available for this file type.</p>
+        <a :href="downloadUrl" :download="file.name">
+          <AppButton>Download to view</AppButton>
         </a>
       </div>
     </div>
@@ -69,6 +56,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import type { File } from '@/types/folder';
 import SpinnerView from '@/views/components/SpinnerView.vue';
+import AppButton from '@/views/components/AppButton.vue';
 
 const props = defineProps<{
   file: File;
@@ -102,7 +90,7 @@ const MIME_BY_EXT: Record<string, string> = {
   pdf: 'application/pdf',
 };
 
-const TEXT_SIZE_LIMIT = 5 * 1024 * 1024; // 5 MB
+const TEXT_SIZE_LIMIT = 5 * 1024 * 1024;
 
 const loading = ref(false);
 const loadError = ref('');
@@ -159,3 +147,62 @@ onUnmounted(() => {
   document.removeEventListener('keydown', onKeyDown);
 });
 </script>
+
+<style scoped>
+.viewer-backdrop {
+  background-color: rgba(0, 0, 0, 0.85);
+}
+
+.viewer-header {
+  background-color: var(--gray-2);
+  border-bottom: 1px solid var(--gray-4);
+}
+
+.viewer-filename {
+  font-family: "Inter", sans-serif;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  max-width: 60%;
+}
+
+.viewer-close {
+  font-size: 22px;
+  line-height: 1;
+  color: var(--text-secondary);
+  transition: color 0.15s;
+}
+.viewer-close:hover {
+  color: var(--text);
+}
+
+.viewer-content {
+  background-color: var(--gray-3);
+}
+
+.viewer-loading-text,
+.viewer-unsupported-msg {
+  color: var(--text-secondary);
+  font-family: "Inter", sans-serif;
+  font-size: 14px;
+}
+
+.viewer-error {
+  color: #e57373;
+  font-family: "Inter", sans-serif;
+  font-size: 14px;
+}
+
+.viewer-text-wrap {
+  background-color: var(--gray-2);
+}
+
+.viewer-pre {
+  font-family: "Courier New", Courier, monospace;
+  font-size: 13px;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-words;
+  margin: 0;
+}
+</style>

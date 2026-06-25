@@ -161,6 +161,7 @@
             <span class="file-download">
               <a @click.stop :href="getDownloadURL(file.uuid)" :download="file.name">⬇️</a>
             </span>
+            <span class="cursor-pointer" @click.stop="viewingFile = file" title="Preview">👁️</span>
             <span v-if="fileSharingEnabled" class="cursor-pointer inline-flex items-center gap-0.5" @click.stop="openShareModal(file)" title="Share">
               🔗<span v-if="sharedFileCounts[file.uuid]" class="share-count">{{ sharedFileCounts[file.uuid] }}</span>
             </span>
@@ -412,6 +413,14 @@
       </div>
     </div>
 
+    <!-- File Viewer -->
+    <FileViewer
+      v-if="viewingFile"
+      :file="viewingFile"
+      :download-url="getDownloadURL(viewingFile.uuid)"
+      @close="viewingFile = null"
+    />
+
   </div>
 </template>
 
@@ -426,6 +435,7 @@ import SpinnerView from './components/SpinnerView.vue';
 import ErrorMessage from './components/ErrorMessage.vue';
 import FileUploader from '@/components/FileUploader.vue';
 import FileUsageBar from '@/components/FileUsageBar.vue';
+import FileViewer from '@/components/FileViewer.vue';
 import { useUsersStore } from '../stores/users';
 
 const route = useRoute();
@@ -452,6 +462,8 @@ const currentFolderId = ref<string>('');
 const usersStore = useUsersStore();
 
 // ----- Modal State -----
+const viewingFile = ref<File | null>(null);
+
 const editingFile = ref<File | null>(null);
 const newFileName = ref('');
 

@@ -151,8 +151,8 @@
               @click.stop="onFileCheckboxClick(file.uuid, index, $event)"
             />
 
-            <span class="file-icon cursor-pointer" @click.stop="viewingFile = file">📄</span>
-            <span class="file-name cursor-pointer" @click.stop="viewingFile = file">{{ formatFileName(file.name) }}</span>
+            <span class="file-icon cursor-pointer" @click.stop="openFileViewer(file)">📄</span>
+            <span class="file-name cursor-pointer" @click.stop="openFileViewer(file)">{{ formatFileName(file.name) }}</span>
             <span class="file-size">{{ formatFileSize(file.file_size) }}</span>
             <span class="file-extension">{{ file.extension }}</span>
 
@@ -161,7 +161,7 @@
             <span class="file-download">
               <a @click.stop :href="getDownloadURL(file.uuid)" :download="file.name">⬇️</a>
             </span>
-            <span class="cursor-pointer" @click.stop="viewingFile = file" title="Preview">👁️</span>
+            <span class="cursor-pointer" @click.stop="openFileViewer(file)" title="Preview">👁️</span>
             <span v-if="fileSharingEnabled" class="cursor-pointer inline-flex items-center gap-0.5" @click.stop="openShareModal(file)" title="Share">
               🔗<span v-if="sharedFileCounts[file.uuid]" class="share-count">{{ sharedFileCounts[file.uuid] }}</span>
             </span>
@@ -418,7 +418,7 @@
       v-if="viewingFile"
       :file="viewingFile"
       :download-url="getDownloadURL(viewingFile.uuid)"
-      @close="viewingFile = null"
+      @close="closeFileViewer"
     />
 
   </div>
@@ -463,6 +463,26 @@ const usersStore = useUsersStore();
 
 // ----- Modal State -----
 const viewingFile = ref<File | null>(null);
+
+function openFileViewer(file: File) {
+  viewingFile.value = file;
+  router.push({ query: { ...route.query, preview: file.uuid } });
+}
+
+function closeFileViewer() {
+  router.back();
+}
+
+watch(
+  () => route.query.preview,
+  (previewId) => {
+    if (!previewId) {
+      viewingFile.value = null;
+    } else if (previewId !== viewingFile.value?.uuid) {
+      viewingFile.value = files.value.find(f => f.uuid === previewId) ?? null;
+    }
+  }
+);
 
 const editingFile = ref<File | null>(null);
 const newFileName = ref('');

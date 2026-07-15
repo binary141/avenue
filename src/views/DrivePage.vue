@@ -26,6 +26,7 @@
             v-model="folderName"
             type="text"
             class="w-full"
+            @keyup.enter="createFolder"
           />
         </div>
 
@@ -92,12 +93,23 @@
       <BreadCrumbs :breadcrumbs=breadcrumbs />
 
       <div class="toolbar-controls flex items-center gap-2">
-        <input
-          v-model="searchQuery"
-          type="text"
-          placeholder="Search this folder…"
-          class="search-input"
-        />
+        <div class="search-input-wrap">
+          <input
+            v-model="searchQuery"
+            type="text"
+            placeholder="Search this folder…"
+            class="search-input"
+          />
+          <button
+            v-if="searchQuery"
+            type="button"
+            class="search-clear-button"
+            title="Clear search"
+            @click="searchQuery = ''"
+          >
+            ✕
+          </button>
+        </div>
         <select v-model="sortKey" class="sort-select">
           <option value="name">Name</option>
           <option value="size">Size</option>
@@ -1343,10 +1355,36 @@ onUnmounted(() => {
   margin-bottom: -0.5rem;
 }
 
+.search-input-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
 .search-input {
   height: 36px !important;
   width: 200px;
   font-size: 0.85rem !important;
+  padding-right: 28px !important;
+}
+
+.search-clear-button {
+  position: absolute;
+  right: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.4em;
+  height: 1.4em;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  color: var(--text-tertiary);
+  cursor: pointer;
+}
+
+.search-clear-button:hover {
+  background-color: var(--gray-4);
+  color: var(--text);
 }
 
 .sort-select {

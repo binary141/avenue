@@ -229,6 +229,11 @@
         <p class="empty-state-hint">Drag files in above, or click the upload area to get started.</p>
       </div>
 
+      <!-- Searching -->
+      <div v-else-if="!loading && searching" class="empty-state">
+        <SpinnerView />
+      </div>
+
       <!-- No Search Results -->
       <div v-else-if="!loading && (folders.length > 0 || files.length > 0) && filteredFolders.length === 0 && filteredFiles.length === 0" class="empty-state">
         <span class="empty-state-icon">🔍</span>
@@ -590,6 +595,35 @@ const searchQuery = ref('')
 const sortKey = ref<'name' | 'size' | 'date'>('name')
 const sortDir = ref<'asc' | 'desc'>('asc')
 
+// Folder search stays client-side (folders aren't covered by the search API).
+// File search hits the backend, which does a `name LIKE 'query%'` prefix match.
+const fileSearchResults = ref<File[] | null>(null)
+const searching = ref(false)
+let searchDebounceHandle: ReturnType<typeof setTimeout> | null = null
+
+async function runFileSearch(query: string, folderId: string) {
+  searching.value = true
+  const url = folderId
+    ? `v1/folder/${folderId}/files/${encodeURIComponent(query)}`
+    : `v1/folder/files/${encodeURIComponent(query)}`
+
+  const response = await api({ url, method: 'GET' })
+  searching.value = false
+  fileSearchResults.value = response.ok && Array.isArray(response.body) ? response.body : []
+}
+
+watch([searchQuery, currentFolderId], ([query, folderId]) => {
+  if (searchDebounceHandle) clearTimeout(searchDebounceHandle)
+
+  const trimmed = query.trim()
+  if (!trimmed) {
+    fileSearchResults.value = null
+    return
+  }
+
+  searchDebounceHandle = setTimeout(() => runFileSearch(trimmed, folderId), 250)
+})
+
 const filteredFolders = computed(() => {
   const q = searchQuery.value.trim().toLowerCase()
   const list = q ? folders.value.filter(f => f.name.toLowerCase().includes(q)) : folders.value.slice()
@@ -597,8 +631,8 @@ const filteredFolders = computed(() => {
 })
 
 const filteredFiles = computed(() => {
-  const q = searchQuery.value.trim().toLowerCase()
-  const list = q ? files.value.filter(f => f.name.toLowerCase().includes(q)) : files.value.slice()
+  const isSearching = searchQuery.value.trim().length > 0
+  const list = (isSearching ? fileSearchResults.value ?? [] : files.value).slice()
 
   return list.sort((a, b) => {
     let cmp = 0

@@ -278,6 +278,8 @@ func (s *Server) SetupRoutes() {
 	secureFolderShare.DELETE("/share/folder/:token", s.RevokeShareFolderLink)
 
 	securedRouterV1.GET("/file/list", s.ListFiles)
+	securedRouterV1.GET("/folder/files/:fileName", s.SearchFiles) // search root folder
+	securedRouterV1.GET("/folder/:folderID/files/:fileName", s.SearchFiles)
 	securedRouterV1.GET("/file/:fileID", s.GetFile)
 	securedRouterV1.PATCH("/file/:fileID/:fileName", s.UpdateFileName)
 	securedRouterV1.DELETE("/file/:fileID", s.DeleteFile)

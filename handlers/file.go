@@ -344,6 +344,35 @@ func (s *Server) ListFiles(c *gin.Context) {
 	c.JSON(http.StatusOK, files)
 }
 
+func (s *Server) SearchFiles(c *gin.Context) {
+	userID, err := shared.GetUserIDFromContext(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Message: "could not get user id",
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	fileName := c.Param("fileName")
+	if fileName == "" {
+		c.JSON(http.StatusBadRequest, Response{
+			Message: "search query can't be empty",
+		})
+		return
+	}
+
+	files, err := db.SearchChildFiles(c.Param("folderID"), userID, fileName)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Message: "could not search files",
+			Error:   err.Error(),
+		})
+		return
+	}
+	c.JSON(http.StatusOK, files)
+}
+
 func (s *Server) UpdateFileName(c *gin.Context) {
 	userID, err := shared.GetUserIDFromContext(c.Request.Context())
 	if err != nil {

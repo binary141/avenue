@@ -2,6 +2,7 @@ package db
 
 import (
 	"database/sql"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -162,6 +163,53 @@ func ListChildFile(parentID, ownerID string) ([]File, error) {
 			FROM files
 			WHERE parent_id = (SELECT id FROM folders WHERE uuid = $1 AND owner_id = $2::BIGINT)
 		`, parentID, ownerID)
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var files []File
+	for rows.Next() {
+		var f File
+		if err := rows.Scan(&f.ID, &f.UUID, &f.Name, &f.Extension, &f.MimeType, &f.FileSize, &f.CreatedBy, &f.CreatedAt); err != nil {
+			return nil, err
+		}
+		files = append(files, f)
+	}
+	return files, rows.Err()
+}
+
+// escapeLikePattern escapes LIKE wildcard characters so user input is
+// matched literally except for the trailing '%' SearchChildFiles appends.
+func escapeLikePattern(s string) string {
+	replacer := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+	return replacer.Replace(s)
+}
+
+// SearchChildFiles returns files directly inside parentID (or the root, if
+// parentID is "") owned by ownerID whose name starts with namePrefix.
+func SearchChildFiles(parentID, ownerID, namePrefix string) ([]File, error) {
+	pattern := escapeLikePattern(namePrefix) + "%"
+
+	var (
+		rows *sql.Rows
+		err  error
+	)
+
+	if parentID == "" {
+		rows, err = DB.Query(`
+			SELECT id, uuid, name, extension, mime_type, file_size, created_by, created_at
+			FROM files
+			WHERE parent_id IS NULL AND created_by=$1::BIGINT AND name LIKE $2 ESCAPE '\'
+		`, ownerID, pattern)
+	} else {
+		rows, err = DB.Query(`
+			SELECT id, uuid, name, extension, mime_type, file_size, created_by, created_at
+			FROM files
+			WHERE parent_id = (SELECT id FROM folders WHERE uuid = $1 AND owner_id = $3::BIGINT)
+			  AND name LIKE $2 ESCAPE '\'
+		`, parentID, pattern, ownerID)
 	}
 	if err != nil {
 		return nil, err

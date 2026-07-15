@@ -94,18 +94,42 @@
 
     <ErrorMessage :msg=error @clear="error = ''"/>
 
-    <BreadCrumbs :breadcrumbs=breadcrumbs>A</BreadCrumbs>
+    <div class="toolbar flex items-center justify-between gap-3 w-full flex-wrap">
+      <BreadCrumbs :breadcrumbs=breadcrumbs />
 
+      <div class="toolbar-controls flex items-center gap-2">
+        <input
+          v-model="searchQuery"
+          type="text"
+          placeholder="Search this folder…"
+          class="search-input"
+        />
+        <select v-model="sortKey" class="sort-select">
+          <option value="name">Name</option>
+          <option value="size">Size</option>
+          <option value="date">Date</option>
+        </select>
+        <button
+          type="button"
+          class="sort-dir-button"
+          :title="sortDir === 'asc' ? 'Ascending' : 'Descending'"
+          @click="sortDir = sortDir === 'asc' ? 'desc' : 'asc'"
+        >
+          {{ sortDir === 'asc' ? '↑' : '↓' }}
+        </button>
+      </div>
+    </div>
 
     <div v-if="!loading" class="folder-contents flex flex-col gap-4">
       <!-- Folders Section -->
-      <div v-if="folders.length > 0" class="folders-section">
+      <div v-if="filteredFolders.length > 0" class="folders-section">
         <h2>Folders</h2>
         <div class="items-list flex flex-col gap-2">
           <div
-            v-for="(folder, index) in folders"
+            v-for="(folder, index) in filteredFolders"
             :key="folder.uuid"
             class="folder-item card flex flex-row items-center gap-3 p-3"
+            :class="{ 'item--selected': selectedFolders.has(folder.uuid) }"
           >
             <!-- Checkbox -->
             <input
@@ -116,19 +140,25 @@
 
             <!-- Folder clickable name -->
             <span
-              class="folder-info flex-1 flex items-center gap-2 cursor-pointer"
+              class="folder-info flex-1 flex items-center gap-2 cursor-pointer min-w-0"
               @click="changeFolder(folder.uuid)"
             >
               <span class="folder-icon">📁</span>
               <span class="folder-name">{{ folder.name }}</span>
+              <span v-if="sharedFolderCounts[folder.uuid]" class="shared-badge" title="Shared">
+                🔗 {{ sharedFolderCounts[folder.uuid] }}
+              </span>
             </span>
 
             <!-- Actions -->
-            <span class="folder-actions flex items-center gap-2">
-              <span class="file-edit cursor-pointer" @click.stop="openFolderEditModal(folder)">✏️</span>
-              <span class="file-delete cursor-pointer" @click.stop="deleteFolder(folder.uuid)">🗑️</span>
-              <span v-if="folderSharingEnabled" class="cursor-pointer inline-flex items-center gap-0.5" @click.stop="openFolderShareModal(folder)" title="Share folder">
-                🔗<span v-if="sharedFolderCounts[folder.uuid]" class="share-count">{{ sharedFolderCounts[folder.uuid] }}</span>
+            <span class="row-actions flex items-center gap-1">
+              <span class="row-menu-wrap">
+                <span class="icon-btn" title="More" @click.stop="toggleRowMenu('folder-' + folder.uuid)">⋮</span>
+                <div v-if="openMenuId === 'folder-' + folder.uuid" class="row-menu" @click.stop>
+                  <button class="row-menu-item" @click="openFolderEditModal(folder); openMenuId = null">Rename</button>
+                  <button v-if="folderSharingEnabled" class="row-menu-item" @click="openFolderShareModal(folder); openMenuId = null">Share</button>
+                  <button class="row-menu-item row-menu-item--danger" @click="deleteFolder(folder.uuid); openMenuId = null">Delete</button>
+                </div>
               </span>
             </span>
           </div>
@@ -136,13 +166,14 @@
       </div>
 
       <!-- Files Section -->
-      <div v-if="files.length > 0" class="files-section">
+      <div v-if="filteredFiles.length > 0" class="files-section">
         <h2>Files</h2>
         <div class="items-list flex flex-col gap-2">
           <div
-            v-for="(file, index) in files"
+            v-for="(file, index) in filteredFiles"
             :key="file.uuid"
             class="file-item card flex flex-row items-center gap-3 p-3"
+            :class="{ 'item--selected': selectedFiles.has(file.uuid) }"
           >
             <!-- Checkbox -->
             <input
@@ -158,19 +189,34 @@
               alt=""
               @click.stop="openFileViewer(file)"
             />
-            <span v-else class="file-icon cursor-pointer" @click.stop="openFileViewer(file)">{{ fileIconFor(file) }}</span>
-            <span class="file-name cursor-pointer" @click.stop="openFileViewer(file)">{{ formatFileName(file.name) }}</span>
-            <span class="file-size">{{ formatFileSize(file.file_size) }}</span>
-            <span class="file-extension">{{ file.extension }}</span>
-
-            <span class="file-edit cursor-pointer" @click.stop="openFileEditModal(file)">✏️</span>
-            <span class="file-delete cursor-pointer" @click.stop="deleteFile(file.uuid)">🗑️</span>
-            <span class="file-download">
-              <a @click.stop :href="getDownloadURL(file.uuid)" :download="file.name">⬇️</a>
+            <span v-else class="file-icon-badge cursor-pointer" @click.stop="openFileViewer(file)">
+              <svg viewBox="0 0 24 24" class="file-icon-svg">
+                <path d="M5 3a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V8l-6-6H5z" fill="var(--gray-4)" stroke="var(--gray-5)" stroke-width="1"/>
+                <path d="M14 2v5a1 1 0 0 0 1 1h5" fill="none" stroke="var(--gray-5)" stroke-width="1"/>
+                <rect x="1.5" y="15" width="19" height="7" rx="1.5" :fill="fileBadgeColor(file)"/>
+                <text x="11" y="20.3" font-size="6.2" font-weight="700" fill="#fff" text-anchor="middle" font-family="Inter, sans-serif">{{ fileBadgeLabel(file) }}</text>
+              </svg>
             </span>
-            <span class="cursor-pointer" @click.stop="openFileViewer(file)" title="Preview">👁️</span>
-            <span v-if="fileSharingEnabled" class="cursor-pointer inline-flex items-center gap-0.5" @click.stop="openShareModal(file)" title="Share">
-              🔗<span v-if="sharedFileCounts[file.uuid]" class="share-count">{{ sharedFileCounts[file.uuid] }}</span>
+
+            <span class="file-name cursor-pointer flex-1 min-w-0" @click.stop="openFileViewer(file)">
+              {{ formatFileName(file.name) }}
+              <span v-if="sharedFileCounts[file.uuid]" class="shared-badge" title="Shared">🔗 {{ sharedFileCounts[file.uuid] }}</span>
+            </span>
+            <span class="file-size">{{ formatFileSize(file.file_size) }}</span>
+
+            <span class="row-actions flex items-center gap-1">
+              <span class="icon-btn" title="Download">
+                <a @click.stop :href="getDownloadURL(file.uuid)" :download="file.name">⬇️</a>
+              </span>
+
+              <span class="row-menu-wrap">
+                <span class="icon-btn" title="More" @click.stop="toggleRowMenu('file-' + file.uuid)">⋮</span>
+                <div v-if="openMenuId === 'file-' + file.uuid" class="row-menu" @click.stop>
+                  <button class="row-menu-item" @click="openFileEditModal(file); openMenuId = null">Rename</button>
+                  <button v-if="fileSharingEnabled" class="row-menu-item" @click="openShareModal(file); openMenuId = null">Share</button>
+                  <button class="row-menu-item row-menu-item--danger" @click="deleteFile(file.uuid); openMenuId = null">Delete</button>
+                </div>
+              </span>
             </span>
           </div>
         </div>
@@ -178,7 +224,15 @@
 
       <!-- Empty State -->
       <div v-if="!loading && folders.length === 0 && files.length === 0" class="empty-state">
-        <p>This folder is empty.</p>
+        <span class="empty-state-icon">🗂️</span>
+        <p class="empty-state-title">This folder is empty</p>
+        <p class="empty-state-hint">Drag files in above, or click the upload area to get started.</p>
+      </div>
+
+      <!-- No Search Results -->
+      <div v-else-if="!loading && (folders.length > 0 || files.length > 0) && filteredFolders.length === 0 && filteredFiles.length === 0" class="empty-state">
+        <span class="empty-state-icon">🔍</span>
+        <p class="empty-state-title">No matches for "{{ searchQuery }}"</p>
       </div>
     </div>
 
@@ -242,13 +296,13 @@
       class="fixed inset-0 overflow-y-auto bg-black/50 z-50"
     >
       <div class="flex min-h-full items-center justify-center p-4">
-      <div class="bg-white rounded shadow-lg w-[520px] p-6 relative flex flex-col">
-        <h3 class="text-lg font-bold mb-1 text-black">Share "{{ sharingFile.name }}"</h3>
-        <p class="text-sm text-gray-500 mb-4">Anyone with the link can view and download this file.</p>
+      <div class="share-modal rounded shadow-lg w-[520px] p-6 relative flex flex-col">
+        <h3 class="text-lg font-bold mb-1">Share "{{ sharingFile.name }}"</h3>
+        <p class="text-sm share-modal-subtext mb-4">Anyone with the link can view and download this file.</p>
 
         <!-- Loading existing links -->
         <div v-if="sharesLoading" class="flex justify-center py-6">
-          <svg class="animate-spin h-6 w-6 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <svg class="animate-spin h-6 w-6" style="color: var(--primary-active);" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
           </svg>
@@ -257,42 +311,42 @@
         <template v-else>
           <!-- Active links list -->
           <div class="mb-4">
-            <p class="text-sm font-semibold text-gray-600 mb-2">
+            <p class="text-sm font-semibold share-modal-subtext mb-2">
               Active links<span v-if="shareLinks.length"> ({{ shareLinks.length }})</span>
             </p>
-            <div v-if="shareLinks.length === 0" class="text-sm text-gray-400 py-2 text-center">
+            <div v-if="shareLinks.length === 0" class="text-sm share-modal-muted py-2 text-center">
               No active links for this file.
             </div>
             <div v-else class="flex flex-col gap-2">
               <div
                 v-for="link in shareLinks"
                 :key="link.token"
-                class="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded px-3 py-2 text-sm"
+                class="share-link-row flex items-center gap-2 rounded px-3 py-2 text-sm"
               >
-                <span class="flex-1 font-mono text-xs text-gray-600 truncate">{{ shareLinkURL(link.token) }}</span>
-                <span class="text-xs text-gray-400 whitespace-nowrap shrink-0">
+                <span class="flex-1 font-mono text-xs share-modal-subtext truncate">{{ shareLinkURL(link.token) }}</span>
+                <span class="text-xs share-modal-muted whitespace-nowrap shrink-0">
                   {{ link.expires_at ? formatExpiry(link.expires_at) : 'Never expires' }}
                 </span>
                 <AppButton @click="copyShareToken(link.token)" class="px-2 py-1 bg-blue-600 text-white text-xs rounded shrink-0">
                   {{ shareTokenCopied[link.token] ? '✓' : 'Copy' }}
                 </AppButton>
-                <AppButton @click="revokeShareLink(link.token)" class="px-2 py-1 bg-red-100 text-red-600 text-xs rounded shrink-0">
+                <AppButton @click="revokeShareLink(link.token)" class="px-2 py-1 revoke-button text-xs rounded shrink-0">
                   Revoke
                 </AppButton>
               </div>
             </div>
           </div>
 
-          <hr class="mb-4 border-gray-200"/>
+          <hr class="mb-4 share-modal-divider"/>
 
           <!-- New link -->
-          <p class="text-sm font-semibold text-gray-600 mb-2">Create new link</p>
+          <p class="text-sm font-semibold share-modal-subtext mb-2">Create new link</p>
           <div class="mb-4">
-            <label class="block text-xs font-medium text-gray-500 mb-1">Expires (optional)</label>
+            <label class="block text-xs font-medium share-modal-muted mb-1">Expires (optional)</label>
             <input
               v-model="shareExpiresAt"
               type="datetime-local"
-              class="border border-gray-300 rounded px-3 py-2 w-full text-gray-700 bg-white text-sm"
+              class="w-full text-sm"
             />
           </div>
 
@@ -303,18 +357,18 @@
               type="checkbox"
               class="rounded"
             />
-            <label for="shareRequireLogin" class="text-sm text-gray-600 select-none cursor-pointer">Require login to access</label>
+            <label for="shareRequireLogin" class="text-sm share-modal-subtext select-none cursor-pointer">Require login to access</label>
           </div>
 
           <div class="flex justify-end gap-2">
-            <AppButton @click="closeShareModal" class="px-3 py-2 bg-gray-200 text-gray-700 rounded text-sm">Close</AppButton>
+            <AppButton @click="closeShareModal" class="px-3 py-2 modal-secondary-button rounded text-sm">Close</AppButton>
             <AppButton @click="generateShareLink" :disabled="shareGenerating" class="px-3 py-2 bg-blue-600 text-white rounded text-sm">
               {{ shareGenerating ? 'Generating…' : 'Generate Link' }}
             </AppButton>
           </div>
         </template>
 
-        <button @click="closeShareModal" class="absolute top-2 right-2 text-gray-500 hover:text-gray-700">✕</button>
+        <button @click="closeShareModal" class="absolute top-2 right-2 share-modal-muted">✕</button>
       </div>
       </div>
     </div>
@@ -325,12 +379,12 @@
       class="fixed inset-0 overflow-y-auto bg-black/50 z-50"
     >
       <div class="flex min-h-full items-center justify-center p-4">
-      <div class="bg-white rounded shadow-lg w-[520px] p-6 relative flex flex-col">
-        <h3 class="text-lg font-bold mb-1 text-black">Share "{{ sharingFolder.name }}"</h3>
-        <p class="text-sm text-gray-500 mb-4">Anyone with the link can browse and download all files in this folder.</p>
+      <div class="share-modal rounded shadow-lg w-[520px] p-6 relative flex flex-col">
+        <h3 class="text-lg font-bold mb-1">Share "{{ sharingFolder.name }}"</h3>
+        <p class="text-sm share-modal-subtext mb-4">Anyone with the link can browse and download all files in this folder.</p>
 
         <div v-if="folderSharesLoading" class="flex justify-center py-6">
-          <svg class="animate-spin h-6 w-6 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <svg class="animate-spin h-6 w-6" style="color: var(--primary-active);" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
           </svg>
@@ -338,41 +392,41 @@
 
         <template v-else>
           <div class="mb-4">
-            <p class="text-sm font-semibold text-gray-600 mb-2">
+            <p class="text-sm font-semibold share-modal-subtext mb-2">
               Active links<span v-if="folderShareLinks.length"> ({{ folderShareLinks.length }})</span>
             </p>
-            <div v-if="folderShareLinks.length === 0" class="text-sm text-gray-400 py-2 text-center">
+            <div v-if="folderShareLinks.length === 0" class="text-sm share-modal-muted py-2 text-center">
               No active links for this folder.
             </div>
             <div v-else class="flex flex-col gap-2">
               <div
                 v-for="link in folderShareLinks"
                 :key="link.token"
-                class="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded px-3 py-2 text-sm"
+                class="share-link-row flex items-center gap-2 rounded px-3 py-2 text-sm"
               >
-                <span class="flex-1 font-mono text-xs text-gray-600 truncate">{{ folderShareLinkURL(link.token) }}</span>
-                <span class="text-xs text-gray-400 whitespace-nowrap shrink-0">
+                <span class="flex-1 font-mono text-xs share-modal-subtext truncate">{{ folderShareLinkURL(link.token) }}</span>
+                <span class="text-xs share-modal-muted whitespace-nowrap shrink-0">
                   {{ link.expires_at ? formatExpiry(link.expires_at) : 'Never expires' }}
                 </span>
                 <AppButton @click="copyFolderShareToken(link.token)" class="px-2 py-1 bg-blue-600 text-white text-xs rounded shrink-0">
                   {{ folderShareTokenCopied[link.token] ? '✓' : 'Copy' }}
                 </AppButton>
-                <AppButton @click="revokeFolderShareLink(link.token)" class="px-2 py-1 bg-red-100 text-red-600 text-xs rounded shrink-0">
+                <AppButton @click="revokeFolderShareLink(link.token)" class="px-2 py-1 revoke-button text-xs rounded shrink-0">
                   Revoke
                 </AppButton>
               </div>
             </div>
           </div>
 
-          <hr class="mb-4 border-gray-200"/>
+          <hr class="mb-4 share-modal-divider"/>
 
-          <p class="text-sm font-semibold text-gray-600 mb-2">Create new link</p>
+          <p class="text-sm font-semibold share-modal-subtext mb-2">Create new link</p>
           <div class="mb-4">
-            <label class="block text-xs font-medium text-gray-500 mb-1">Expires (optional)</label>
+            <label class="block text-xs font-medium share-modal-muted mb-1">Expires (optional)</label>
             <input
               v-model="folderShareExpiresAt"
               type="datetime-local"
-              class="border border-gray-300 rounded px-3 py-2 w-full text-gray-700 bg-white text-sm"
+              class="w-full text-sm"
             />
           </div>
 
@@ -383,7 +437,7 @@
               type="checkbox"
               class="rounded"
             />
-            <label for="folderShareRequireLogin" class="text-sm text-gray-600 select-none cursor-pointer">Require login to access</label>
+            <label for="folderShareRequireLogin" class="text-sm share-modal-subtext select-none cursor-pointer">Require login to access</label>
           </div>
 
           <div class="mb-4 flex items-center gap-2">
@@ -393,29 +447,29 @@
               type="checkbox"
               class="rounded"
             />
-            <label for="folderShareAllowUpload" class="text-sm text-gray-600 select-none cursor-pointer">Allow file uploads</label>
+            <label for="folderShareAllowUpload" class="text-sm share-modal-subtext select-none cursor-pointer">Allow file uploads</label>
           </div>
 
           <div v-if="folderShareAllowUpload" class="mb-4">
-            <label class="block text-xs font-medium text-gray-500 mb-1">Max upload size in MB (0 = server default)</label>
+            <label class="block text-xs font-medium share-modal-muted mb-1">Max upload size in MB (0 = server default)</label>
             <input
               v-model.number="folderShareMaxFileSizeMB"
               type="number"
               min="0"
               placeholder="0"
-              class="border border-gray-300 rounded px-3 py-2 w-full text-gray-700 bg-white text-sm"
+              class="w-full text-sm"
             />
           </div>
 
           <div class="flex justify-end gap-2">
-            <AppButton @click="closeFolderShareModal" class="px-3 py-2 bg-gray-200 text-gray-700 rounded text-sm">Close</AppButton>
+            <AppButton @click="closeFolderShareModal" class="px-3 py-2 modal-secondary-button rounded text-sm">Close</AppButton>
             <AppButton @click="generateFolderShareLink" :disabled="folderShareGenerating" class="px-3 py-2 bg-blue-600 text-white rounded text-sm">
               {{ folderShareGenerating ? 'Generating…' : 'Generate Link' }}
             </AppButton>
           </div>
         </template>
 
-        <button @click="closeFolderShareModal" class="absolute top-2 right-2 text-gray-500 hover:text-gray-700">✕</button>
+        <button @click="closeFolderShareModal" class="absolute top-2 right-2 share-modal-muted">✕</button>
       </div>
       </div>
     </div>
@@ -434,7 +488,7 @@
 <script setup lang="ts">
 import AppButton from './components/AppButton.vue'
 import BreadCrumbs from './components/BreadCrumbs.vue'
-import { ref, onMounted, watchEffect, watch, nextTick, computed } from 'vue';
+import { ref, onMounted, onUnmounted, watchEffect, watch, nextTick, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import api from '@/utils/api';
 import type { Breadcrumb, Folder, File, FolderContents } from '@/types/folder';
@@ -530,6 +584,62 @@ const folderShareTokenCopied = ref<Record<string, boolean>>({});
 const sharedFolderCounts = ref<Record<string, number>>({});
 
 const folderName = ref('');
+
+// ----- Search / Sort -----
+const searchQuery = ref('')
+const sortKey = ref<'name' | 'size' | 'date'>('name')
+const sortDir = ref<'asc' | 'desc'>('asc')
+
+const filteredFolders = computed(() => {
+  const q = searchQuery.value.trim().toLowerCase()
+  const list = q ? folders.value.filter(f => f.name.toLowerCase().includes(q)) : folders.value.slice()
+  return list.sort((a, b) => a.name.localeCompare(b.name) * (sortDir.value === 'asc' ? 1 : -1))
+})
+
+const filteredFiles = computed(() => {
+  const q = searchQuery.value.trim().toLowerCase()
+  const list = q ? files.value.filter(f => f.name.toLowerCase().includes(q)) : files.value.slice()
+
+  return list.sort((a, b) => {
+    let cmp = 0
+    if (sortKey.value === 'name') cmp = a.name.localeCompare(b.name)
+    else if (sortKey.value === 'size') cmp = a.file_size - b.file_size
+    else cmp = new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    return cmp * (sortDir.value === 'asc' ? 1 : -1)
+  })
+})
+
+// ----- Row "more" menu -----
+const openMenuId = ref<string | null>(null)
+
+function toggleRowMenu(id: string) {
+  openMenuId.value = openMenuId.value === id ? null : id
+}
+
+function closeRowMenu() {
+  openMenuId.value = null
+}
+
+// ----- File type badge -----
+const FILE_BADGE_COLORS: Record<string, string> = {
+  pdf: '#d64545',
+  doc: '#3b6fd6', docx: '#3b6fd6', txt: '#3b6fd6', md: '#3b6fd6', rtf: '#3b6fd6',
+  xls: '#2f9e5c', xlsx: '#2f9e5c', csv: '#2f9e5c',
+  ppt: '#d6822f', pptx: '#d6822f',
+  zip: '#a67c2e', tar: '#a67c2e', gz: '#a67c2e', rar: '#a67c2e', '7z': '#a67c2e',
+  mp4: '#8a4fd6', mov: '#8a4fd6', avi: '#8a4fd6', mkv: '#8a4fd6', webm: '#8a4fd6',
+  mp3: '#d6478f', wav: '#d6478f', flac: '#d6478f', ogg: '#d6478f',
+  js: '#5a6fd6', ts: '#5a6fd6', py: '#5a6fd6', go: '#5a6fd6', java: '#5a6fd6', c: '#5a6fd6', cpp: '#5a6fd6', json: '#5a6fd6', html: '#5a6fd6', css: '#5a6fd6', vue: '#5a6fd6',
+}
+
+function fileBadgeColor(file: File): string {
+  return FILE_BADGE_COLORS[normalizedExtension(file)] || '#767676'
+}
+
+function fileBadgeLabel(file: File): string {
+  const ext = normalizedExtension(file)
+  return (ext || 'file').slice(0, 4).toUpperCase()
+}
 
 const selectedFolders = ref<Set<string>>(new Set())
 const selectedFiles = ref<Set<string>>(new Set())
@@ -948,26 +1058,10 @@ function formatFileName(fileName: string): string {
   return fileName.length > maxNameLength ? fileName.substring(0, maxNameLength) + "..." : fileName
 }
 
-const FILE_ICONS: Record<string, string> = {
-  jpg: '🖼️', jpeg: '🖼️', png: '🖼️', gif: '🖼️', webp: '🖼️', svg: '🖼️', bmp: '🖼️',
-  pdf: '📕',
-  mp4: '🎞️', mov: '🎞️', avi: '🎞️', mkv: '🎞️', webm: '🎞️',
-  mp3: '🎵', wav: '🎵', flac: '🎵', ogg: '🎵',
-  zip: '🗜️', tar: '🗜️', gz: '🗜️', rar: '🗜️', '7z': '🗜️',
-  doc: '📝', docx: '📝', txt: '📝', md: '📝', rtf: '📝',
-  xls: '📊', xlsx: '📊', csv: '📊',
-  ppt: '📽️', pptx: '📽️',
-  js: '💻', ts: '💻', py: '💻', go: '💻', java: '💻', c: '💻', cpp: '💻', json: '💻', html: '💻', css: '💻', vue: '💻',
-}
-
 const IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp'])
 
 function normalizedExtension(file: File): string {
   return (file.extension || '').replace(/^\./, '').toLowerCase()
-}
-
-function fileIconFor(file: File): string {
-  return FILE_ICONS[normalizedExtension(file)] || '📄'
 }
 
 function isImageFile(file: File): boolean {
@@ -1047,6 +1141,10 @@ async function getDashboardInfo() {
   usersStore.folderSharingEnabled = response.body.folderSharingEnabled !== false;
 }
 
+function handleDocumentClick() {
+  closeRowMenu()
+}
+
 onMounted(async () => {
   refreshCurrentList();
   await getDashboardInfo();
@@ -1056,6 +1154,11 @@ onMounted(async () => {
   if (folderSharingEnabled.value) {
     loadAllFolderShares();
   }
+  document.addEventListener('click', handleDocumentClick);
+});
+
+onUnmounted(() => {
+  document.removeEventListener('click', handleDocumentClick);
 });
 </script>
 
@@ -1070,6 +1173,16 @@ onMounted(async () => {
   width: 100%;
 }
 
+.folders-section h2,
+.files-section h2 {
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  margin: 0 0 0.5rem 0.25rem;
+}
+
 .items-list {
   width: 100%;
 }
@@ -1078,57 +1191,182 @@ onMounted(async () => {
   flex: 1;
 }
 
-.folder-actions {
-  display: flex;
-  gap: 0.5rem;
-}
-
 .folder-item,
 .file-item {
   cursor: pointer;
-  transition: background-color 0.2s;
+  transition: background-color 0.15s, box-shadow 0.15s;
 }
 
 .folder-item:hover,
 .file-item:hover {
-  background-color: var(--background-hover, rgba(0, 0, 0, 0.05));
+  background-color: var(--gray-3);
 }
 
-.folder-icon,
-.file-icon {
+.item--selected {
+  background-color: var(--gray-3);
+  box-shadow: inset 0 0 0 1px var(--primary-active);
+}
+
+.folder-icon {
   font-size: 1.5em;
 }
 
 .file-thumb {
-  width: 1.5em;
-  height: 1.5em;
+  width: 2em;
+  height: 2em;
   object-fit: cover;
   border-radius: 4px;
   flex-shrink: 0;
 }
 
+.file-icon-badge {
+  flex-shrink: 0;
+  display: inline-flex;
+}
+
+.file-icon-svg {
+  width: 2em;
+  height: 2em;
+}
+
 .folder-name,
 .file-name {
-  flex: 1;
   font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .file-size {
   color: var(--text-secondary, #666);
-  font-size: 0.9em;
-  text-transform: uppercase;
+  font-size: 0.85em;
+  white-space: nowrap;
 }
 
-.file-extension {
-  color: var(--text-secondary, #666);
-  font-size: 0.9em;
-  text-transform: uppercase;
+/* Row actions: quieter by default, fully visible on row hover/focus */
+.row-actions {
+  opacity: 0.5;
+  transition: opacity 0.15s;
+  flex-shrink: 0;
+}
+
+.folder-item:hover .row-actions,
+.file-item:hover .row-actions,
+.item--selected .row-actions {
+  opacity: 1;
+}
+
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.9em;
+  height: 1.9em;
+  border-radius: 6px;
+  cursor: pointer;
+  position: relative;
+}
+
+.icon-btn:hover {
+  background-color: var(--gray-4);
+}
+
+.icon-btn a {
+  display: inline-flex;
+}
+
+.row-menu-wrap {
+  position: relative;
+}
+
+.row-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  background-color: var(--gray-2);
+  border: 1px solid var(--gray-4);
+  border-radius: 8px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  min-width: 120px;
+  z-index: 20;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+}
+
+.row-menu-item {
+  text-align: left;
+  padding: 0.4rem 0.6rem;
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.row-menu-item:hover {
+  background-color: var(--gray-4);
+}
+
+.row-menu-item--danger {
+  color: #e57373;
+}
+
+.toolbar {
+  margin-bottom: -0.5rem;
+}
+
+.search-input {
+  height: 36px !important;
+  width: 200px;
+  font-size: 0.85rem !important;
+}
+
+.sort-select {
+  height: 36px;
+  background-color: var(--gray-4);
+  color: var(--text);
+  border: none;
+  border-radius: 6px;
+  padding: 0 0.5rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.sort-dir-button {
+  height: 36px;
+  width: 36px;
+  background-color: var(--gray-4);
+  color: var(--text);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.sort-dir-button:hover {
+  background-color: var(--gray-5);
 }
 
 .empty-state {
   text-align: center;
-  padding: 2rem;
+  padding: 3rem 1rem;
   color: var(--text-secondary, #666);
+}
+
+.empty-state-icon {
+  font-size: 2.5rem;
+  display: block;
+  margin-bottom: 0.75rem;
+  opacity: 0.8;
+}
+
+.empty-state-title {
+  font-weight: 600;
+  color: var(--text);
+  margin: 0 0 0.25rem 0;
+}
+
+.empty-state-hint {
+  font-size: 0.85rem;
+  margin: 0;
 }
 
 .modal {
@@ -1139,11 +1377,50 @@ onMounted(async () => {
   max-width: 400px;
 }
 
-.share-count {
-  font-size: 0.65rem;
-  font-weight: 700;
-  color: #3A3F78;
-  line-height: 1;
+.share-modal {
+  background-color: var(--gray-2);
+  color: var(--text);
+}
+
+.share-modal-subtext {
+  color: var(--text-secondary);
+}
+
+.share-modal-muted {
+  color: var(--text-tertiary);
+}
+
+.share-modal-divider {
+  border-color: var(--gray-4);
+}
+
+.share-link-row {
+  background-color: var(--gray);
+  border: 1px solid var(--gray-4);
+}
+
+.revoke-button {
+  background-color: rgba(229, 115, 115, 0.15);
+  color: #e57373;
+}
+
+.modal-secondary-button {
+  background-color: var(--gray-4);
+  color: var(--text);
+}
+
+.shared-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--primary-active);
+  background-color: var(--gray-4);
+  border-radius: 999px;
+  padding: 0.1rem 0.45rem;
+  margin-left: 0.4rem;
+  vertical-align: middle;
+  white-space: nowrap;
 }
 </style>
 

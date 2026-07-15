@@ -219,6 +219,7 @@
                 <span class="icon-btn" title="More" @click.stop="toggleRowMenu('file-' + file.uuid)">⋮</span>
                 <div v-if="openMenuId === 'file-' + file.uuid" class="row-menu" @click.stop>
                   <button class="row-menu-item" @click="openFileEditModal(file); openMenuId = null">Rename</button>
+                  <button class="row-menu-item" @click="openMoveModal(file); openMenuId = null">Move to…</button>
                   <button v-if="fileSharingEnabled" class="row-menu-item" @click="openShareModal(file); openMenuId = null">Share</button>
                   <button class="row-menu-item row-menu-item--danger" @click="deleteFile(file.uuid); openMenuId = null">Delete</button>
                 </div>
@@ -485,6 +486,53 @@
       </div>
     </div>
 
+    <!-- Move File Modal -->
+    <div
+      v-if="movingFile"
+      class="fixed inset-0 flex items-center justify-center bg-black/50 z-50"
+    >
+      <div class="share-modal rounded-lg w-96 p-6 relative shadow-lg flex flex-col">
+        <h3 class="text-lg font-bold mb-1">Move "{{ movingFile.name }}"</h3>
+        <p class="text-sm share-modal-subtext mb-3">Choose a destination folder.</p>
+
+        <div class="move-picker-breadcrumbs flex items-center flex-wrap gap-1 mb-2 text-sm">
+          <button class="move-picker-crumb" @click="loadMoveFolder('')">Home</button>
+          <template v-for="bc in moveBreadcrumbs" :key="bc.folder_id">
+            <span class="share-modal-muted">/</span>
+            <button class="move-picker-crumb" @click="loadMoveFolder(bc.folder_id)">{{ bc.label }}</button>
+          </template>
+        </div>
+
+        <div class="move-picker-list">
+          <div v-if="moveLoading" class="flex justify-center py-6">
+            <SpinnerView />
+          </div>
+          <template v-else>
+            <div v-if="moveFolders.length === 0" class="text-sm share-modal-muted text-center py-4">
+              No subfolders here.
+            </div>
+            <button
+              v-for="folder in moveFolders"
+              :key="folder.uuid"
+              class="move-picker-item"
+              @click="loadMoveFolder(folder.uuid)"
+            >
+              📁 {{ folder.name }}
+            </button>
+          </template>
+        </div>
+
+        <div class="flex justify-end gap-2 mt-4">
+          <AppButton @click="closeMoveModal" class="px-3 py-2 modal-secondary-button rounded text-sm">Cancel</AppButton>
+          <AppButton @click="confirmMove" :disabled="moving || moveLoading" class="px-3 py-2 bg-blue-600 text-white rounded text-sm">
+            {{ moving ? 'Moving…' : 'Move Here' }}
+          </AppButton>
+        </div>
+
+        <button @click="closeMoveModal" class="absolute top-2 right-2 share-modal-muted">✕</button>
+      </div>
+    </div>
+
     <!-- File Viewer -->
     <FileViewer
       v-if="viewingFile"
@@ -561,6 +609,59 @@ const newFileName = ref('');
 
 const editingFolder = ref<Folder | null>(null);
 const newFolderName = ref('');
+
+// ----- Move File State -----
+const movingFile = ref<File | null>(null);
+const moveFolderId = ref('');
+const moveFolders = ref<Folder[]>([]);
+const moveBreadcrumbs = ref<Breadcrumb[]>([]);
+const moveLoading = ref(false);
+const moving = ref(false);
+
+async function loadMoveFolder(folderId: string) {
+  moveLoading.value = true;
+  const response = await api({ url: `v1/folder/list/${folderId}`, method: 'GET' });
+  moveLoading.value = false;
+
+  if (response.ok && response.body) {
+    moveFolderId.value = folderId;
+    moveFolders.value = response.body.folders || [];
+    moveBreadcrumbs.value = response.body.breadcrumbs || [];
+  } else {
+    error.value = response.body?.error || 'Failed to load folders';
+  }
+}
+
+function openMoveModal(file: File) {
+  movingFile.value = file;
+  loadMoveFolder(currentFolderId.value);
+}
+
+function closeMoveModal() {
+  movingFile.value = null;
+  moveFolders.value = [];
+  moveBreadcrumbs.value = [];
+}
+
+async function confirmMove() {
+  if (!movingFile.value) return;
+  moving.value = true;
+
+  const response = await api({
+    url: `v1/file/${movingFile.value.uuid}/move`,
+    method: 'PATCH',
+    json: { parent: moveFolderId.value },
+  });
+
+  moving.value = false;
+
+  if (response.ok) {
+    closeMoveModal();
+    refreshCurrentList();
+  } else {
+    error.value = response.body?.error || 'Failed to move file';
+  }
+}
 
 // ----- Share State -----
 interface ShareLinkItem {
@@ -1473,6 +1574,44 @@ onUnmounted(() => {
 .modal-secondary-button {
   background-color: var(--gray-4);
   color: var(--text);
+}
+
+.move-picker-breadcrumbs {
+  max-height: 3.5rem;
+  overflow-y: auto;
+}
+
+.move-picker-crumb {
+  color: var(--primary-active);
+  cursor: pointer;
+  padding: 0.1rem 0.25rem;
+  border-radius: 4px;
+}
+
+.move-picker-crumb:hover {
+  background-color: var(--gray-4);
+}
+
+.move-picker-list {
+  border: 1px solid var(--gray-4);
+  border-radius: 8px;
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.move-picker-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 0.5rem 0.6rem;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--text);
+}
+
+.move-picker-item:hover {
+  background-color: var(--gray-4);
 }
 
 .shared-badge {

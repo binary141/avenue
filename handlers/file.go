@@ -373,6 +373,69 @@ func (s *Server) SearchFiles(c *gin.Context) {
 	c.JSON(http.StatusOK, files)
 }
 
+type MoveFileReq struct {
+	Parent string `json:"parent"` // destination folder uuid, "" moves the file to the root
+}
+
+func (s *Server) MoveFile(c *gin.Context) {
+	userID, err := shared.GetUserIDFromContext(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Message: "could not get user id",
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	var req MoveFileReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, Response{
+			Message: "could not marshal all data to json",
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	file, err := db.GetFileByIDForUser(c.Param("fileID"), userID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			c.JSON(http.StatusNotFound, Response{
+				Message: "file not found in db",
+				Error:   err.Error(),
+			})
+			return
+		}
+
+		c.JSON(http.StatusInternalServerError, Response{
+			Message: "could not get file",
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	if req.Parent != "" {
+		if _, err := db.GetFolder(req.Parent, userID); err != nil {
+			c.JSON(http.StatusBadRequest, Response{
+				Message: "destination folder must exist",
+				Error:   err.Error(),
+			})
+			return
+		}
+	}
+
+	file.Parent = req.Parent
+
+	if err := db.UpdateFile(*file); err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Message: "could not move file",
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	c.Status(http.StatusOK)
+}
+
 func (s *Server) UpdateFileName(c *gin.Context) {
 	userID, err := shared.GetUserIDFromContext(c.Request.Context())
 	if err != nil {

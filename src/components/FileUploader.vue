@@ -357,23 +357,23 @@ const hasFiles = computed(() => selectedFiles.value.length > 0)
 }
 
 .drop-zone {
-  border: 2px dashed #cbd5e1;
+  border: 2px dashed var(--gray-4);
   border-radius: 0.5rem;
   padding: 2rem;
   text-align: center;
   cursor: pointer;
   transition: all 0.2s ease;
-  background-color: #f8fafc;
+  background-color: var(--gray);
 }
 
 .drop-zone:hover:not(.drop-zone--disabled) {
-  border-color: #3b82f6;
-  background-color: #eff6ff;
+  border-color: var(--primary-hover);
+  background-color: var(--gray-3);
 }
 
 .drop-zone--dragging {
-  border-color: #3b82f6;
-  background-color: #dbeafe;
+  border-color: var(--primary-active);
+  background-color: var(--gray-3);
 }
 
 .drop-zone--disabled {
@@ -399,23 +399,23 @@ const hasFiles = computed(() => selectedFiles.value.length > 0)
 .drop-zone__icon {
   width: 3rem;
   height: 3rem;
-  color: #64748b;
+  color: var(--text-secondary);
 }
 
 .drop-zone__text {
   font-size: 0.875rem;
-  color: #475569;
+  color: var(--text-secondary);
   margin: 0;
 }
 
 .drop-zone__text--primary {
-  color: #3b82f6;
+  color: var(--primary-active);
   font-weight: 600;
 }
 
 .drop-zone__hint {
   font-size: 0.75rem;
-  color: #94a3b8;
+  color: var(--text-tertiary);
   margin: 0;
 }
 
@@ -430,15 +430,15 @@ const hasFiles = computed(() => selectedFiles.value.length > 0)
   align-items: center;
   justify-content: space-between;
   padding: 0.75rem;
-  background-color: white;
-  border: 1px solid #e2e8f0;
+  background-color: var(--gray-2);
+  border: 1px solid var(--gray-4);
   border-radius: 0.375rem;
   transition: all 0.2s ease;
 }
 
 .file-item:hover {
-  border-color: #cbd5e1;
-  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+  border-color: var(--gray-5);
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.3);
 }
 
 .file-item__info {
@@ -452,7 +452,7 @@ const hasFiles = computed(() => selectedFiles.value.length > 0)
 .file-item__icon {
   width: 2rem;
   height: 2rem;
-  color: #64748b;
+  color: var(--text-secondary);
   flex-shrink: 0;
 }
 
@@ -465,7 +465,7 @@ const hasFiles = computed(() => selectedFiles.value.length > 0)
 .file-item__name {
   font-size: 0.875rem;
   font-weight: 500;
-  color: #1e293b;
+  color: var(--text);
   margin: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -474,13 +474,13 @@ const hasFiles = computed(() => selectedFiles.value.length > 0)
 
 .file-item__size {
   font-size: 0.75rem;
-  color: #64748b;
+  color: var(--text-secondary);
   margin: 0;
 }
 
 .file-item__progress-track {
   height: 4px;
-  background-color: #e2e8f0;
+  background-color: var(--gray-4);
   border-radius: 2px;
   overflow: hidden;
   margin-top: 4px;
@@ -488,13 +488,13 @@ const hasFiles = computed(() => selectedFiles.value.length > 0)
 
 .file-item__progress-fill {
   height: 100%;
-  background-color: #3b82f6;
+  background-color: var(--primary-active);
   transition: width 0.15s ease;
 }
 
 .file-item__speed {
   font-size: 0.7rem;
-  color: #64748b;
+  color: var(--text-secondary);
   margin: 2px 0 0;
 }
 
@@ -504,7 +504,7 @@ const hasFiles = computed(() => selectedFiles.value.length > 0)
   background: none;
   border: none;
   cursor: pointer;
-  color: #64748b;
+  color: var(--text-secondary);
   transition: color 0.2s ease;
   flex-shrink: 0;
 }
@@ -527,7 +527,7 @@ const hasFiles = computed(() => selectedFiles.value.length > 0)
   position: relative;
   width: 100%;
   height: 2rem;
-  background-color: #e2e8f0;
+  background-color: var(--gray-4);
   border-radius: 0.375rem;
   overflow: hidden;
   margin-top: 1rem;
@@ -535,7 +535,7 @@ const hasFiles = computed(() => selectedFiles.value.length > 0)
 
 .progress-bar__fill {
   height: 100%;
-  background-color: #3b82f6;
+  background-color: var(--primary-active);
   transition: width 0.3s ease;
 }
 
@@ -546,15 +546,15 @@ const hasFiles = computed(() => selectedFiles.value.length > 0)
   transform: translate(-50%, -50%);
   font-size: 0.875rem;
   font-weight: 600;
-  color: #1e293b;
+  color: var(--text);
 }
 
 .upload-button {
   width: 100%;
   margin-top: 1rem;
   padding: 0.75rem 1.5rem;
-  background-color: #3b82f6;
-  color: white;
+  background-color: var(--primary);
+  color: var(--text);
   border: none;
   border-radius: 0.375rem;
   font-size: 0.875rem;
@@ -564,7 +564,7 @@ const hasFiles = computed(() => selectedFiles.value.length > 0)
 }
 
 .upload-button:hover:not(:disabled) {
-  background-color: #2563eb;
+  background-color: var(--primary-hover);
 }
 
 .upload-button:disabled {

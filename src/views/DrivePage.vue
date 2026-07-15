@@ -14,43 +14,37 @@
     <!-- create folder dialog -->
     <div
       v-if="show"
-      class="fixed inset-0 flex items-center justify-center"
+      class="fixed inset-0 flex items-center justify-center bg-black/50 z-50"
     >
-      <div class="bg-white p-6 rounded-lg w-96">
-        <h2 class="text-lg font-semibold mb-4 text-gray-700 ">Create Folder</h2>
+      <div class="share-modal p-6 rounded-lg w-96 shadow-lg">
+        <h2 class="text-lg font-semibold mb-4">Create Folder</h2>
 
-        <div
-          class="space-y-4 w-80 bg-white text-gray-700 p-6 rounded-lg shadow"
-        >
-          <div>
-            <label class="block text-sm font-medium mb-1 text-gray-600">Folder Name</label>
-            <input
-              ref="inputRef"
-              v-model="folderName"
-              type="text"
-              class="w-full border border-gray-300 rounded px-3 py-2 text-gray-700 bg-white"
-            />
-          </div>
-
-          <div class="flex justify-end gap-3 mt-6">
-            <AppButton
-              @click="show = false"
-              class="px-3 py-2 bg-gray-200 text-gray-700 rounded"
-            >
-              Cancel
-            </AppButton>
-
-            <AppButton
-              type="submit"
-              @click="createFolder"
-              class="px-3 py-2 bg-blue-600 text-white rounded"
-            >
-              Create
-            </AppButton>
-          </div>
+        <div>
+          <label class="block text-sm font-medium mb-1 share-modal-subtext">Folder Name</label>
+          <input
+            ref="inputRef"
+            v-model="folderName"
+            type="text"
+            class="w-full"
+          />
         </div>
 
+        <div class="flex justify-end gap-3 mt-6">
+          <AppButton
+            @click="show = false"
+            class="px-3 py-2 modal-secondary-button rounded"
+          >
+            Cancel
+          </AppButton>
 
+          <AppButton
+            type="submit"
+            @click="createFolder"
+            class="px-3 py-2 bg-blue-600 text-white rounded"
+          >
+            Create
+          </AppButton>
+        </div>
       </div>
     </div>
 

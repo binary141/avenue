@@ -151,7 +151,14 @@
               @click.stop="onFileCheckboxClick(file.uuid, index, $event)"
             />
 
-            <span class="file-icon cursor-pointer" @click.stop="openFileViewer(file)">📄</span>
+            <img
+              v-if="isImageFile(file)"
+              :src="getDownloadURL(file.uuid)"
+              class="file-thumb cursor-pointer"
+              alt=""
+              @click.stop="openFileViewer(file)"
+            />
+            <span v-else class="file-icon cursor-pointer" @click.stop="openFileViewer(file)">{{ fileIconFor(file) }}</span>
             <span class="file-name cursor-pointer" @click.stop="openFileViewer(file)">{{ formatFileName(file.name) }}</span>
             <span class="file-size">{{ formatFileSize(file.file_size) }}</span>
             <span class="file-extension">{{ file.extension }}</span>
@@ -941,6 +948,32 @@ function formatFileName(fileName: string): string {
   return fileName.length > maxNameLength ? fileName.substring(0, maxNameLength) + "..." : fileName
 }
 
+const FILE_ICONS: Record<string, string> = {
+  jpg: '🖼️', jpeg: '🖼️', png: '🖼️', gif: '🖼️', webp: '🖼️', svg: '🖼️', bmp: '🖼️',
+  pdf: '📕',
+  mp4: '🎞️', mov: '🎞️', avi: '🎞️', mkv: '🎞️', webm: '🎞️',
+  mp3: '🎵', wav: '🎵', flac: '🎵', ogg: '🎵',
+  zip: '🗜️', tar: '🗜️', gz: '🗜️', rar: '🗜️', '7z': '🗜️',
+  doc: '📝', docx: '📝', txt: '📝', md: '📝', rtf: '📝',
+  xls: '📊', xlsx: '📊', csv: '📊',
+  ppt: '📽️', pptx: '📽️',
+  js: '💻', ts: '💻', py: '💻', go: '💻', java: '💻', c: '💻', cpp: '💻', json: '💻', html: '💻', css: '💻', vue: '💻',
+}
+
+const IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp'])
+
+function normalizedExtension(file: File): string {
+  return (file.extension || '').replace(/^\./, '').toLowerCase()
+}
+
+function fileIconFor(file: File): string {
+  return FILE_ICONS[normalizedExtension(file)] || '📄'
+}
+
+function isImageFile(file: File): boolean {
+  return IMAGE_EXTENSIONS.has(normalizedExtension(file))
+}
+
 function formatFileSize(bytes: number): string {
   if (bytes === 0) return '0 B'
   const k = 1024
@@ -1064,6 +1097,14 @@ onMounted(async () => {
 .folder-icon,
 .file-icon {
   font-size: 1.5em;
+}
+
+.file-thumb {
+  width: 1.5em;
+  height: 1.5em;
+  object-fit: cover;
+  border-radius: 4px;
+  flex-shrink: 0;
 }
 
 .folder-name,

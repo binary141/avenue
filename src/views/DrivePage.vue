@@ -65,19 +65,28 @@
     <!-- Bulk Actions -->
     <div
       v-if="hasSelection"
-      class="flex items-center gap-3 mb-4 p-3 rounded bg-blue-50 border border-blue-200"
+      class="bulk-actions-bar flex items-center gap-3 mb-4 p-3 rounded"
     >
-      <span class="text-sm text-gray-700">
+      <span class="text-sm share-modal-subtext">
         Selected:
         {{ selectedFolders.size }} folders,
         {{ selectedFiles.size }} files
       </span>
 
+      <AppButton
+        class="bg-blue-600 text-white px-3 py-1"
+        :disabled="selectedFiles.size === 0"
+        :title="selectedFolders.size > 0 ? 'Only selected files will be moved — folders can\'t be bulk-moved yet' : ''"
+        @click="openBulkMoveModal"
+      >
+        Move
+      </AppButton>
+
       <AppButton class="bg-red-600 text-white px-3 py-1" @click="bulkDelete">
         Delete
       </AppButton>
 
-      <AppButton class="bg-gray-200 px-3 py-1" @click="clearSelection">
+      <AppButton class="modal-secondary-button px-3 py-1" @click="clearSelection">
         Clear
       </AppButton>
     </div>
@@ -488,11 +497,13 @@
 
     <!-- Move File Modal -->
     <div
-      v-if="movingFile"
+      v-if="movingFileIds.length > 0"
       class="fixed inset-0 flex items-center justify-center bg-black/50 z-50"
     >
       <div class="share-modal rounded-lg w-96 p-6 relative shadow-lg flex flex-col">
-        <h3 class="text-lg font-bold mb-1">Move "{{ movingFile.name }}"</h3>
+        <h3 class="text-lg font-bold mb-1">
+          {{ movingSingleFileName ? `Move "${movingSingleFileName}"` : `Move ${movingFileIds.length} files` }}
+        </h3>
         <p class="text-sm share-modal-subtext mb-3">Choose a destination folder.</p>
 
         <div class="move-picker-breadcrumbs flex items-center flex-wrap gap-1 mb-2 text-sm">
@@ -611,7 +622,8 @@ const editingFolder = ref<Folder | null>(null);
 const newFolderName = ref('');
 
 // ----- Move File State -----
-const movingFile = ref<File | null>(null);
+const movingFileIds = ref<string[]>([]);
+const movingSingleFileName = ref<string | null>(null);
 const moveFolderId = ref('');
 const moveFolders = ref<Folder[]>([]);
 const moveBreadcrumbs = ref<Breadcrumb[]>([]);
@@ -633,34 +645,48 @@ async function loadMoveFolder(folderId: string) {
 }
 
 function openMoveModal(file: File) {
-  movingFile.value = file;
+  movingFileIds.value = [file.uuid];
+  movingSingleFileName.value = file.name;
+  loadMoveFolder(currentFolderId.value);
+}
+
+function openBulkMoveModal() {
+  if (selectedFiles.value.size === 0) return;
+  movingFileIds.value = Array.from(selectedFiles.value);
+  movingSingleFileName.value = null;
   loadMoveFolder(currentFolderId.value);
 }
 
 function closeMoveModal() {
-  movingFile.value = null;
+  movingFileIds.value = [];
+  movingSingleFileName.value = null;
   moveFolders.value = [];
   moveBreadcrumbs.value = [];
 }
 
 async function confirmMove() {
-  if (!movingFile.value) return;
+  if (movingFileIds.value.length === 0) return;
   moving.value = true;
 
-  const response = await api({
-    url: `v1/file/${movingFile.value.uuid}/move`,
-    method: 'PATCH',
-    json: { parent: moveFolderId.value },
-  });
+  let failures = 0;
+  for (const fileId of movingFileIds.value) {
+    const response = await api({
+      url: `v1/file/${fileId}/move`,
+      method: 'PATCH',
+      json: { parent: moveFolderId.value },
+    });
+    if (!response.ok) failures++;
+  }
 
   moving.value = false;
 
-  if (response.ok) {
-    closeMoveModal();
-    refreshCurrentList();
-  } else {
-    error.value = response.body?.error || 'Failed to move file';
+  if (failures > 0) {
+    error.value = `Failed to move ${failures} of ${movingFileIds.value.length} file(s)`;
   }
+
+  clearSelection();
+  closeMoveModal();
+  refreshCurrentList();
 }
 
 // ----- Share State -----
@@ -1612,6 +1638,11 @@ onUnmounted(() => {
 
 .move-picker-item:hover {
   background-color: var(--gray-4);
+}
+
+.bulk-actions-bar {
+  background-color: var(--gray-2);
+  border: 1px solid var(--gray-4);
 }
 
 .shared-badge {

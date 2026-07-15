@@ -58,17 +58,25 @@ func GetFileByID(id, creatorID string) (*File, error) {
 
 // GetFileByIDForUser returns a file if the user is either its creator or owns
 // the folder it lives in. Used where folder owners need to manage uploaded files.
+//
+// The parent folder's UUID is included (via a join) so callers that fetch a
+// file and pass it straight to UpdateFile don't accidentally null out
+// parent_id — UpdateFile treats an empty Parent as "move to root".
 func GetFileByIDForUser(id, userID string) (*File, error) {
 	var f File
+	var parent sql.NullString
 	err := DB.QueryRow(`
-		SELECT id, uuid, name, extension, mime_type, file_size, created_by, created_at
-		FROM files WHERE uuid=$1
-		  AND (created_by=$2::BIGINT
-		       OR parent_id IN (SELECT id FROM folders WHERE owner_id=$2::BIGINT))
-	`, id, userID).Scan(&f.ID, &f.UUID, &f.Name, &f.Extension, &f.MimeType, &f.FileSize, &f.CreatedBy, &f.CreatedAt)
+		SELECT f.id, f.uuid, f.name, f.extension, f.mime_type, f.file_size, f.created_by, f.created_at, p.uuid
+		FROM files f
+		LEFT JOIN folders p ON p.id = f.parent_id
+		WHERE f.uuid=$1
+		  AND (f.created_by=$2::BIGINT
+		       OR f.parent_id IN (SELECT id FROM folders WHERE owner_id=$2::BIGINT))
+	`, id, userID).Scan(&f.ID, &f.UUID, &f.Name, &f.Extension, &f.MimeType, &f.FileSize, &f.CreatedBy, &f.CreatedAt, &parent)
 	if err != nil {
 		return nil, err
 	}
+	f.Parent = parent.String
 	return &f, nil
 }
 

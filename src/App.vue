@@ -177,7 +177,8 @@ async function getUserAndLogin() {
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@600;700&display=swap');
 
 .header {
-  width: 100%;
+  width: calc(100% + 2 * var(--page-padding));
+  margin: calc(-1 * var(--page-padding)) calc(-1 * var(--page-padding)) 0;
   height: 90px;
   background-color: var(--primary);
   display: flex;

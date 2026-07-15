@@ -2,10 +2,11 @@
   <div class="file-usage">
     <div class="flex justify-between mb-1 text-sm">
       <span>Storage Usage</span>
-      <span>{{ percentage }}%</span>
+      <span>{{ isUnlimited ? 'Unlimited' : `${percentage}%` }}</span>
     </div>
 
-    <div class="bar">
+    <div v-if="isUnlimited" class="bar bar--unlimited" />
+    <div v-else class="bar">
       <div
         class="bar-fill"
         :style="{ width: percentage + '%' }"
@@ -13,7 +14,7 @@
     </div>
 
     <div class="mt-2 text-xs text-gray-600">
-      {{ humanUsed }} used of {{ humanQuota }}
+      {{ isUnlimited ? `${humanUsed} used` : `${humanUsed} used of ${humanQuota}` }}
     </div>
   </div>
 </template>
@@ -23,13 +24,15 @@ import { computed } from "vue";
 
 interface Props {
   used: number;   // bytes
-  quota: number; // bytes
+  quota: number; // bytes, 0 means unlimited
 }
 
 const props = defineProps<Props>();
 
+const isUnlimited = computed(() => props.quota === 0);
+
 const percentage = computed(() => {
-  if (props.quota === 0) return 0;
+  if (isUnlimited.value) return 0;
   return Math.min(
     100,
     Math.round((props.used / props.quota) * 100)
@@ -57,15 +60,26 @@ const humanQuota = computed(() => bytesToHuman(props.quota));
 
 .bar {
   height: 10px;
-  background-color: #e5e7eb;
+  background-color: var(--gray-4);
   border-radius: 9999px;
   overflow: hidden;
 }
 
 .bar-fill {
   height: 100%;
-  background-color: #3b82f6;
+  background-color: var(--primary-active);
   transition: width 0.3s ease;
+}
+
+.bar--unlimited {
+  background-image: repeating-linear-gradient(
+    135deg,
+    var(--primary-active),
+    var(--primary-active) 6px,
+    var(--gray-4) 6px,
+    var(--gray-4) 12px
+  );
+  opacity: 0.6;
 }
 </style>
 

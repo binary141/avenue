@@ -3,32 +3,18 @@ package db
 import (
 	"database/sql"
 	"time"
+
+	"avenue/backend/sdk"
 )
 
-// ShareFolderLink is returned from management endpoints and stored internally.
-// FolderIntID is the integer FK used for subtree checks; it is not sent to clients.
-type ShareFolderLink struct {
-	ID           int64      `json:"id"`
-	Token        string     `json:"token"`
-	FolderUUID   string     `json:"folder_uuid"`
-	FolderName   string     `json:"folder_name"`
-	FolderIntID  int64      `json:"-"`
-	CreatedBy    int64      `json:"created_by"`
-	ExpiresAt    *time.Time `json:"expires_at"`
-	CreatedAt    time.Time  `json:"created_at"`
-	RequireLogin bool       `json:"require_login"`
-	AllowUpload  bool       `json:"allow_upload"`
-	MaxFileSize  int64      `json:"max_file_size"`
-	LastAccessed *time.Time `json:"last_accessed"`
-}
+func CreateShareFolderLink(folderUUID, createdBy string, expiresAt *time.Time, requireLogin, allowUpload bool, maxFileSize int64) (sdk.ShareFolderLink, error) {
+	var link sdk.ShareFolderLink
 
-func CreateShareFolderLink(folderUUID, createdBy string, expiresAt *time.Time, requireLogin, allowUpload bool, maxFileSize int64) (ShareFolderLink, error) {
 	token, err := generateToken()
 	if err != nil {
-		return ShareFolderLink{}, err
+		return link, err
 	}
 
-	var link ShareFolderLink
 	err = DB.QueryRow(`
 		WITH ins AS (
 			INSERT INTO share_folder_links (token, folder_id, created_by, expires_at, require_login, allow_upload, max_file_size)
@@ -44,7 +30,7 @@ func CreateShareFolderLink(folderUUID, createdBy string, expiresAt *time.Time, r
 		&link.CreatedBy, &link.ExpiresAt, &link.CreatedAt, &link.RequireLogin, &link.AllowUpload, &link.MaxFileSize,
 	)
 	if err != nil {
-		return ShareFolderLink{}, err
+		return link, err
 	}
 	return link, nil
 }
@@ -53,8 +39,9 @@ func touchShareFolderLink(token string) {
 	_, _ = DB.Exec(`UPDATE share_folder_links SET last_accessed = now() WHERE token = $1`, token)
 }
 
-func GetShareFolderLink(token string) (ShareFolderLink, error) {
-	var link ShareFolderLink
+func GetShareFolderLink(token string) (sdk.ShareFolderLink, error) {
+	var link sdk.ShareFolderLink
+
 	err := DB.QueryRow(`
 		SELECT sl.id, sl.token, sl.folder_id, fo.uuid, fo.name,
 		       sl.created_by, sl.expires_at, sl.created_at, sl.require_login, sl.allow_upload, sl.max_file_size, sl.last_accessed
@@ -67,13 +54,17 @@ func GetShareFolderLink(token string) (ShareFolderLink, error) {
 		&link.CreatedBy, &link.ExpiresAt, &link.CreatedAt, &link.RequireLogin, &link.AllowUpload, &link.MaxFileSize, &link.LastAccessed,
 	)
 	if err != nil {
-		return ShareFolderLink{}, sql.ErrNoRows
+		return link, sql.ErrNoRows
 	}
+
 	touchShareFolderLink(token)
+
 	return link, nil
 }
 
-func ListShareFoldersByFolder(folderUUID, createdBy string) ([]ShareFolderLink, error) {
+func ListShareFoldersByFolder(folderUUID, createdBy string) ([]sdk.ShareFolderLink, error) {
+	var links []sdk.ShareFolderLink
+
 	rows, err := DB.Query(`
 		SELECT sl.id, sl.token, sl.folder_id, fo.uuid, fo.name,
 		       sl.created_by, sl.expires_at, sl.created_at, sl.require_login, sl.allow_upload, sl.max_file_size, sl.last_accessed
@@ -88,19 +79,22 @@ func ListShareFoldersByFolder(folderUUID, createdBy string) ([]ShareFolderLink, 
 	}
 	defer rows.Close()
 
-	var links []ShareFolderLink
 	for rows.Next() {
-		var l ShareFolderLink
+		var l sdk.ShareFolderLink
 		if err := rows.Scan(&l.ID, &l.Token, &l.FolderIntID, &l.FolderUUID, &l.FolderName,
 			&l.CreatedBy, &l.ExpiresAt, &l.CreatedAt, &l.RequireLogin, &l.AllowUpload, &l.MaxFileSize, &l.LastAccessed); err != nil {
 			return nil, err
 		}
+
 		links = append(links, l)
 	}
+
 	return links, rows.Err()
 }
 
-func ListShareFoldersByUser(createdBy string) ([]ShareFolderLink, error) {
+func ListShareFoldersByUser(createdBy string) ([]sdk.ShareFolderLink, error) {
+	var links []sdk.ShareFolderLink
+
 	rows, err := DB.Query(`
 		SELECT sl.id, sl.token, sl.folder_id, COALESCE(fo.uuid, ''), COALESCE(fo.name, ''),
 		       sl.created_by, sl.expires_at, sl.created_at, sl.require_login, sl.allow_upload, sl.max_file_size, sl.last_accessed
@@ -115,19 +109,21 @@ func ListShareFoldersByUser(createdBy string) ([]ShareFolderLink, error) {
 	}
 	defer rows.Close()
 
-	var links []ShareFolderLink
 	for rows.Next() {
-		var l ShareFolderLink
+		var l sdk.ShareFolderLink
 		if err := rows.Scan(&l.ID, &l.Token, &l.FolderIntID, &l.FolderUUID, &l.FolderName,
 			&l.CreatedBy, &l.ExpiresAt, &l.CreatedAt, &l.RequireLogin, &l.AllowUpload, &l.MaxFileSize, &l.LastAccessed); err != nil {
 			return nil, err
 		}
 		links = append(links, l)
 	}
+
 	return links, rows.Err()
 }
 
-func ListExpiredShareFoldersByUser(createdBy string) ([]ShareFolderLink, error) {
+func ListExpiredShareFoldersByUser(createdBy string) ([]sdk.ShareFolderLink, error) {
+	var links []sdk.ShareFolderLink
+
 	rows, err := DB.Query(`
 		SELECT sl.id, sl.token, sl.folder_id, COALESCE(fo.uuid, ''), COALESCE(fo.name, ''),
 		       sl.created_by, sl.expires_at, sl.created_at, sl.require_login, sl.allow_upload, sl.max_file_size, sl.last_accessed
@@ -142,15 +138,15 @@ func ListExpiredShareFoldersByUser(createdBy string) ([]ShareFolderLink, error) 
 	}
 	defer rows.Close()
 
-	var links []ShareFolderLink
 	for rows.Next() {
-		var l ShareFolderLink
+		var l sdk.ShareFolderLink
 		if err := rows.Scan(&l.ID, &l.Token, &l.FolderIntID, &l.FolderUUID, &l.FolderName,
 			&l.CreatedBy, &l.ExpiresAt, &l.CreatedAt, &l.RequireLogin, &l.AllowUpload, &l.MaxFileSize, &l.LastAccessed); err != nil {
 			return nil, err
 		}
 		links = append(links, l)
 	}
+
 	return links, rows.Err()
 }
 

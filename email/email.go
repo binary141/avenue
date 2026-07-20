@@ -26,13 +26,13 @@ var Default Sender
 // globalEmailTo overrides the To address on all outbound messages when set.
 var globalEmailTo = shared.GetEnv("GLOBAL_EMAIL_TO", "")
 
-var NotConfigured = errors.New("sender is not configured")
+var ErrNotConfigured = errors.New("sender is not configured")
 
 // Send delivers msg via Default, overriding the To address with GLOBAL_EMAIL_TO
 // if that variable is set.
 func Send(msg Message) error {
 	if Default == nil {
-		return NotConfigured
+		return ErrNotConfigured
 	}
 
 	if globalEmailTo != "" {

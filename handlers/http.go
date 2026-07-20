@@ -12,6 +12,7 @@ import (
 
 	"avenue/backend/db"
 	"avenue/backend/logger"
+	"avenue/backend/sdk"
 	"avenue/backend/shared"
 
 	"github.com/gin-contrib/cors"
@@ -312,7 +313,5 @@ func (s *Server) Run(address string) error {
 func (s *Server) pingHandler(c *gin.Context) {
 	ctx := c.Request.Context()
 	logger.Debugf("ctx val: %s", ctx.Value(shared.USERCOOKIENAME))
-	c.JSON(200, gin.H{
-		"message": "pong",
-	})
+	c.JSON(200, sdk.MessageResponse{Message: "pong"})
 }

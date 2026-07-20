@@ -31,6 +31,7 @@ type User struct {
 	Email     string    `json:"email"`
 	FirstName string    `json:"firstName"`
 	LastName  string    `json:"lastName"`
+	Password  string    `json:"-"` // server-only: bcrypt hash, never sent to clients
 	CanLogin  bool      `json:"canLogin"`
 	IsAdmin   bool      `json:"isAdmin"`
 	Quota     int64     `json:"quota"`
@@ -66,6 +67,7 @@ type ShareFolderLink struct {
 	Token        string     `json:"token"`
 	FolderUUID   string     `json:"folder_uuid"`
 	FolderName   string     `json:"folder_name"`
+	FolderIntID  int64      `json:"-"` // server-only: integer FK used for subtree checks
 	CreatedBy    int64      `json:"created_by"`
 	ExpiresAt    *time.Time `json:"expires_at"`
 	CreatedAt    time.Time  `json:"created_at"`

@@ -12,6 +12,7 @@ import (
 	"avenue/backend/db"
 	"avenue/backend/email"
 	"avenue/backend/logger"
+	"avenue/backend/sdk"
 	"avenue/backend/shared"
 
 	"github.com/gin-gonic/gin"
@@ -33,17 +34,8 @@ func forgotPasswordHTML(resetURL string) string {
 	return buf.String()
 }
 
-type ForgotPasswordRequest struct {
-	Email string `json:"email" binding:"required"`
-}
-
-type ResetPasswordRequest struct {
-	Token       string `json:"token" binding:"required"`
-	NewPassword string `json:"newPassword" binding:"required,min=8"`
-}
-
 func (s *Server) ForgotPassword(c *gin.Context) {
-	var req ForgotPasswordRequest
+	var req sdk.ForgotPasswordRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.Status(http.StatusBadRequest)
 		return
@@ -79,7 +71,7 @@ func (s *Server) ForgotPassword(c *gin.Context) {
 		HTML:    forgotPasswordHTML(resetURL),
 		Text:    "You requested a password reset for your Avenue account.\n\nClick the link below to set a new password:\n\n" + resetURL + "\n\nThis link expires in 1 hour. If you did not request this, you can safely ignore this email.",
 	}); err != nil {
-		if !errors.Is(err, email.NotConfigured) {
+		if !errors.Is(err, email.ErrNotConfigured) {
 			logger.Errorf("email(forgot password): %v", err)
 		}
 	}
@@ -88,7 +80,7 @@ func (s *Server) ForgotPassword(c *gin.Context) {
 }
 
 func (s *Server) ResetPassword(c *gin.Context) {
-	var req ResetPasswordRequest
+	var req sdk.ResetPasswordRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.Status(http.StatusBadRequest)
 		return
@@ -177,7 +169,7 @@ func (s *Server) AdminSendPasswordReset(c *gin.Context) {
 		HTML:    forgotPasswordHTML(resetURL),
 		Text:    "An administrator has sent you a password reset for your Avenue account.\n\nClick the link below to set a new password:\n\n" + resetURL + "\n\nThis link expires in 1 hour.",
 	}); err != nil {
-		if errors.Is(err, email.NotConfigured) {
+		if errors.Is(err, email.ErrNotConfigured) {
 			respond(c, http.StatusServiceUnavailable, errors.New("email is not configured"))
 			return
 		}

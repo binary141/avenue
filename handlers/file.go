@@ -15,22 +15,12 @@ import (
 
 	"avenue/backend/db"
 	"avenue/backend/logger"
+	"avenue/backend/sdk"
 	"avenue/backend/shared"
 
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/afero"
 )
-
-type UploadReq struct {
-	Name      string `json:"name" binding:"required"`
-	Extension string `json:"extension"  binding:"required"`
-	Data      string `json:"data" binding:"required"`
-	Parent    string `json:"parent"`
-}
-type Response struct {
-	Message string `json:"message"`
-	Error   string `json:"error"`
-}
 
 func ensureDir(fs afero.Fs, path string) error {
 	exists, err := afero.DirExists(fs, path)
@@ -50,7 +40,7 @@ func ensureDir(fs afero.Fs, path string) error {
 func (s *Server) Upload(c *gin.Context) {
 	userID, err := shared.GetUserIDFromContext(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, Response{
+		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
 			Message: "could not get user id",
 			Error:   err.Error(),
 		})
@@ -60,7 +50,7 @@ func (s *Server) Upload(c *gin.Context) {
 	user, err := db.GetUserByIDStr(userID)
 	if err != nil {
 		logger.Errorf("error getting user: %s", err.Error())
-		c.JSON(http.StatusInternalServerError, Response{
+		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
 			Error: err.Error(),
 		})
 		return
@@ -68,7 +58,7 @@ func (s *Server) Upload(c *gin.Context) {
 
 	userIDInt, err := strconv.ParseInt(userID, 10, 64)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, Response{Error: err.Error()})
+		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -80,14 +70,14 @@ func (s *Server) Upload(c *gin.Context) {
 		totalUsed, err := db.GetUserUsage(userIDInt)
 		if err != nil {
 			logger.Errorf("error getting user quota: %s", err.Error())
-			c.JSON(http.StatusInternalServerError, Response{
+			c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
 				Error: err.Error(),
 			})
 			return
 		}
 
 		if totalUsed >= user.Quota {
-			c.JSON(http.StatusUnprocessableEntity, Response{
+			c.JSON(http.StatusUnprocessableEntity, sdk.MessageResponse{
 				Error: "Max quota reached. Please delete files to be able to upload files",
 			})
 			return
@@ -106,7 +96,7 @@ func (s *Server) Upload(c *gin.Context) {
 
 	err = ensureDir(s.fs, fmt.Sprintf("/%s", userID))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, Response{
+		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
 			Message: "could not ensure dir exists",
 			Error:   err.Error(),
 		})
@@ -115,7 +105,7 @@ func (s *Server) Upload(c *gin.Context) {
 
 	mr, err := c.Request.MultipartReader()
 	if err != nil {
-		c.JSON(http.StatusBadRequest, Response{
+		c.JSON(http.StatusBadRequest, sdk.MessageResponse{
 			Message: "invalid multipart request",
 			Error:   err.Error(),
 		})
@@ -136,7 +126,7 @@ func (s *Server) Upload(c *gin.Context) {
 			break
 		}
 		if err != nil {
-			c.JSON(http.StatusBadRequest, Response{
+			c.JSON(http.StatusBadRequest, sdk.MessageResponse{
 				Message: "multipart read error",
 				Error:   err.Error(),
 			})
@@ -147,7 +137,7 @@ func (s *Server) Upload(c *gin.Context) {
 		case "parent":
 			buf, err := io.ReadAll(io.LimitReader(part, 1024))
 			if err != nil {
-				c.JSON(http.StatusInternalServerError, Response{
+				c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
 					Message: "Unable to read multi part bytes for parent",
 					Error:   err.Error(),
 				})
@@ -157,7 +147,7 @@ func (s *Server) Upload(c *gin.Context) {
 		case "file":
 			// only allow one file upload for now
 			if fileSeen {
-				c.JSON(http.StatusBadRequest, Response{Message: "only one file allowed"})
+				c.JSON(http.StatusBadRequest, sdk.MessageResponse{Message: "only one file allowed"})
 				return
 			}
 			fileSeen = true
@@ -168,7 +158,7 @@ func (s *Server) Upload(c *gin.Context) {
 			buf := make([]byte, 512)
 			n, err := io.ReadAtLeast(part, buf, 1)
 			if err != nil && err != io.ErrUnexpectedEOF {
-				c.JSON(http.StatusInternalServerError, Response{
+				c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
 					Message: "Unable to read multi part bytes",
 					Error:   err.Error(),
 				})
@@ -177,7 +167,7 @@ func (s *Server) Upload(c *gin.Context) {
 			contentType = http.DetectContentType(buf[:n])
 
 			// Create file record in database
-			fileID, err = db.CreateFile(&db.File{
+			fileID, err = db.CreateFile(&sdk.File{
 				Name:      filename,
 				Extension: extension,
 				MimeType:  contentType,
@@ -185,7 +175,7 @@ func (s *Server) Upload(c *gin.Context) {
 				CreatedBy: userIDInt,
 			})
 			if err != nil {
-				c.JSON(http.StatusInternalServerError, Response{
+				c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
 					Message: "could not create file record",
 					Error:   err.Error(),
 				})
@@ -199,14 +189,14 @@ func (s *Server) Upload(c *gin.Context) {
 				deleteErr := db.DeleteFile(fileID, userID)
 				if deleteErr != nil {
 					logger.Errorf("delete file: %v", deleteErr)
-					c.JSON(http.StatusInternalServerError, Response{
+					c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
 						Message: "could not delete file in db",
 						Error:   deleteErr.Error(),
 					})
 					return
 				}
 
-				c.JSON(http.StatusInternalServerError, Response{
+				c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
 					Message: "could not create file",
 					Error:   err.Error(),
 				})
@@ -221,14 +211,14 @@ func (s *Server) Upload(c *gin.Context) {
 				deleteErr := db.DeleteFile(fileID, userID)
 				if deleteErr != nil {
 					logger.Errorf("delete file: %v", deleteErr)
-					c.JSON(http.StatusInternalServerError, Response{
+					c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
 						Message: "could not delete file in db",
 						Error:   deleteErr.Error(),
 					})
 					return
 				}
 
-				c.JSON(http.StatusInternalServerError, Response{
+				c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
 					Message: "Unable to read multi part bytes",
 					Error:   err.Error(),
 				})
@@ -243,7 +233,7 @@ func (s *Server) Upload(c *gin.Context) {
 				deleteErr := db.DeleteFile(fileID, userID)
 				if deleteErr != nil {
 					logger.Errorf("delete file: %v", deleteErr)
-					c.JSON(http.StatusInternalServerError, Response{
+					c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
 						Message: "could not delete file in db",
 						Error:   deleteErr.Error(),
 					})
@@ -252,20 +242,20 @@ func (s *Server) Upload(c *gin.Context) {
 
 				var maxErr *http.MaxBytesError
 				if errors.As(err, &maxErr) {
-					c.JSON(http.StatusRequestEntityTooLarge, Response{
+					c.JSON(http.StatusRequestEntityTooLarge, sdk.MessageResponse{
 						Error: "File too large",
 					})
 					return
 				}
 
 				if errors.Is(err, http.ErrBodyReadAfterClose) {
-					c.JSON(http.StatusRequestEntityTooLarge, Response{
+					c.JSON(http.StatusRequestEntityTooLarge, sdk.MessageResponse{
 						Error: "File too large",
 					})
 					return
 				}
 
-				c.JSON(http.StatusInternalServerError, Response{
+				c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
 					Message: "Unable to read multi part bytes",
 					Error:   err.Error(),
 				})
@@ -286,14 +276,14 @@ func (s *Server) Upload(c *gin.Context) {
 	}
 
 	if fileID == "" {
-		c.JSON(http.StatusBadRequest, Response{
+		c.JSON(http.StatusBadRequest, sdk.MessageResponse{
 			Message: "no file provided",
 		})
 		return
 	}
 
 	// Update file size in database
-	err = db.UpdateFile(db.File{
+	err = db.UpdateFile(sdk.File{
 		UUID:      fileID,
 		FileSize:  total,
 		Extension: extension,
@@ -303,7 +293,7 @@ func (s *Server) Upload(c *gin.Context) {
 	})
 	if err != nil {
 		// what do we want to do if we cannot update the filesize?
-		c.JSON(http.StatusInternalServerError, Response{
+		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
 			Message: "could not update file size",
 			Error:   err.Error(),
 		})
@@ -313,7 +303,7 @@ func (s *Server) Upload(c *gin.Context) {
 	err = db.UpdateUsage(userIDInt, total)
 	if err != nil {
 		// todo should we rollback? Or just have a cron that'll reconcile?
-		c.JSON(http.StatusInternalServerError, Response{
+		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
 			Message: "could not update user quota usage",
 			Error:   err.Error(),
 		})
@@ -326,7 +316,7 @@ func (s *Server) Upload(c *gin.Context) {
 func (s *Server) ListFiles(c *gin.Context) {
 	userID, err := shared.GetUserIDFromContext(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, Response{
+		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
 			Message: "could not get user id",
 			Error:   err.Error(),
 		})
@@ -335,7 +325,7 @@ func (s *Server) ListFiles(c *gin.Context) {
 
 	files, err := db.ListFiles(userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, Response{
+		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
 			Message: "could not list files",
 			Error:   err.Error(),
 		})
@@ -347,7 +337,7 @@ func (s *Server) ListFiles(c *gin.Context) {
 func (s *Server) SearchFiles(c *gin.Context) {
 	userID, err := shared.GetUserIDFromContext(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, Response{
+		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
 			Message: "could not get user id",
 			Error:   err.Error(),
 		})
@@ -356,7 +346,7 @@ func (s *Server) SearchFiles(c *gin.Context) {
 
 	fileName := c.Param("fileName")
 	if fileName == "" {
-		c.JSON(http.StatusBadRequest, Response{
+		c.JSON(http.StatusBadRequest, sdk.MessageResponse{
 			Message: "search query can't be empty",
 		})
 		return
@@ -364,7 +354,7 @@ func (s *Server) SearchFiles(c *gin.Context) {
 
 	files, err := db.SearchChildFiles(c.Param("folderID"), userID, fileName)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, Response{
+		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
 			Message: "could not search files",
 			Error:   err.Error(),
 		})
@@ -373,23 +363,19 @@ func (s *Server) SearchFiles(c *gin.Context) {
 	c.JSON(http.StatusOK, files)
 }
 
-type MoveFileReq struct {
-	Parent string `json:"parent"` // destination folder uuid, "" moves the file to the root
-}
-
 func (s *Server) MoveFile(c *gin.Context) {
 	userID, err := shared.GetUserIDFromContext(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, Response{
+		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
 			Message: "could not get user id",
 			Error:   err.Error(),
 		})
 		return
 	}
 
-	var req MoveFileReq
+	var req sdk.MoveFileRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, Response{
+		c.JSON(http.StatusBadRequest, sdk.MessageResponse{
 			Message: "could not marshal all data to json",
 			Error:   err.Error(),
 		})
@@ -399,14 +385,14 @@ func (s *Server) MoveFile(c *gin.Context) {
 	file, err := db.GetFileByIDForUser(c.Param("fileID"), userID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			c.JSON(http.StatusNotFound, Response{
+			c.JSON(http.StatusNotFound, sdk.MessageResponse{
 				Message: "file not found in db",
 				Error:   err.Error(),
 			})
 			return
 		}
 
-		c.JSON(http.StatusInternalServerError, Response{
+		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
 			Message: "could not get file",
 			Error:   err.Error(),
 		})
@@ -415,7 +401,7 @@ func (s *Server) MoveFile(c *gin.Context) {
 
 	if req.Parent != "" {
 		if _, err := db.GetFolder(req.Parent, userID); err != nil {
-			c.JSON(http.StatusBadRequest, Response{
+			c.JSON(http.StatusBadRequest, sdk.MessageResponse{
 				Message: "destination folder must exist",
 				Error:   err.Error(),
 			})
@@ -426,7 +412,7 @@ func (s *Server) MoveFile(c *gin.Context) {
 	file.Parent = req.Parent
 
 	if err := db.UpdateFile(*file); err != nil {
-		c.JSON(http.StatusInternalServerError, Response{
+		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
 			Message: "could not move file",
 			Error:   err.Error(),
 		})
@@ -439,7 +425,7 @@ func (s *Server) MoveFile(c *gin.Context) {
 func (s *Server) UpdateFileName(c *gin.Context) {
 	userID, err := shared.GetUserIDFromContext(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, Response{
+		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
 			Message: "could not get user id",
 			Error:   err.Error(),
 		})
@@ -448,7 +434,7 @@ func (s *Server) UpdateFileName(c *gin.Context) {
 
 	newName := c.Param("fileName")
 	if newName == "" {
-		c.JSON(http.StatusBadRequest, Response{
+		c.JSON(http.StatusBadRequest, sdk.MessageResponse{
 			Message: "filename can't be empty",
 		})
 		return
@@ -457,14 +443,14 @@ func (s *Server) UpdateFileName(c *gin.Context) {
 	file, err := db.GetFileByIDForUser(c.Param("fileID"), userID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			c.JSON(http.StatusNotFound, Response{
+			c.JSON(http.StatusNotFound, sdk.MessageResponse{
 				Message: "file not found in db",
 				Error:   err.Error(),
 			})
 			return
 		}
 
-		c.JSON(http.StatusInternalServerError, Response{
+		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
 			Message: "could not get file",
 			Error:   err.Error(),
 		})
@@ -475,7 +461,7 @@ func (s *Server) UpdateFileName(c *gin.Context) {
 
 	err = db.UpdateFile(*file)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, Response{
+		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
 			Message: "could not update file",
 			Error:   err.Error(),
 		})
@@ -488,7 +474,7 @@ func (s *Server) UpdateFileName(c *gin.Context) {
 func (s *Server) GetFile(c *gin.Context) {
 	userID, err := shared.GetUserIDFromContext(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, Response{
+		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
 			Message: "could not get user id",
 			Error:   err.Error(),
 		})
@@ -498,14 +484,14 @@ func (s *Server) GetFile(c *gin.Context) {
 	file, err := db.GetFileByIDForUser(c.Param("fileID"), userID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			c.JSON(http.StatusNotFound, Response{
+			c.JSON(http.StatusNotFound, sdk.MessageResponse{
 				Message: "file not found in db",
 				Error:   err.Error(),
 			})
 			return
 		}
 
-		c.JSON(http.StatusInternalServerError, Response{
+		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
 			Message: "could not get file",
 			Error:   err.Error(),
 		})
@@ -516,14 +502,14 @@ func (s *Server) GetFile(c *gin.Context) {
 	fileData, err := s.fs.Open(path)
 	if err != nil {
 		if errors.Is(err, afero.ErrFileNotFound) {
-			c.JSON(http.StatusNotFound, Response{
+			c.JSON(http.StatusNotFound, sdk.MessageResponse{
 				Message: "could not find file in fs",
 				Error:   err.Error(),
 			})
 			return
 		}
 
-		c.JSON(http.StatusInternalServerError, Response{
+		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
 			Message: "could not open file",
 			Error:   err.Error(),
 		})
@@ -553,7 +539,7 @@ func (s *Server) GetFile(c *gin.Context) {
 func (s *Server) DeleteFile(c *gin.Context) {
 	userID, err := shared.GetUserIDFromContext(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, Response{
+		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
 			Message: "could not get user id",
 			Error:   err.Error(),
 		})
@@ -561,7 +547,7 @@ func (s *Server) DeleteFile(c *gin.Context) {
 	}
 	f, err := db.GetFileByIDForUser(c.Param("fileID"), userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, Response{
+		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
 			Message: "error getting file",
 			Error:   err.Error(),
 		})
@@ -572,7 +558,7 @@ func (s *Server) DeleteFile(c *gin.Context) {
 		// only error if the file was found
 		// if the file wasn't found, we still want to delete from the system
 		if !errors.Is(err, afero.ErrFileNotFound) {
-			c.JSON(http.StatusInternalServerError, Response{
+			c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
 				Message: "error deleting file from file system",
 				Error:   err.Error(),
 			})
@@ -581,7 +567,7 @@ func (s *Server) DeleteFile(c *gin.Context) {
 	}
 
 	if err = db.DeleteFileForUser(c.Param("fileID"), userID); err != nil {
-		c.JSON(http.StatusInternalServerError, Response{
+		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
 			Message: "error deleting file from db",
 			Error:   err.Error(),
 		})
@@ -595,7 +581,7 @@ func (s *Server) DeleteFile(c *gin.Context) {
 	err = db.UpdateUsage(f.CreatedBy, -f.FileSize)
 	if err != nil {
 		// todo should we rollback? Or just have a cron that'll reconcile?
-		c.JSON(http.StatusInternalServerError, Response{
+		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
 			Message: "could not update user quota usage",
 			Error:   err.Error(),
 		})

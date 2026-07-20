@@ -14,6 +14,7 @@ import (
 	"avenue/backend/db"
 	"avenue/backend/email"
 	"avenue/backend/logger"
+	"avenue/backend/sdk"
 	"avenue/backend/shared"
 
 	"github.com/gin-gonic/gin"
@@ -35,18 +36,13 @@ func userCreatedHTML(setPasswordURL string) string {
 	return buf.String()
 }
 
-type LoginRequest struct {
-	Email    string `json:"email" binding:"required,min=4,max=64"`
-	Password string `json:"password" binding:"required,min=4,max=64"`
-}
-
 func (s *Server) LoginMeta(c *gin.Context) {
 	enabled := shared.GetEnv("REGISTRATION_ENABLED", "false")
-	c.JSON(http.StatusOK, gin.H{"registration_enabled": enabled})
+	c.JSON(http.StatusOK, sdk.V1LoginMetaResponse{RegistrationEnabled: enabled})
 }
 
 func (s *Server) Login(c *gin.Context) {
-	var req LoginRequest
+	var req sdk.LoginRequest
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.Status(http.StatusBadRequest)
@@ -68,15 +64,15 @@ func (s *Server) Login(c *gin.Context) {
 	c.SetCookie(string(shared.USERCOOKIENAME), fmt.Sprintf("%d", u.ID), 600, "/", "localhost", false, true)
 	c.SetCookie(string(shared.SESSIONCOOKIENAME), session.SessionID, 600, "/", "localhost", false, true)
 
-	c.JSON(http.StatusOK, gin.H{
-		"Message":                        "OK",
-		"User-Id":                        u.ID,
-		string(shared.SESSIONCOOKIENAME): session.SessionID,
-		"user_data":                      u,
+	c.JSON(http.StatusOK, sdk.V1LoginResponse{
+		Message:   "OK",
+		UserID:    u.ID,
+		SessionID: session.SessionID,
+		UserData:  u,
 	})
 }
 
-func (s *Server) authorize(email, password string) (db.User, error) {
+func (s *Server) authorize(email, password string) (sdk.User, error) {
 	user, err := db.GetUserByEmail(email)
 	if err != nil {
 		return user, err
@@ -86,7 +82,7 @@ func (s *Server) authorize(email, password string) (db.User, error) {
 
 	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password))
 	if err != nil {
-		return db.User{}, err
+		return sdk.User{}, err
 	}
 
 	return user, nil
@@ -106,14 +102,7 @@ func (s *Server) Logout(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, Response{Message: "OK"})
-}
-
-type RegisterRequest struct {
-	Password  string `json:"password" binding:"required,min=4,max=64"`
-	FirstName string `json:"firstName" binding:"max=64"`
-	LastName  string `json:"lastName" binding:"max=64"`
-	Email     string `json:"email" binding:"required,min=4,max=512"`
+	c.JSON(http.StatusOK, sdk.MessageResponse{Message: "OK"})
 }
 
 func (s *Server) Register(c *gin.Context) {
@@ -124,7 +113,7 @@ func (s *Server) Register(c *gin.Context) {
 		return
 	}
 
-	var req RegisterRequest
+	var req sdk.RegisterRequest
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		respond(c, http.StatusBadRequest, err)
@@ -159,21 +148,12 @@ func (s *Server) Register(c *gin.Context) {
 			To:      userEmail,
 			Subject: "Welcome to Avenue",
 			Text:    "Your Avenue account has been created. You can now log in at any time.",
-		}); err != nil && !errors.Is(err, email.NotConfigured) {
+		}); err != nil && !errors.Is(err, email.ErrNotConfigured) {
 			logger.Errorf("email(register): %v", err)
 		}
 	}(u.Email)
 
 	c.JSON(http.StatusCreated, u)
-}
-
-type CreateUserRequest struct {
-	Email     string  `json:"email" binding:"required,min=4,max=512"`
-	Password  *string `json:"password" binding:"omitempty,min=4,max=64"`
-	FirstName string  `json:"firstName" binding:"min=1,max=64"`
-	LastName  string  `json:"lastName" binding:"min=1,max=64"`
-	IsAdmin   bool    `json:"isAdmin"`
-	SendEmail bool    `json:"sendEmail"`
 }
 
 func (s *Server) CreateUser(c *gin.Context) {
@@ -195,7 +175,7 @@ func (s *Server) CreateUser(c *gin.Context) {
 		return
 	}
 
-	var req CreateUserRequest
+	var req sdk.CreateUserRequest
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		respond(c, http.StatusBadRequest, err)
@@ -259,7 +239,7 @@ func (s *Server) CreateUser(c *gin.Context) {
 				Subject: "Your Avenue account has been created",
 				HTML:    userCreatedHTML(setPasswordURL),
 				Text:    "An administrator has created an Avenue account for you.\n\nClick the link below to set your password:\n\n" + setPasswordURL + "\n\nThis link expires in 1 hour.",
-			}); err != nil && !errors.Is(err, email.NotConfigured) {
+			}); err != nil && !errors.Is(err, email.ErrNotConfigured) {
 				logger.Errorf("email(user created): %v", err)
 			}
 		}(nu.ID, nu.Email, scheme, host)
@@ -321,16 +301,6 @@ func (s *Server) GetProfile(c *gin.Context) {
 	c.JSON(http.StatusOK, u)
 }
 
-type UpdateProfileRequest struct {
-	ID        int64   `json:"id" binding:"required,min=1"`
-	Email     *string `json:"email" binding:"omitempty,email,min=4,max=512"`
-	IsAdmin   *bool   `json:"isAdmin"`
-	Password  *string `json:"password" binding:"omitempty,min=4,max=64"`
-	FirstName *string `json:"firstName" binding:"min=0,max=64"`
-	LastName  *string `json:"lastName" binding:"min=0,max=64"`
-	Quota     *int64  `json:"quota" binding:"omitempty,min=0"`
-}
-
 func (s *Server) UpdateProfile(c *gin.Context) {
 	ctx := c.Request.Context()
 	userID, err := shared.GetUserIDFromContext(ctx)
@@ -339,7 +309,7 @@ func (s *Server) UpdateProfile(c *gin.Context) {
 		return
 	}
 
-	var req UpdateProfileRequest
+	var req sdk.UpdateProfileRequest
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		respond(c, http.StatusBadRequest, err)
@@ -412,10 +382,6 @@ func (s *Server) UpdateProfile(c *gin.Context) {
 	c.JSON(http.StatusOK, updatingUser)
 }
 
-type UpdatePasswordRequest struct {
-	Password string `json:"password" binding:"required,min=8,max=128"`
-}
-
 func (s *Server) UpdatePassword(c *gin.Context) {
 	ctx := c.Request.Context()
 	userID, err := shared.GetUserIDFromContext(ctx)
@@ -424,7 +390,7 @@ func (s *Server) UpdatePassword(c *gin.Context) {
 		return
 	}
 
-	var req UpdatePasswordRequest
+	var req sdk.UpdatePasswordRequest
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		respond(c, http.StatusBadRequest, err)

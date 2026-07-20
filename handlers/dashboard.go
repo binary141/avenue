@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"avenue/backend/db"
+	"avenue/backend/sdk"
 	"avenue/backend/shared"
 	"net/http"
 
@@ -23,9 +24,9 @@ func (s *Server) DashboardInfo(c *gin.Context) {
 		}
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"maxFileSize":          maxFileSize,
-		"fileSharingEnabled":   shared.GetEnvBool("ENABLE_FILE_SHARING", false),
-		"folderSharingEnabled": shared.GetEnvBool("ENABLE_FOLDER_SHARING", false),
+	c.JSON(http.StatusOK, sdk.V1DashboardResponse{
+		MaxFileSize:          maxFileSize,
+		FileSharingEnabled:   shared.GetEnvBool("ENABLE_FILE_SHARING", false),
+		FolderSharingEnabled: shared.GetEnvBool("ENABLE_FOLDER_SHARING", false),
 	})
 }

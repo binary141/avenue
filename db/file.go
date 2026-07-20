@@ -3,24 +3,13 @@ package db
 import (
 	"database/sql"
 	"strings"
-	"time"
+
+	"avenue/backend/sdk"
 
 	"github.com/google/uuid"
 )
 
-type File struct {
-	ID        int64     `json:"id"`
-	UUID      string    `json:"uuid"`
-	Name      string    `json:"name"`
-	Extension string    `json:"extension"`
-	MimeType  string    `json:"mimeType"`
-	FileSize  int64     `json:"file_size"`
-	Parent    string    `json:"parent"`     // always "" — parent_id stored as BIGINT, not returned
-	CreatedBy int64     `json:"created_by"` // was TEXT, now BIGINT
-	CreatedAt time.Time `json:"created_at"`
-}
-
-func CreateFile(file *File) (string, error) {
+func CreateFile(file *sdk.File) (string, error) {
 	if file.UUID == "" {
 		file.UUID = uuid.NewString()
 	}
@@ -44,8 +33,8 @@ func CreateFile(file *File) (string, error) {
 	return file.UUID, nil
 }
 
-func GetFileByID(id, creatorID string) (*File, error) {
-	var f File
+func GetFileByID(id, creatorID string) (*sdk.File, error) {
+	var f sdk.File
 	err := DB.QueryRow(`
 		SELECT id, uuid, name, extension, mime_type, file_size, created_by, created_at
 		FROM files WHERE uuid=$1 AND created_by=$2::BIGINT
@@ -62,8 +51,8 @@ func GetFileByID(id, creatorID string) (*File, error) {
 // The parent folder's UUID is included (via a join) so callers that fetch a
 // file and pass it straight to UpdateFile don't accidentally null out
 // parent_id — UpdateFile treats an empty Parent as "move to root".
-func GetFileByIDForUser(id, userID string) (*File, error) {
-	var f File
+func GetFileByIDForUser(id, userID string) (*sdk.File, error) {
+	var f sdk.File
 	var parent sql.NullString
 	err := DB.QueryRow(`
 		SELECT f.id, f.uuid, f.name, f.extension, f.mime_type, f.file_size, f.created_by, f.created_at, p.uuid
@@ -80,8 +69,8 @@ func GetFileByIDForUser(id, userID string) (*File, error) {
 	return &f, nil
 }
 
-func GetFileByIDPublic(id string) (*File, error) {
-	var f File
+func GetFileByIDPublic(id string) (*sdk.File, error) {
+	var f sdk.File
 	err := DB.QueryRow(`
 		SELECT id, uuid, name, extension, mime_type, file_size, created_by, created_at
 		FROM files WHERE uuid=$1
@@ -92,7 +81,7 @@ func GetFileByIDPublic(id string) (*File, error) {
 	return &f, nil
 }
 
-func ListFiles(creatorID string) ([]File, error) {
+func ListFiles(creatorID string) ([]sdk.File, error) {
 	rows, err := DB.Query(`
 		SELECT id, uuid, name, extension, mime_type, file_size, created_by, created_at
 		FROM files WHERE created_by=$1::BIGINT
@@ -102,9 +91,9 @@ func ListFiles(creatorID string) ([]File, error) {
 	}
 	defer rows.Close()
 
-	var files []File
+	var files []sdk.File
 	for rows.Next() {
-		var f File
+		var f sdk.File
 		if err := rows.Scan(&f.ID, &f.UUID, &f.Name, &f.Extension, &f.MimeType, &f.FileSize, &f.CreatedBy, &f.CreatedAt); err != nil {
 			return nil, err
 		}
@@ -130,7 +119,7 @@ func DeleteFileForUser(id, userID string) error {
 
 // ListChildFilePublic lists all files in a folder regardless of who created them.
 // Used by public shared folder endpoints.
-func ListChildFilePublic(parentID string) ([]File, error) {
+func ListChildFilePublic(parentID string) ([]sdk.File, error) {
 	rows, err := DB.Query(`
 		SELECT id, uuid, name, extension, mime_type, file_size, created_by, created_at
 		FROM files
@@ -141,9 +130,9 @@ func ListChildFilePublic(parentID string) ([]File, error) {
 	}
 	defer rows.Close()
 
-	var files []File
+	var files []sdk.File
 	for rows.Next() {
-		var f File
+		var f sdk.File
 		if err := rows.Scan(&f.ID, &f.UUID, &f.Name, &f.Extension, &f.MimeType, &f.FileSize, &f.CreatedBy, &f.CreatedAt); err != nil {
 			return nil, err
 		}
@@ -152,7 +141,7 @@ func ListChildFilePublic(parentID string) ([]File, error) {
 	return files, rows.Err()
 }
 
-func ListChildFile(parentID, ownerID string) ([]File, error) {
+func ListChildFile(parentID, ownerID string) ([]sdk.File, error) {
 	var (
 		rows *sql.Rows
 		err  error
@@ -177,9 +166,9 @@ func ListChildFile(parentID, ownerID string) ([]File, error) {
 	}
 	defer rows.Close()
 
-	var files []File
+	var files []sdk.File
 	for rows.Next() {
-		var f File
+		var f sdk.File
 		if err := rows.Scan(&f.ID, &f.UUID, &f.Name, &f.Extension, &f.MimeType, &f.FileSize, &f.CreatedBy, &f.CreatedAt); err != nil {
 			return nil, err
 		}
@@ -197,7 +186,7 @@ func escapeLikePattern(s string) string {
 
 // SearchChildFiles returns files directly inside parentID (or the root, if
 // parentID is "") owned by ownerID whose name starts with namePrefix.
-func SearchChildFiles(parentID, ownerID, namePrefix string) ([]File, error) {
+func SearchChildFiles(parentID, ownerID, namePrefix string) ([]sdk.File, error) {
 	pattern := escapeLikePattern(namePrefix) + "%"
 
 	var (
@@ -224,9 +213,9 @@ func SearchChildFiles(parentID, ownerID, namePrefix string) ([]File, error) {
 	}
 	defer rows.Close()
 
-	var files []File
+	var files []sdk.File
 	for rows.Next() {
-		var f File
+		var f sdk.File
 		if err := rows.Scan(&f.ID, &f.UUID, &f.Name, &f.Extension, &f.MimeType, &f.FileSize, &f.CreatedBy, &f.CreatedAt); err != nil {
 			return nil, err
 		}
@@ -235,7 +224,7 @@ func SearchChildFiles(parentID, ownerID, namePrefix string) ([]File, error) {
 	return files, rows.Err()
 }
 
-func UpdateFile(f File) error {
+func UpdateFile(f sdk.File) error {
 	_, err := DB.Exec(`
 		UPDATE files SET name=$2, extension=$3, mime_type=$4, file_size=$5,
 			parent_id = CASE WHEN $6 = '' THEN NULL

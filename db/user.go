@@ -2,34 +2,22 @@ package db
 
 import (
 	"strconv"
-	"time"
+
+	"avenue/backend/sdk"
 
 	"golang.org/x/crypto/bcrypt"
 )
 
-type User struct {
-	ID        int64     `json:"id"`
-	Email     string    `json:"email"`
-	FirstName string    `json:"firstName"`
-	LastName  string    `json:"lastName"`
-	Password  string    `json:"-"`
-	CanLogin  bool      `json:"canLogin"`
-	IsAdmin   bool      `json:"isAdmin"`
-	Quota     int64     `json:"quota"`
-	SpaceUsed int64     `json:"spaceUsed"`
-	CreatedAt time.Time `json:"createdAt"`
-}
-
-func GetUserByIDStr(idStr string) (User, error) {
+func GetUserByIDStr(idStr string) (sdk.User, error) {
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		return User{}, err
+		return sdk.User{}, err
 	}
 	return GetUserByID(id)
 }
 
-func GetUserByID(id int64) (User, error) {
-	var u User
+func GetUserByID(id int64) (sdk.User, error) {
+	var u sdk.User
 	err := DB.QueryRow(`
 		SELECT id, email, COALESCE(first_name,''), COALESCE(last_name,''), password, can_login, is_admin, quota, space_used, created_at
 		FROM users WHERE id = $1 AND deleted_at IS NULL
@@ -37,8 +25,8 @@ func GetUserByID(id int64) (User, error) {
 	return u, err
 }
 
-func GetUserByEmail(email string) (User, error) {
-	var u User
+func GetUserByEmail(email string) (sdk.User, error) {
+	var u sdk.User
 	err := DB.QueryRow(`
 		SELECT id, email, COALESCE(first_name,''), COALESCE(last_name,''), password, can_login, is_admin, quota, space_used, created_at
 		FROM users WHERE email = $1 AND deleted_at IS NULL
@@ -46,7 +34,7 @@ func GetUserByEmail(email string) (User, error) {
 	return u, err
 }
 
-func GetUsers() ([]User, error) {
+func GetUsers() ([]sdk.User, error) {
 	rows, err := DB.Query(`
 		SELECT id, email, COALESCE(first_name,''), COALESCE(last_name,''), can_login, is_admin, quota, space_used, created_at
 		FROM users WHERE deleted_at IS NULL ORDER BY id ASC
@@ -56,9 +44,9 @@ func GetUsers() ([]User, error) {
 	}
 	defer rows.Close()
 
-	var users []User
+	var users []sdk.User
 	for rows.Next() {
-		var u User
+		var u sdk.User
 		if err := rows.Scan(&u.ID, &u.Email, &u.FirstName, &u.LastName, &u.CanLogin, &u.IsAdmin, &u.Quota, &u.SpaceUsed, &u.CreatedAt); err != nil {
 			return nil, err
 		}
@@ -67,8 +55,8 @@ func GetUsers() ([]User, error) {
 	return users, rows.Err()
 }
 
-func CreateUser(email, password, firstName, lastName string, isAdmin bool) (User, error) {
-	var u User
+func CreateUser(email, password, firstName, lastName string, isAdmin bool) (sdk.User, error) {
+	var u sdk.User
 	err := DB.QueryRow(`
 		INSERT INTO users (email, password, first_name, last_name, can_login, is_admin, created_at, updated_at)
 		VALUES ($1, $2, NULLIF($3,''), NULLIF($4,''), true, $5, now(), now())
@@ -79,7 +67,7 @@ func CreateUser(email, password, firstName, lastName string, isAdmin bool) (User
 	return u, err
 }
 
-func UpdateUser(user User) (User, error) {
+func UpdateUser(user sdk.User) (sdk.User, error) {
 	_, err := DB.Exec(`
 		UPDATE users
 		SET is_admin=$2, first_name=NULLIF($3,''), last_name=NULLIF($4,''),
@@ -89,7 +77,7 @@ func UpdateUser(user User) (User, error) {
 	return user, err
 }
 
-func HasOtherAdmins(user User) (bool, error) {
+func HasOtherAdmins(user sdk.User) (bool, error) {
 	var exists bool
 	err := DB.QueryRow(
 		`SELECT EXISTS(SELECT 1 FROM users WHERE is_admin=true AND id <> $1 AND deleted_at IS NULL)`,
@@ -183,4 +171,3 @@ func UpsertRootUser() error {
 
 	return nil
 }
-

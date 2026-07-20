@@ -3,20 +3,14 @@ package db
 import (
 	"database/sql"
 
+	"avenue/backend/sdk"
+
 	"github.com/google/uuid"
 )
 
 const rootFolderID = "c32af1cc-aba9-4878-a305-5006dc7a5b76"
 
-type Folder struct {
-	ID       int64  `json:"id"`
-	UUID     string `json:"uuid"`
-	Name     string `json:"name"`
-	ParentID int64  `json:"parent_id"` // 0 means root (no parent)
-	OwnerID  int64  `json:"owner_id"`
-}
-
-func CreateFolder(f *Folder) (string, error) {
+func CreateFolder(f *sdk.Folder) (string, error) {
 	if f.UUID == "" {
 		f.UUID = uuid.NewString()
 	}
@@ -28,8 +22,8 @@ func CreateFolder(f *Folder) (string, error) {
 	return f.UUID, err
 }
 
-func GetFolder(folderID, userID string) (*Folder, error) {
-	var f Folder
+func GetFolder(folderID, userID string) (*sdk.Folder, error) {
+	var f sdk.Folder
 	err := DB.QueryRow(
 		`SELECT id, uuid, name, COALESCE(parent_id, 0), owner_id FROM folders WHERE uuid=$1 AND owner_id=$2::BIGINT`,
 		folderID, userID,
@@ -40,7 +34,7 @@ func GetFolder(folderID, userID string) (*Folder, error) {
 	return &f, nil
 }
 
-func UpdateFolder(f Folder) error {
+func UpdateFolder(f sdk.Folder) error {
 	_, err := DB.Exec(
 		`UPDATE folders SET name=$2 WHERE uuid=$1 AND owner_id=$3`,
 		f.UUID, f.Name, f.OwnerID,
@@ -56,7 +50,7 @@ func DeleteFolder(folderID, userID string) error {
 	return err
 }
 
-func ListChildFolder(parentID, ownerID string) ([]Folder, error) {
+func ListChildFolder(parentID, ownerID string) ([]sdk.Folder, error) {
 	var (
 		rows *sql.Rows
 		err  error
@@ -80,9 +74,9 @@ func ListChildFolder(parentID, ownerID string) ([]Folder, error) {
 	}
 	defer rows.Close()
 
-	var folders []Folder
+	var folders []sdk.Folder
 	for rows.Next() {
-		var f Folder
+		var f sdk.Folder
 		if err := rows.Scan(&f.ID, &f.UUID, &f.Name, &f.ParentID, &f.OwnerID); err != nil {
 			return nil, err
 		}
@@ -91,7 +85,7 @@ func ListChildFolder(parentID, ownerID string) ([]Folder, error) {
 	return folders, rows.Err()
 }
 
-func ListFolderParents(folderID, ownerID string) ([]Folder, error) {
+func ListFolderParents(folderID, ownerID string) ([]sdk.Folder, error) {
 	rows, err := DB.Query(`
 		WITH RECURSIVE folder_breadcrumbs (id, uuid, name, parent_id, owner_id) AS (
 			SELECT id, uuid, name, parent_id, owner_id
@@ -111,9 +105,9 @@ func ListFolderParents(folderID, ownerID string) ([]Folder, error) {
 	}
 	defer rows.Close()
 
-	var folders []Folder
+	var folders []sdk.Folder
 	for rows.Next() {
-		var f Folder
+		var f sdk.Folder
 		if err := rows.Scan(&f.ID, &f.UUID, &f.Name, &f.ParentID, &f.OwnerID); err != nil {
 			return nil, err
 		}

@@ -32,6 +32,9 @@ services:
       DB_PASSWORD: secret
       DB_DATABASE: avenue
 
+      ROOT_USER_EMAIL: admin@example.com
+      ROOT_USER_PASSWORD: password
+
       # emails
       SES_FROM: ${SES_FROM:-}
       AWS_REGION: ${AWS_REGION:-}

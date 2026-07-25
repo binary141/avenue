@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"archive/zip"
 	"bytes"
 	"database/sql"
 	"errors"
@@ -546,6 +547,102 @@ func (s *Server) GetFile(c *gin.Context) {
 		c.Status(http.StatusInternalServerError)
 		return
 	}
+}
+
+// DownloadFilesZip streams a zip archive of the requested files to the
+// client. Files are read from disk and written into the zip one at a time
+// so the archive is never buffered in memory or on disk before sending.
+func (s *Server) DownloadFilesZip(c *gin.Context) {
+	userID, err := shared.GetUserIDFromContext(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
+			Message: "could not get user id",
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	ids := c.QueryArray("ids")
+	if len(ids) == 0 {
+		c.JSON(http.StatusBadRequest, sdk.MessageResponse{
+			Message: "no file ids provided",
+		})
+		return
+	}
+
+	files := make([]*sdk.File, 0, len(ids))
+	for _, id := range ids {
+		file, err := db.GetFileByIDForUser(id, userID)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				c.JSON(http.StatusNotFound, sdk.MessageResponse{
+					Message: fmt.Sprintf("file not found in db: %s", id),
+					Error:   err.Error(),
+				})
+				return
+			}
+
+			c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
+				Message: "could not get file",
+				Error:   err.Error(),
+			})
+			return
+		}
+		files = append(files, file)
+	}
+
+	c.Header("Content-Type", "application/zip")
+	c.Header("Content-Disposition", `attachment; filename="download.zip"`)
+	c.Header("Cache-Control", "no-cache")
+	c.Header("Access-Control-Expose-Headers", "Content-Disposition")
+	c.Status(http.StatusOK)
+	c.Writer.Flush()
+
+	zw := zip.NewWriter(c.Writer)
+	defer func() {
+		_ = zw.Close()
+	}()
+
+	names := make(map[string]int)
+	for _, file := range files {
+		path := fmt.Sprintf("/%d/%s", file.CreatedBy, file.UUID)
+		fileData, err := s.fs.Open(path)
+		if err != nil {
+			logger.Errorf("error opening file %s for zip download: %s", file.UUID, err.Error())
+			continue
+		}
+
+		entryWriter, err := zw.CreateHeader(&zip.FileHeader{
+			Name:     uniqueZipEntryName(names, file.Name),
+			Method:   zip.Deflate,
+			Modified: file.CreatedAt,
+		})
+		if err != nil {
+			_ = fileData.Close()
+			logger.Errorf("error creating zip entry for %s: %s", file.UUID, err.Error())
+			continue
+		}
+
+		if _, err := io.Copy(entryWriter, fileData); err != nil {
+			logger.Errorf("error writing file %s to zip: %s", file.UUID, err.Error())
+		}
+		_ = fileData.Close()
+	}
+}
+
+// uniqueZipEntryName disambiguates duplicate file names within a single zip
+// archive by appending " (n)" before the extension, mirroring how OS file
+// managers handle name collisions.
+func uniqueZipEntryName(seen map[string]int, name string) string {
+	count := seen[name]
+	seen[name] = count + 1
+	if count == 0 {
+		return name
+	}
+
+	ext := filepath.Ext(name)
+	base := strings.TrimSuffix(name, ext)
+	return fmt.Sprintf("%s (%d)%s", base, count, ext)
 }
 
 // DeleteFile moves a file to the trash. The blob stays on disk and quota

@@ -83,6 +83,15 @@
         Move
       </AppButton>
 
+      <AppButton
+        class="bg-blue-600 text-white px-3 py-1"
+        :disabled="selectedFiles.size === 0"
+        :title="selectedFolders.size > 0 ? 'Only selected files will be downloaded — folders can\'t be zipped yet' : ''"
+        @click="downloadSelectedFiles"
+      >
+        Download
+      </AppButton>
+
       <AppButton class="bg-red-600 text-white px-3 py-1" @click="bulkDelete">
         Delete
       </AppButton>
@@ -944,6 +953,19 @@ function getDownloadURL(fileId: string): string {
   const baseURL = import.meta.env.VITE_APP_API_URL || '';
 
   return `${baseURL}v1/file/${fileId}?token=${usersStore.token}`
+}
+
+function downloadSelectedFiles() {
+  const baseURL = import.meta.env.VITE_APP_API_URL || '';
+  const params = new URLSearchParams({ token: usersStore.token });
+  for (const fileId of selectedFiles.value) {
+    params.append('ids', fileId);
+  }
+
+  const link = document.createElement('a');
+  link.href = `${baseURL}v1/files/zip?${params.toString()}`;
+  link.download = 'download.zip';
+  link.click();
 }
 
 // ----- File Operations -----

@@ -816,7 +816,11 @@ const lastFolderIndex = ref<number | null>(null)
 const lastFileIndex = ref<number | null>(null)
 
 function selectFolderRange(start: number, end: number) {
-  const list = folders.value.slice()
+  // Range must be resolved against the same order the checkboxes are
+  // rendered in (filteredFolders), not the raw fetch order — otherwise the
+  // indices from the click handler point at different folders than what's
+  // on screen whenever a sort is active.
+  const list = filteredFolders.value
   const [from, to] = start < end ? [start, end] : [end, start]
 
   for (let i = from; i <= to; i++) {
@@ -827,7 +831,7 @@ function selectFolderRange(start: number, end: number) {
 }
 
 function selectFileRange(start: number, end: number) {
-  const list = files.value.slice() // snapshot
+  const list = filteredFiles.value
   const [from, to] = start < end ? [start, end] : [end, start]
 
   for (let i = from; i <= to; i++) {

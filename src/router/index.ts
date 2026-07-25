@@ -72,6 +72,11 @@ const router = createRouter({
             name: 'shares',
             component: () => import('@/views/SharesPage.vue'),
         },
+        {
+            path: '/trash',
+            name: 'trash',
+            component: () => import('@/views/TrashPage.vue'),
+        },
     ],
     scrollBehavior(to, from, savedPosition) {
         if (savedPosition && scrollPositions[to.path] !== undefined) {

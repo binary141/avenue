@@ -33,6 +33,10 @@
               Shared Links
             </button>
             <button class="text-left px-3 py-2 hover:bg-gray-100 rounded-lg text-black"
+                    @click="goToTrash">
+              Trash
+            </button>
+            <button class="text-left px-3 py-2 hover:bg-gray-100 rounded-lg text-black"
                     @click="goToProfile">
               Profile Settings
             </button>
@@ -123,6 +127,11 @@ function goToAdmin() {
 
 function goToShares() {
   router.push("/shares")
+  showMenu.value = false
+}
+
+function goToTrash() {
+  router.push("/trash")
   showMenu.value = false
 }
 

@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"avenue/backend/db"
 	"avenue/backend/logger"
@@ -117,6 +118,7 @@ func (s *Server) Upload(c *gin.Context) {
 	var extension string
 	var fileID string
 	var fileSeen bool
+	var createdAt time.Time
 
 	contentType := "application/octet-stream" // will be overwritten with the actual content type once we start streaming the file data
 
@@ -167,6 +169,7 @@ func (s *Server) Upload(c *gin.Context) {
 			contentType = http.DetectContentType(buf[:n])
 
 			// Create file record in database
+			createdAt = time.Now().UTC()
 			fileID, err = db.CreateFile(&sdk.File{
 				Name:      filename,
 				Extension: extension,
@@ -310,7 +313,16 @@ func (s *Server) Upload(c *gin.Context) {
 		return
 	}
 
-	c.Status(http.StatusCreated)
+	c.JSON(http.StatusCreated, sdk.File{
+		UUID:      fileID,
+		Name:      filename,
+		Extension: extension,
+		MimeType:  contentType,
+		FileSize:  total,
+		Parent:    parent,
+		CreatedBy: userIDInt,
+		CreatedAt: createdAt,
+	})
 }
 
 func (s *Server) ListFiles(c *gin.Context) {

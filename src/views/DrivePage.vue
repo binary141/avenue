@@ -51,6 +51,7 @@
 
     <FileUploader
       :parent="currentFolderId"
+      @file-uploaded="handleFileUploaded"
       @upload="refreshCurrentList"
       @error="handleUploadError"
       :multiple=true
@@ -1271,6 +1272,14 @@ async function loadFolderContents(folderId: string = '') {
 
 function handleUploadError(message: string) {
   error.value = message
+}
+
+function handleFileUploaded(file: File) {
+  // Show the file immediately; the final `upload` event still triggers a
+  // full refresh once the whole batch is done, which reconciles this.
+  if ((file.parent || '') === currentFolderId.value) {
+    files.value.push(file)
+  }
 }
 
 function refreshCurrentList() {

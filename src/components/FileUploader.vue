@@ -131,6 +131,7 @@
 <script setup lang="ts">
 import { ref, computed, watchEffect } from 'vue'
 import { GLOBAL_HEADERS } from '@/utils/api'
+import type { File as ApiFile } from '@/types/folder'
 
 interface Props {
   accept?: string
@@ -150,6 +151,7 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<{
   upload: [files: File[]]
+  'file-uploaded': [file: ApiFile]
   error: [message: string]
 }>()
 
@@ -360,6 +362,12 @@ const uploadFiles = async () => {
       if (idx !== -1) selectedFiles.value.splice(idx, 1)
       uploaded.push(file)
       uploadProgress.value = Math.round((uploaded.length / totalFiles) * 100)
+
+      // Let the parent add this file to the UI right away instead of
+      // waiting for every file in the batch to finish uploading.
+      if (response.body) {
+        emit('file-uploaded', response.body as ApiFile)
+      }
     }
   }
 

@@ -21,6 +21,7 @@
           <th class="px-4 py-2 text-left">Last Name</th>
           <th class="px-4 py-2 text-left">Email</th>
           <th class="px-4 py-2 text-left">Admin</th>
+          <th class="px-4 py-2 text-left">Storage Used</th>
           <th class="px-4 py-2 text-left">Quota</th>
           <th class="px-4 py-2 text-left">Actions</th>
         </tr>
@@ -44,6 +45,9 @@
               Admin
             </span>
             <span v-else class="opacity-60 text-sm">User</span>
+          </td>
+          <td class="px-4 py-2">
+            {{ formatBytes(user.spaceUsed) }}
           </td>
           <td class="px-4 py-2">
             {{ formatQuota(user.quota) }}
@@ -258,6 +262,12 @@ onMounted(fetchUsers)
 
 function formatQuota(bytes?: number) {
   if (!bytes || bytes <= 0) return 'Unlimited'
+
+  return formatBytes(bytes)
+}
+
+function formatBytes(bytes?: number) {
+  if (!bytes || bytes <= 0) return '0 MiB'
 
   const gib = 1024 ** 3
   const mib = 1024 ** 2

@@ -6,6 +6,7 @@ import (
 	"net/mail"
 	"os"
 	"strconv"
+	"time"
 )
 
 type cookieStr string
@@ -43,6 +44,23 @@ func GetEnvInt64(key string, defaultVal int64) int64 {
 		return defaultVal
 	}
 	return castedKey
+}
+
+// GetEnvDuration parses key as a Go duration string (e.g. "5m", "720h"),
+// falling back to defaultVal (also parsed as a duration) if key is unset or
+// invalid.
+func GetEnvDuration(key string, defaultVal string) time.Duration {
+	envKey := os.Getenv(key)
+	if envKey == "" {
+		envKey = defaultVal
+	}
+
+	dur, err := time.ParseDuration(envKey)
+	if err != nil {
+		fmt.Printf("error parsing duration: %s", err.Error())
+		dur, _ = time.ParseDuration(defaultVal)
+	}
+	return dur
 }
 
 func GetEnv(key string, defaultVal string) string {

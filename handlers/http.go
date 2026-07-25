@@ -26,6 +26,12 @@ type Server struct {
 	fs     afero.Fs
 }
 
+// FS returns the server's jailed filesystem, for callers outside the
+// handlers package (e.g. the trash sweeper) that need to remove blobs.
+func (s *Server) FS() afero.Fs {
+	return s.fs
+}
+
 func SetupServer() Server {
 	prod := shared.GetEnv("APP_ENV", "dev") == "production"
 	if prod {

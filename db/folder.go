@@ -251,6 +251,35 @@ func PurgeFolder(folderID, ownerID string) ([]sdk.File, error) {
 	return files, nil
 }
 
+// ListExpiredTrashedFolders returns folders that have been sitting in the
+// trash longer than cutoff and are eligible for a system-wide sweep — i.e.
+// trashed folders whose parent is not itself trashed. Nested folders/files
+// are purged along with their expired ancestor by PurgeFolder, regardless of
+// their own deleted_at.
+func ListExpiredTrashedFolders(cutoff time.Time) ([]sdk.Folder, error) {
+	rows, err := DB.Query(`
+		SELECT f.uuid, f.owner_id
+		FROM folders f
+		LEFT JOIN folders p ON p.id = f.parent_id
+		WHERE f.deleted_at IS NOT NULL AND f.deleted_at < $1
+		  AND (p.id IS NULL OR p.deleted_at IS NULL)
+	`, cutoff)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var folders []sdk.Folder
+	for rows.Next() {
+		var f sdk.Folder
+		if err := rows.Scan(&f.UUID, &f.OwnerID); err != nil {
+			return nil, err
+		}
+		folders = append(folders, f)
+	}
+	return folders, rows.Err()
+}
+
 // ListTrashedFolders returns the folders the user explicitly trashed —
 // i.e. trashed folders whose parent is not itself trashed. Folders that are
 // only in the trash because an ancestor was trashed are omitted; they come

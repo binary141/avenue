@@ -3,6 +3,7 @@ package db
 import (
 	"database/sql"
 	"strings"
+	"time"
 
 	"avenue/backend/sdk"
 
@@ -209,6 +210,35 @@ func ListTrashedFiles(userID string) ([]sdk.File, error) {
 	for rows.Next() {
 		var f sdk.File
 		if err := rows.Scan(&f.ID, &f.UUID, &f.Name, &f.Extension, &f.MimeType, &f.FileSize, &f.CreatedBy, &f.CreatedAt, &f.DeletedAt); err != nil {
+			return nil, err
+		}
+		files = append(files, f)
+	}
+	return files, rows.Err()
+}
+
+// ListExpiredTrashedFiles returns files that have been sitting in the trash
+// longer than cutoff and are eligible for a system-wide sweep — i.e. trashed
+// files whose parent folder is not itself trashed. Files only in the trash
+// because their parent folder was trashed get purged when that folder is
+// swept instead (see ListExpiredTrashedFolders).
+func ListExpiredTrashedFiles(cutoff time.Time) ([]sdk.File, error) {
+	rows, err := DB.Query(`
+		SELECT f.uuid, f.created_by, f.file_size
+		FROM files f
+		LEFT JOIN folders p ON p.id = f.parent_id
+		WHERE f.deleted_at IS NOT NULL AND f.deleted_at < $1
+		  AND (p.id IS NULL OR p.deleted_at IS NULL)
+	`, cutoff)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var files []sdk.File
+	for rows.Next() {
+		var f sdk.File
+		if err := rows.Scan(&f.UUID, &f.CreatedBy, &f.FileSize); err != nil {
 			return nil, err
 		}
 		files = append(files, f)

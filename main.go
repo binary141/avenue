@@ -8,6 +8,7 @@ import (
 	"avenue/backend/handlers"
 	"avenue/backend/logger"
 	"avenue/backend/shared"
+	"avenue/backend/sweeper"
 )
 
 var frontendFS embed.FS
@@ -35,6 +36,8 @@ func main() {
 	}
 
 	server := handlers.SetupServer()
+
+	sweeper.Start(server.FS())
 
 	server.SetupRoutes()
 

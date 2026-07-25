@@ -922,6 +922,8 @@ const downloadDisabledReason = computed(() => {
 function clearSelection() {
   selectedFolders.value.clear()
   selectedFiles.value.clear()
+  lastFolderIndex.value = null
+  lastFileIndex.value = null
 }
 
 async function bulkDelete() {
@@ -1367,7 +1369,10 @@ function refreshCurrentList() {
 // whenever the sort controls change.
 watch(
   () => [route.params.folderId, route.query.folderId],
-  () => refreshCurrentList(),
+  () => {
+    clearSelection()
+    refreshCurrentList()
+  },
   { immediate: true }
 )
 

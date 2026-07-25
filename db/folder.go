@@ -2,6 +2,7 @@ package db
 
 import (
 	"database/sql"
+	"time"
 
 	"avenue/backend/sdk"
 
@@ -69,6 +70,54 @@ func folderSubtreeIDs(rootID int64) ([]int64, error) {
 		ids = append(ids, id)
 	}
 	return ids, rows.Err()
+}
+
+// ZipFileEntry is a file within a folder download, along with its path
+// relative to the root of the zip archive (rooted at the downloaded folder
+// itself, so nested subfolders are preserved).
+type ZipFileEntry struct {
+	UUID      string
+	Name      string
+	CreatedBy int64
+	CreatedAt time.Time
+	DirPath   string
+}
+
+// ListFolderFilesForZip returns every file nested (at any depth) under
+// folderID, owned by ownerID, along with the path of the containing folder
+// relative to folderID's own name. Used to build a folder download zip that
+// preserves the folder's directory structure.
+func ListFolderFilesForZip(folderID, ownerID string) ([]ZipFileEntry, error) {
+	rows, err := DB.Query(`
+		WITH RECURSIVE subtree AS (
+			SELECT id, name::text AS dir_path
+			FROM folders
+			WHERE uuid = $1 AND owner_id = $2::BIGINT AND deleted_at IS NULL
+			UNION ALL
+			SELECT f.id, s.dir_path || '/' || f.name
+			FROM folders f
+			INNER JOIN subtree s ON f.parent_id = s.id
+			WHERE f.deleted_at IS NULL
+		)
+		SELECT files.uuid, files.name, files.created_by, files.created_at, subtree.dir_path
+		FROM subtree
+		JOIN files ON files.parent_id = subtree.id
+		WHERE files.deleted_at IS NULL
+	`, folderID, ownerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var entries []ZipFileEntry
+	for rows.Next() {
+		var e ZipFileEntry
+		if err := rows.Scan(&e.UUID, &e.Name, &e.CreatedBy, &e.CreatedAt, &e.DirPath); err != nil {
+			return nil, err
+		}
+		entries = append(entries, e)
+	}
+	return entries, rows.Err()
 }
 
 // TrashFolder soft-deletes folderID and its entire subtree (nested folders

@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"avenue/backend/db"
@@ -23,6 +24,11 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/afero"
 )
+
+// folderZipMu ensures only one folder download is being zipped at a time
+// across the whole server, since walking and streaming a large folder tree
+// is comparatively expensive.
+var folderZipMu sync.Mutex
 
 func ensureDir(fs afero.Fs, path string) error {
 	exists, err := afero.DirExists(fs, path)
@@ -563,10 +569,27 @@ func (s *Server) DownloadFilesZip(c *gin.Context) {
 	}
 
 	ids := c.QueryArray("ids")
-	if len(ids) == 0 {
+	folderIDs := c.QueryArray("folderIds")
+
+	if len(ids) == 0 && len(folderIDs) == 0 {
 		c.JSON(http.StatusBadRequest, sdk.MessageResponse{
-			Message: "no file ids provided",
+			Message: "no file or folder ids provided",
 		})
+		return
+	}
+
+	// Folder downloads walk an entire subtree, so they can't be combined
+	// with other files/folders in the same request — only one folder,
+	// downloaded on its own, is allowed.
+	if len(folderIDs) > 0 {
+		if len(folderIDs) > 1 || len(ids) > 0 {
+			c.JSON(http.StatusBadRequest, sdk.MessageResponse{
+				Message: "a folder can't be downloaded alongside other files or folders",
+			})
+			return
+		}
+
+		s.downloadFolderZip(c, userID, folderIDs[0])
 		return
 	}
 
@@ -625,6 +648,85 @@ func (s *Server) DownloadFilesZip(c *gin.Context) {
 
 		if _, err := io.Copy(entryWriter, fileData); err != nil {
 			logger.Errorf("error writing file %s to zip: %s", file.UUID, err.Error())
+		}
+		_ = fileData.Close()
+	}
+}
+
+// downloadFolderZip streams a zip archive of every file nested under
+// folderID, preserving its directory structure. Only one folder download can
+// run at a time across the whole server, since walking a large folder tree
+// is comparatively expensive; concurrent requests are rejected outright
+// rather than queued, so the caller can retry shortly.
+func (s *Server) downloadFolderZip(c *gin.Context, userID, folderID string) {
+	folder, err := db.GetFolder(folderID, userID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			c.JSON(http.StatusNotFound, sdk.MessageResponse{
+				Message: "folder not found in db",
+				Error:   err.Error(),
+			})
+			return
+		}
+
+		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
+			Message: "could not get folder",
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	if !folderZipMu.TryLock() {
+		c.JSON(http.StatusTooManyRequests, sdk.MessageResponse{
+			Message: "another folder download is already in progress, please try again shortly",
+		})
+		return
+	}
+	defer folderZipMu.Unlock()
+
+	entries, err := db.ListFolderFilesForZip(folderID, userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
+			Message: "could not list folder contents",
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	c.Header("Content-Type", "application/zip")
+	c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s.zip"`, folder.Name))
+	c.Header("Cache-Control", "no-cache")
+	c.Header("Access-Control-Expose-Headers", "Content-Disposition")
+	c.Status(http.StatusOK)
+	c.Writer.Flush()
+
+	zw := zip.NewWriter(c.Writer)
+	defer func() {
+		_ = zw.Close()
+	}()
+
+	names := make(map[string]int)
+	for _, entry := range entries {
+		path := fmt.Sprintf("/%d/%s", entry.CreatedBy, entry.UUID)
+		fileData, err := s.fs.Open(path)
+		if err != nil {
+			logger.Errorf("error opening file %s for folder zip download: %s", entry.UUID, err.Error())
+			continue
+		}
+
+		entryWriter, err := zw.CreateHeader(&zip.FileHeader{
+			Name:     uniqueZipEntryName(names, entry.DirPath+"/"+entry.Name),
+			Method:   zip.Deflate,
+			Modified: entry.CreatedAt,
+		})
+		if err != nil {
+			_ = fileData.Close()
+			logger.Errorf("error creating zip entry for %s: %s", entry.UUID, err.Error())
+			continue
+		}
+
+		if _, err := io.Copy(entryWriter, fileData); err != nil {
+			logger.Errorf("error writing file %s to zip: %s", entry.UUID, err.Error())
 		}
 		_ = fileData.Close()
 	}

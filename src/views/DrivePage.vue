@@ -85,8 +85,8 @@
 
       <AppButton
         class="bg-blue-600 text-white px-3 py-1"
-        :disabled="selectedFiles.size === 0"
-        :title="selectedFolders.size > 0 ? 'Only selected files will be downloaded — folders can\'t be zipped yet' : ''"
+        :disabled="!canDownloadSelection"
+        :title="downloadDisabledReason"
         @click="downloadSelectedFiles"
       >
         Download
@@ -899,6 +899,26 @@ const hasSelection = computed(
   () => selectedFolders.value.size > 0 || selectedFiles.value.size > 0
 )
 
+// A folder download walks the whole subtree on the backend, so it can only
+// be requested on its own — not alongside other files or folders.
+const canDownloadSelection = computed(() => {
+  if (selectedFolders.value.size > 0) {
+    return selectedFolders.value.size === 1 && selectedFiles.value.size === 0
+  }
+  return selectedFiles.value.size > 0
+})
+
+const downloadDisabledReason = computed(() => {
+  if (canDownloadSelection.value) return ''
+  if (selectedFolders.value.size > 1) {
+    return 'Only one folder can be downloaded at a time'
+  }
+  if (selectedFolders.value.size > 0 && selectedFiles.value.size > 0) {
+    return "A folder can't be downloaded alongside other files or folders"
+  }
+  return ''
+})
+
 function clearSelection() {
   selectedFolders.value.clear()
   selectedFiles.value.clear()
@@ -956,10 +976,18 @@ function getDownloadURL(fileId: string): string {
 }
 
 function downloadSelectedFiles() {
+  if (!canDownloadSelection.value) return;
+
   const baseURL = import.meta.env.VITE_APP_API_URL || '';
   const params = new URLSearchParams({ token: usersStore.token });
-  for (const fileId of selectedFiles.value) {
-    params.append('ids', fileId);
+
+  if (selectedFolders.value.size > 0) {
+    const [folderId] = selectedFolders.value;
+    params.append('folderIds', folderId);
+  } else {
+    for (const fileId of selectedFiles.value) {
+      params.append('ids', fileId);
+    }
   }
 
   const link = document.createElement('a');

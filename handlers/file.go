@@ -13,7 +13,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"avenue/backend/db"
@@ -24,11 +23,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/afero"
 )
-
-// folderZipMu ensures only one folder download is being zipped at a time
-// across the whole server, since walking and streaming a large folder tree
-// is comparatively expensive.
-var folderZipMu sync.Mutex
 
 func ensureDir(fs afero.Fs, path string) error {
 	exists, err := afero.DirExists(fs, path)
@@ -654,10 +648,9 @@ func (s *Server) DownloadFilesZip(c *gin.Context) {
 }
 
 // downloadFolderZip streams a zip archive of every file nested under
-// folderID, preserving its directory structure. Only one folder download can
-// run at a time across the whole server, since walking a large folder tree
-// is comparatively expensive; concurrent requests are rejected outright
-// rather than queued, so the caller can retry shortly.
+// folderID, preserving its directory structure. A single request may only
+// target one folder (enforced by the caller), but multiple folder downloads
+// can run concurrently across the server.
 func (s *Server) downloadFolderZip(c *gin.Context, userID, folderID string) {
 	folder, err := db.GetFolder(folderID, userID)
 	if err != nil {
@@ -675,14 +668,6 @@ func (s *Server) downloadFolderZip(c *gin.Context, userID, folderID string) {
 		})
 		return
 	}
-
-	if !folderZipMu.TryLock() {
-		c.JSON(http.StatusTooManyRequests, sdk.MessageResponse{
-			Message: "another folder download is already in progress, please try again shortly",
-		})
-		return
-	}
-	defer folderZipMu.Unlock()
 
 	entries, err := db.ListFolderFilesForZip(folderID, userID)
 	if err != nil {

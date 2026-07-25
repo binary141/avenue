@@ -1310,9 +1310,16 @@ function refreshCurrentList() {
   usersStore.pullMe()
 }
 
-watchEffect(() => {
-  refreshCurrentList()
-})
+// Scoped to the route's folder id explicitly (rather than watchEffect) so
+// this only fires on navigation — watchEffect would also pick up whatever
+// refreshCurrentList happens to read internally (e.g. sortDir/sortKey via
+// loadFolderContents), causing spurious reloads and a stray pullMe() call
+// whenever the sort controls change.
+watch(
+  () => [route.params.folderId, route.query.folderId],
+  () => refreshCurrentList(),
+  { immediate: true }
+)
 
 async function getDashboardInfo() {
   const response = await api({
@@ -1336,7 +1343,7 @@ function handleDocumentClick() {
 }
 
 onMounted(async () => {
-  refreshCurrentList();
+  // refreshCurrentList() already runs once via the immediate route watcher above.
   await getDashboardInfo();
   if (fileSharingEnabled.value) {
     loadAllShares();

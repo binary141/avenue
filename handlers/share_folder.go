@@ -153,7 +153,7 @@ func (s *Server) GetSharedFolderContents(c *gin.Context) {
 		return
 	}
 	ownerID := fmt.Sprint(link.CreatedBy)
-	folders, err := db.ListChildFolder(link.FolderUUID, ownerID)
+	folders, err := db.ListChildFolder(link.FolderUUID, ownerID, sdk.SortAsc)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{Error: err.Error()})
 		return
@@ -202,7 +202,7 @@ func (s *Server) BrowseSharedSubFolder(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{Error: err.Error()})
 		return
 	}
-	folders, err := db.ListChildFolder(subFolderUUID, ownerID)
+	folders, err := db.ListChildFolder(subFolderUUID, ownerID, sdk.SortAsc)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{Error: err.Error()})
 		return

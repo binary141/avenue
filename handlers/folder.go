@@ -237,8 +237,21 @@ func (s *Server) ListFolderContents(c *gin.Context) {
 		return
 	}
 
+	sortDir := sdk.SortAsc
+	if c.Query("sort") == string(sdk.SortDesc) {
+		sortDir = sdk.SortDesc
+	}
+
+	sortColumn := "name"
+	switch c.Query("sortBy") {
+	case "size":
+		sortColumn = "file_size"
+	case "date":
+		sortColumn = "created_at"
+	}
+
 	folderID := c.Param("folderID")
-	folds, err := db.ListChildFolder(folderID, userID)
+	folds, err := db.ListChildFolder(folderID, userID, sortDir)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
 			Message: "Internal server error",
@@ -246,7 +259,7 @@ func (s *Server) ListFolderContents(c *gin.Context) {
 		})
 		return
 	}
-	files, err := db.ListChildFile(folderID, userID)
+	files, err := db.ListChildFile(folderID, userID, sortColumn, sortDir)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
 			Message: "Internal server error",

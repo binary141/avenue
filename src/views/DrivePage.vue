@@ -758,16 +758,21 @@ watch([searchQuery, currentFolderId], ([query, folderId]) => {
   searchDebounceHandle = setTimeout(() => runFileSearch(trimmed, folderId), 250)
 })
 
+// Folders are always fetched from the server pre-sorted (by name), so
+// filtering for a search query preserves that order without re-sorting.
 const filteredFolders = computed(() => {
   const q = searchQuery.value.trim().toLowerCase()
-  const list = q ? folders.value.filter(f => f.name.toLowerCase().includes(q)) : folders.value.slice()
-  return list.sort((a, b) => a.name.localeCompare(b.name) * (sortDir.value === 'asc' ? 1 : -1))
+  return q ? folders.value.filter(f => f.name.toLowerCase().includes(q)) : folders.value
 })
 
+// Non-search file listings come pre-sorted from the server (loadFolderContents
+// sends sort/sortBy). The search endpoint doesn't support sorting, so its
+// results still get sorted client-side.
 const filteredFiles = computed(() => {
   const isSearching = searchQuery.value.trim().length > 0
-  const list = (isSearching ? fileSearchResults.value ?? [] : files.value).slice()
+  if (!isSearching) return files.value
 
+  const list = (fileSearchResults.value ?? []).slice()
   return list.sort((a, b) => {
     let cmp = 0
     if (sortKey.value === 'name') cmp = a.name.localeCompare(b.name)
@@ -775,6 +780,10 @@ const filteredFiles = computed(() => {
     else cmp = new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
     return cmp * (sortDir.value === 'asc' ? 1 : -1)
   })
+})
+
+watch([sortKey, sortDir], () => {
+  loadFolderContents(currentFolderId.value)
 })
 
 // ----- Row "more" menu -----
@@ -1253,8 +1262,9 @@ async function loadFolderContents(folderId: string = '') {
   loading.value = true
 
   try {
+    const params = new URLSearchParams({ sort: sortDir.value, sortBy: sortKey.value })
     const response = await api({
-      url: `v1/folder/list/${folderId}`,
+      url: `v1/folder/list/${folderId}?${params.toString()}`,
       method: 'GET'
     })
 

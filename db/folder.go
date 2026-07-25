@@ -231,7 +231,11 @@ func ListTrashedFolders(ownerID string) ([]sdk.Folder, error) {
 	return folders, rows.Err()
 }
 
-func ListChildFolder(parentID, ownerID string) ([]sdk.Folder, error) {
+// ListChildFolder lists the child folders of parentID, ordered by name.
+// sortDir is interpolated directly into the query since placeholders can't
+// parameterize ORDER BY; it's a typed sdk.SortDirection so callers can't pass
+// arbitrary strings.
+func ListChildFolder(parentID, ownerID string, sortDir sdk.SortDirection) ([]sdk.Folder, error) {
 	var (
 		rows *sql.Rows
 		err  error
@@ -239,14 +243,14 @@ func ListChildFolder(parentID, ownerID string) ([]sdk.Folder, error) {
 
 	if parentID == "" || parentID == rootFolderID {
 		rows, err = DB.Query(
-			`SELECT id, uuid, name, COALESCE(parent_id, 0), owner_id FROM folders WHERE parent_id IS NULL AND owner_id=$1::BIGINT AND deleted_at IS NULL`,
+			`SELECT id, uuid, name, COALESCE(parent_id, 0), owner_id FROM folders WHERE parent_id IS NULL AND owner_id=$1::BIGINT AND deleted_at IS NULL ORDER BY name `+string(sortDir),
 			ownerID,
 		)
 	} else {
 		rows, err = DB.Query(`
 			SELECT id, uuid, name, COALESCE(parent_id, 0), owner_id FROM folders
 			WHERE parent_id = (SELECT id FROM folders WHERE uuid = $1)
-			  AND owner_id = $2::BIGINT AND deleted_at IS NULL`,
+			  AND owner_id = $2::BIGINT AND deleted_at IS NULL ORDER BY name `+string(sortDir),
 			parentID, ownerID,
 		)
 	}

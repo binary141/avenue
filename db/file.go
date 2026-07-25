@@ -240,25 +240,32 @@ func ListChildFilePublic(parentID string) ([]sdk.File, error) {
 	return files, rows.Err()
 }
 
-func ListChildFile(parentID, ownerID string) ([]sdk.File, error) {
+// ListChildFile lists the files in parentID. sortBy must already be validated
+// by the caller to be one of "name", "file_size", or "created_at". Both
+// sortBy and sortDir are interpolated directly into the query since
+// placeholders can't parameterize ORDER BY; sortDir is a typed
+// sdk.SortDirection so callers can't pass arbitrary strings.
+func ListChildFile(parentID, ownerID, sortBy string, sortDir sdk.SortDirection) ([]sdk.File, error) {
 	var (
 		rows *sql.Rows
 		err  error
 	)
+
+	orderBy := " ORDER BY " + sortBy + " " + string(sortDir)
 
 	if parentID == "" {
 		// Root: only files the user themselves created with no parent
 		rows, err = DB.Query(`
 			SELECT id, uuid, name, extension, mime_type, file_size, created_by, created_at
 			FROM files WHERE parent_id IS NULL AND created_by=$1::BIGINT AND deleted_at IS NULL
-		`, ownerID)
+		`+orderBy, ownerID)
 	} else {
 		// Folder: all files inside a folder owned by this user, regardless of uploader
 		rows, err = DB.Query(`
 			SELECT id, uuid, name, extension, mime_type, file_size, created_by, created_at
 			FROM files
 			WHERE parent_id = (SELECT id FROM folders WHERE uuid = $1 AND owner_id = $2::BIGINT) AND deleted_at IS NULL
-		`, parentID, ownerID)
+		`+orderBy, parentID, ownerID)
 	}
 	if err != nil {
 		return nil, err

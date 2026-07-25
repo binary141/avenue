@@ -3,15 +3,18 @@ package handlers
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"net/http"
 	"slices"
 	"strconv"
 
 	"avenue/backend/db"
+	"avenue/backend/logger"
 	"avenue/backend/sdk"
 	"avenue/backend/shared"
 
 	"github.com/gin-gonic/gin"
+	"github.com/spf13/afero"
 )
 
 func (s *Server) CreateFolder(c *gin.Context) {
@@ -66,6 +69,8 @@ func (s *Server) CreateFolder(c *gin.Context) {
 	c.Status(http.StatusCreated)
 }
 
+// DeleteFolder moves a folder, and everything nested inside it, to the
+// trash. Use RestoreFolder to undo, or PurgeFolder to permanently delete it.
 func (s *Server) DeleteFolder(c *gin.Context) {
 	userID, err := shared.GetUserIDFromContext(c.Request.Context())
 	if err != nil {
@@ -78,44 +83,99 @@ func (s *Server) DeleteFolder(c *gin.Context) {
 
 	folderID := c.Param("folderID")
 
-	folds, err := db.ListChildFolder(folderID, userID)
+	err = db.TrashFolder(folderID, userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-			Message: "Internal server error",
-			Error:   err.Error(),
-		})
-		return
-	}
-	files, err := db.ListChildFile(folderID, userID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-			Message: "Internal server error",
-			Error:   err.Error(),
-		})
-		return
-	}
+		if errors.Is(err, sql.ErrNoRows) {
+			c.JSON(http.StatusNotFound, sdk.MessageResponse{
+				Message: "folder not found in db",
+				Error:   err.Error(),
+			})
+			return
+		}
 
-	if len(folds) != 0 || len(files) != 0 {
-		c.JSON(http.StatusBadRequest, sdk.MessageResponse{
-			Message: "",
-			Error:   "Folder still contains files or folders",
-		})
-		return
-	}
-
-	err = db.DeleteFolder(folderID, userID)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, sdk.MessageResponse{
-			Message: "",
-			Error:   "Folder still contains files or folders",
+		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
+			Message: "could not delete folder",
+			Error:   err.Error(),
 		})
 		return
 	}
 
 	c.JSON(http.StatusOK, sdk.MessageResponse{
-		Message: "Folder deleted successfully",
+		Message: "Folder moved to trash",
 		Error:   "",
 	})
+}
+
+// RestoreFolder restores a trashed folder and everything nested inside it.
+func (s *Server) RestoreFolder(c *gin.Context) {
+	userID, err := shared.GetUserIDFromContext(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
+			Message: "could not get user id",
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	err = db.RestoreFolder(c.Param("folderID"), userID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			c.JSON(http.StatusNotFound, sdk.MessageResponse{
+				Message: "folder not found in trash",
+				Error:   err.Error(),
+			})
+			return
+		}
+
+		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
+			Message: "could not restore folder",
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	c.Status(http.StatusOK)
+}
+
+// PurgeFolder permanently deletes a trashed folder and everything nested
+// inside it, removing file blobs from disk and reconciling quota usage.
+func (s *Server) PurgeFolder(c *gin.Context) {
+	userID, err := shared.GetUserIDFromContext(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
+			Message: "could not get user id",
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	purgedFiles, err := db.PurgeFolder(c.Param("folderID"), userID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			c.JSON(http.StatusNotFound, sdk.MessageResponse{
+				Message: "folder not found in trash",
+				Error:   err.Error(),
+			})
+			return
+		}
+
+		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
+			Message: "could not purge folder",
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	for _, f := range purgedFiles {
+		if err := s.fs.Remove(fmt.Sprintf("/%d/%s", f.CreatedBy, f.UUID)); err != nil && !errors.Is(err, afero.ErrFileNotFound) {
+			logger.Errorf("purge folder: remove file blob %s: %v", f.UUID, err)
+		}
+		if err := db.UpdateUsage(f.CreatedBy, -f.FileSize); err != nil {
+			logger.Errorf("purge folder: update usage for user %d: %v", f.CreatedBy, err)
+		}
+	}
+
+	c.Status(http.StatusOK)
 }
 
 func (s *Server) UpdateFolderName(c *gin.Context) {

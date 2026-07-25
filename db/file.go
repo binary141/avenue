@@ -37,7 +37,7 @@ func GetFileByID(id, creatorID string) (*sdk.File, error) {
 	var f sdk.File
 	err := DB.QueryRow(`
 		SELECT id, uuid, name, extension, mime_type, file_size, created_by, created_at
-		FROM files WHERE uuid=$1 AND created_by=$2::BIGINT
+		FROM files WHERE uuid=$1 AND created_by=$2::BIGINT AND deleted_at IS NULL
 	`, id, creatorID).Scan(&f.ID, &f.UUID, &f.Name, &f.Extension, &f.MimeType, &f.FileSize, &f.CreatedBy, &f.CreatedAt)
 	if err != nil {
 		return nil, err
@@ -58,7 +58,7 @@ func GetFileByIDForUser(id, userID string) (*sdk.File, error) {
 		SELECT f.id, f.uuid, f.name, f.extension, f.mime_type, f.file_size, f.created_by, f.created_at, p.uuid
 		FROM files f
 		LEFT JOIN folders p ON p.id = f.parent_id
-		WHERE f.uuid=$1
+		WHERE f.uuid=$1 AND f.deleted_at IS NULL
 		  AND (f.created_by=$2::BIGINT
 		       OR f.parent_id IN (SELECT id FROM folders WHERE owner_id=$2::BIGINT))
 	`, id, userID).Scan(&f.ID, &f.UUID, &f.Name, &f.Extension, &f.MimeType, &f.FileSize, &f.CreatedBy, &f.CreatedAt, &parent)
@@ -73,7 +73,7 @@ func GetFileByIDPublic(id string) (*sdk.File, error) {
 	var f sdk.File
 	err := DB.QueryRow(`
 		SELECT id, uuid, name, extension, mime_type, file_size, created_by, created_at
-		FROM files WHERE uuid=$1
+		FROM files WHERE uuid=$1 AND deleted_at IS NULL
 	`, id).Scan(&f.ID, &f.UUID, &f.Name, &f.Extension, &f.MimeType, &f.FileSize, &f.CreatedBy, &f.CreatedAt)
 	if err != nil {
 		return nil, err
@@ -84,7 +84,7 @@ func GetFileByIDPublic(id string) (*sdk.File, error) {
 func ListFiles(creatorID string) ([]sdk.File, error) {
 	rows, err := DB.Query(`
 		SELECT id, uuid, name, extension, mime_type, file_size, created_by, created_at
-		FROM files WHERE created_by=$1::BIGINT
+		FROM files WHERE created_by=$1::BIGINT AND deleted_at IS NULL
 	`, creatorID)
 	if err != nil {
 		return nil, err
@@ -102,12 +102,16 @@ func ListFiles(creatorID string) ([]sdk.File, error) {
 	return files, rows.Err()
 }
 
+// DeleteFile hard-deletes a file record. This is only meant for rolling back
+// a file record created during an upload that failed partway through — user
+// facing deletes go through TrashFile/TrashFileForUser instead.
 func DeleteFile(id, creatorID string) error {
 	_, err := DB.Exec(`DELETE FROM files WHERE uuid=$1 AND created_by=$2::BIGINT`, id, creatorID)
 	return err
 }
 
-// DeleteFileForUser deletes a file if the user is its creator or owns its parent folder.
+// DeleteFileForUser hard-deletes a file if the user is its creator or owns
+// its parent folder. Only meant for upload rollback, see DeleteFile.
 func DeleteFileForUser(id, userID string) error {
 	_, err := DB.Exec(`
 		DELETE FROM files WHERE uuid=$1
@@ -117,13 +121,108 @@ func DeleteFileForUser(id, userID string) error {
 	return err
 }
 
+// TrashFileForUser soft-deletes a file if the user is its creator or owns
+// its parent folder, and revokes any share links pointing at it.
+func TrashFileForUser(id, userID string) error {
+	tx, err := DB.Beginx()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	res, err := tx.Exec(`
+		UPDATE files SET deleted_at = now() WHERE uuid=$1 AND deleted_at IS NULL
+		  AND (created_by=$2::BIGINT
+		       OR parent_id IN (SELECT id FROM folders WHERE owner_id=$2::BIGINT))
+	`, id, userID)
+	if err != nil {
+		return err
+	}
+	if n, err := res.RowsAffected(); err != nil {
+		return err
+	} else if n == 0 {
+		return sql.ErrNoRows
+	}
+
+	if _, err := tx.Exec(`DELETE FROM share_links WHERE file_id = (SELECT id FROM files WHERE uuid=$1)`, id); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+// RestoreFileForUser un-trashes a file if the user is its creator or owns
+// its parent folder.
+func RestoreFileForUser(id, userID string) error {
+	res, err := DB.Exec(`
+		UPDATE files SET deleted_at = NULL WHERE uuid=$1 AND deleted_at IS NOT NULL
+		  AND (created_by=$2::BIGINT
+		       OR parent_id IN (SELECT id FROM folders WHERE owner_id=$2::BIGINT))
+	`, id, userID)
+	if err != nil {
+		return err
+	}
+	if n, err := res.RowsAffected(); err != nil {
+		return err
+	} else if n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+// PurgeFileForUser permanently deletes a trashed file if the user is its
+// creator or owns its parent folder, and returns the deleted row so the
+// caller can remove its blob from the filesystem and reconcile quota usage.
+func PurgeFileForUser(id, userID string) (*sdk.File, error) {
+	var f sdk.File
+	err := DB.QueryRow(`
+		DELETE FROM files WHERE uuid=$1 AND deleted_at IS NOT NULL
+		  AND (created_by=$2::BIGINT
+		       OR parent_id IN (SELECT id FROM folders WHERE owner_id=$2::BIGINT))
+		RETURNING uuid, created_by, file_size
+	`, id, userID).Scan(&f.UUID, &f.CreatedBy, &f.FileSize)
+	if err != nil {
+		return nil, err
+	}
+	return &f, nil
+}
+
+// ListTrashedFiles returns the files the user explicitly trashed — i.e.
+// trashed files whose parent folder is not itself trashed. Files that are
+// only in the trash because their parent folder was trashed are omitted;
+// they come back into view when that folder is restored.
+func ListTrashedFiles(userID string) ([]sdk.File, error) {
+	rows, err := DB.Query(`
+		SELECT f.id, f.uuid, f.name, f.extension, f.mime_type, f.file_size, f.created_by, f.created_at, f.deleted_at
+		FROM files f
+		LEFT JOIN folders p ON p.id = f.parent_id
+		WHERE f.created_by = $1::BIGINT AND f.deleted_at IS NOT NULL
+		  AND (p.id IS NULL OR p.deleted_at IS NULL)
+		ORDER BY f.deleted_at DESC
+	`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var files []sdk.File
+	for rows.Next() {
+		var f sdk.File
+		if err := rows.Scan(&f.ID, &f.UUID, &f.Name, &f.Extension, &f.MimeType, &f.FileSize, &f.CreatedBy, &f.CreatedAt, &f.DeletedAt); err != nil {
+			return nil, err
+		}
+		files = append(files, f)
+	}
+	return files, rows.Err()
+}
+
 // ListChildFilePublic lists all files in a folder regardless of who created them.
 // Used by public shared folder endpoints.
 func ListChildFilePublic(parentID string) ([]sdk.File, error) {
 	rows, err := DB.Query(`
 		SELECT id, uuid, name, extension, mime_type, file_size, created_by, created_at
 		FROM files
-		WHERE parent_id = (SELECT id FROM folders WHERE uuid = $1)
+		WHERE parent_id = (SELECT id FROM folders WHERE uuid = $1) AND deleted_at IS NULL
 	`, parentID)
 	if err != nil {
 		return nil, err
@@ -151,14 +250,14 @@ func ListChildFile(parentID, ownerID string) ([]sdk.File, error) {
 		// Root: only files the user themselves created with no parent
 		rows, err = DB.Query(`
 			SELECT id, uuid, name, extension, mime_type, file_size, created_by, created_at
-			FROM files WHERE parent_id IS NULL AND created_by=$1::BIGINT
+			FROM files WHERE parent_id IS NULL AND created_by=$1::BIGINT AND deleted_at IS NULL
 		`, ownerID)
 	} else {
 		// Folder: all files inside a folder owned by this user, regardless of uploader
 		rows, err = DB.Query(`
 			SELECT id, uuid, name, extension, mime_type, file_size, created_by, created_at
 			FROM files
-			WHERE parent_id = (SELECT id FROM folders WHERE uuid = $1 AND owner_id = $2::BIGINT)
+			WHERE parent_id = (SELECT id FROM folders WHERE uuid = $1 AND owner_id = $2::BIGINT) AND deleted_at IS NULL
 		`, parentID, ownerID)
 	}
 	if err != nil {
@@ -198,14 +297,14 @@ func SearchChildFiles(parentID, ownerID, namePrefix string) ([]sdk.File, error) 
 		rows, err = DB.Query(`
 			SELECT id, uuid, name, extension, mime_type, file_size, created_by, created_at
 			FROM files
-			WHERE parent_id IS NULL AND created_by=$1::BIGINT AND name LIKE $2 ESCAPE '\'
+			WHERE parent_id IS NULL AND created_by=$1::BIGINT AND name LIKE $2 ESCAPE '\' AND deleted_at IS NULL
 		`, ownerID, pattern)
 	} else {
 		rows, err = DB.Query(`
 			SELECT id, uuid, name, extension, mime_type, file_size, created_by, created_at
 			FROM files
 			WHERE parent_id = (SELECT id FROM folders WHERE uuid = $1 AND owner_id = $3::BIGINT)
-			  AND name LIKE $2 ESCAPE '\'
+			  AND name LIKE $2 ESCAPE '\' AND deleted_at IS NULL
 		`, parentID, pattern, ownerID)
 	}
 	if err != nil {

@@ -6,6 +6,7 @@ import (
 	"avenue/backend/sdk"
 
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 )
 
 const rootFolderID = "c32af1cc-aba9-4878-a305-5006dc7a5b76"
@@ -25,7 +26,7 @@ func CreateFolder(f *sdk.Folder) (string, error) {
 func GetFolder(folderID, userID string) (*sdk.Folder, error) {
 	var f sdk.Folder
 	err := DB.QueryRow(
-		`SELECT id, uuid, name, COALESCE(parent_id, 0), owner_id FROM folders WHERE uuid=$1 AND owner_id=$2::BIGINT`,
+		`SELECT id, uuid, name, COALESCE(parent_id, 0), owner_id FROM folders WHERE uuid=$1 AND owner_id=$2::BIGINT AND deleted_at IS NULL`,
 		folderID, userID,
 	).Scan(&f.ID, &f.UUID, &f.Name, &f.ParentID, &f.OwnerID)
 	if err != nil {
@@ -42,12 +43,192 @@ func UpdateFolder(f sdk.Folder) error {
 	return err
 }
 
-func DeleteFolder(folderID, userID string) error {
-	_, err := DB.Exec(
-		`DELETE FROM folders WHERE uuid=$1 AND owner_id=$2::BIGINT`,
-		folderID, userID,
-	)
-	return err
+// folderSubtreeIDs returns the id of rootID plus the ids of every folder
+// nested under it, at any depth.
+func folderSubtreeIDs(rootID int64) ([]int64, error) {
+	rows, err := DB.Query(`
+		WITH RECURSIVE subtree AS (
+			SELECT id FROM folders WHERE id = $1
+			UNION ALL
+			SELECT f.id FROM folders f
+			INNER JOIN subtree s ON f.parent_id = s.id
+		)
+		SELECT id FROM subtree
+	`, rootID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+// TrashFolder soft-deletes folderID and its entire subtree (nested folders
+// and all files within them), and revokes any share links pointing into
+// that subtree.
+func TrashFolder(folderID, ownerID string) error {
+	var rootID int64
+	err := DB.QueryRow(
+		`SELECT id FROM folders WHERE uuid=$1 AND owner_id=$2::BIGINT AND deleted_at IS NULL`,
+		folderID, ownerID,
+	).Scan(&rootID)
+	if err != nil {
+		return err
+	}
+
+	ids, err := folderSubtreeIDs(rootID)
+	if err != nil {
+		return err
+	}
+
+	tx, err := DB.Beginx()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.Exec(`UPDATE folders SET deleted_at = now() WHERE id = ANY($1) AND deleted_at IS NULL`, pq.Array(ids)); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`UPDATE files SET deleted_at = now() WHERE parent_id = ANY($1) AND deleted_at IS NULL`, pq.Array(ids)); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`DELETE FROM share_folder_links WHERE folder_id = ANY($1)`, pq.Array(ids)); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`DELETE FROM share_links WHERE file_id IN (SELECT id FROM files WHERE parent_id = ANY($1))`, pq.Array(ids)); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+// RestoreFolder un-trashes folderID and its entire trashed subtree.
+//
+// Note: if a file or subfolder inside folderID was independently trashed
+// before folderID itself was trashed, restoring folderID will also restore
+// it — a folder restore brings back everything currently inside it.
+func RestoreFolder(folderID, ownerID string) error {
+	var rootID int64
+	err := DB.QueryRow(
+		`SELECT id FROM folders WHERE uuid=$1 AND owner_id=$2::BIGINT AND deleted_at IS NOT NULL`,
+		folderID, ownerID,
+	).Scan(&rootID)
+	if err != nil {
+		return err
+	}
+
+	ids, err := folderSubtreeIDs(rootID)
+	if err != nil {
+		return err
+	}
+
+	tx, err := DB.Beginx()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.Exec(`UPDATE folders SET deleted_at = NULL WHERE id = ANY($1)`, pq.Array(ids)); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`UPDATE files SET deleted_at = NULL WHERE parent_id = ANY($1)`, pq.Array(ids)); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+// PurgeFolder permanently deletes a trashed folder and its entire subtree
+// (folders and files) from the database. It returns the files that were
+// deleted so the caller can remove their blobs from the filesystem and
+// reconcile quota usage.
+func PurgeFolder(folderID, ownerID string) ([]sdk.File, error) {
+	var rootID int64
+	err := DB.QueryRow(
+		`SELECT id FROM folders WHERE uuid=$1 AND owner_id=$2::BIGINT AND deleted_at IS NOT NULL`,
+		folderID, ownerID,
+	).Scan(&rootID)
+	if err != nil {
+		return nil, err
+	}
+
+	ids, err := folderSubtreeIDs(rootID)
+	if err != nil {
+		return nil, err
+	}
+
+	tx, err := DB.Beginx()
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	rows, err := tx.Query(`DELETE FROM files WHERE parent_id = ANY($1) RETURNING uuid, created_by, file_size`, pq.Array(ids))
+	if err != nil {
+		return nil, err
+	}
+	var files []sdk.File
+	for rows.Next() {
+		var f sdk.File
+		if err := rows.Scan(&f.UUID, &f.CreatedBy, &f.FileSize); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		files = append(files, f)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, err
+	}
+	rows.Close()
+
+	if _, err := tx.Exec(`DELETE FROM folders WHERE id = ANY($1)`, pq.Array(ids)); err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+
+	return files, nil
+}
+
+// ListTrashedFolders returns the folders the user explicitly trashed —
+// i.e. trashed folders whose parent is not itself trashed. Folders that are
+// only in the trash because an ancestor was trashed are omitted; they come
+// back into view when that ancestor is restored.
+func ListTrashedFolders(ownerID string) ([]sdk.Folder, error) {
+	rows, err := DB.Query(`
+		SELECT f.id, f.uuid, f.name, COALESCE(f.parent_id, 0), f.owner_id, f.deleted_at
+		FROM folders f
+		LEFT JOIN folders p ON p.id = f.parent_id
+		WHERE f.owner_id = $1::BIGINT AND f.deleted_at IS NOT NULL
+		  AND (p.id IS NULL OR p.deleted_at IS NULL)
+		ORDER BY f.deleted_at DESC
+	`, ownerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var folders []sdk.Folder
+	for rows.Next() {
+		var f sdk.Folder
+		if err := rows.Scan(&f.ID, &f.UUID, &f.Name, &f.ParentID, &f.OwnerID, &f.DeletedAt); err != nil {
+			return nil, err
+		}
+		folders = append(folders, f)
+	}
+	return folders, rows.Err()
 }
 
 func ListChildFolder(parentID, ownerID string) ([]sdk.Folder, error) {
@@ -58,14 +239,14 @@ func ListChildFolder(parentID, ownerID string) ([]sdk.Folder, error) {
 
 	if parentID == "" || parentID == rootFolderID {
 		rows, err = DB.Query(
-			`SELECT id, uuid, name, COALESCE(parent_id, 0), owner_id FROM folders WHERE parent_id IS NULL AND owner_id=$1::BIGINT`,
+			`SELECT id, uuid, name, COALESCE(parent_id, 0), owner_id FROM folders WHERE parent_id IS NULL AND owner_id=$1::BIGINT AND deleted_at IS NULL`,
 			ownerID,
 		)
 	} else {
 		rows, err = DB.Query(`
 			SELECT id, uuid, name, COALESCE(parent_id, 0), owner_id FROM folders
 			WHERE parent_id = (SELECT id FROM folders WHERE uuid = $1)
-			  AND owner_id = $2::BIGINT`,
+			  AND owner_id = $2::BIGINT AND deleted_at IS NULL`,
 			parentID, ownerID,
 		)
 	}

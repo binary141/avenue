@@ -222,7 +222,7 @@ func (s *Server) folderSharingRequired(c *gin.Context) {
 
 func (s *Server) SetupRoutes() {
 	c := cors.Config{
-		AllowOrigins:     []string{shared.GetEnv("ALLOW_ORIGIN", "http://localhost:5173"), "http://localhost:8080"},
+		AllowOrigins:     []string{shared.GetEnv("ALLOW_ORIGIN", "http://localhost:5173"), "http://localhost:8080", "http://localhost:8081"},
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "content-type", "Accept", "Authorization", "authorization"},
 		AllowCredentials: false,
@@ -285,6 +285,8 @@ func (s *Server) SetupRoutes() {
 	securedRouterV1.PATCH("/file/:fileID/move", s.MoveFile)
 	securedRouterV1.PATCH("/file/:fileID/:fileName", s.UpdateFileName)
 	securedRouterV1.DELETE("/file/:fileID", s.DeleteFile)
+	securedRouterV1.PATCH("/file/:fileID/restore", s.RestoreFile)
+	securedRouterV1.DELETE("/file/:fileID/purge", s.PurgeFile)
 
 	// -- folder routes -- //
 	securedRouterV1.POST("/folder", s.CreateFolder)
@@ -292,6 +294,12 @@ func (s *Server) SetupRoutes() {
 	securedRouterV1.PATCH("/folder/:folderID/:folderName", s.UpdateFolderName)
 	securedRouterV1.GET("/folder/list/", s.ListFolderContents) // for use for getting the root folder
 	securedRouterV1.GET("/folder/list/:folderID", s.ListFolderContents)
+	securedRouterV1.PATCH("/folder/:folderID/restore", s.RestoreFolder)
+	securedRouterV1.DELETE("/folder/:folderID/purge", s.PurgeFolder)
+
+	// -- trash routes -- //
+	securedRouterV1.GET("/trash", s.ListTrash)
+	securedRouterV1.POST("/trash/empty", s.EmptyTrash)
 
 	// --- users routes --- //
 	unsecuredRouterV1.POST("/logout", s.Logout)

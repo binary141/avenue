@@ -77,7 +77,29 @@ func (c *Client) UpdateFileName(h http.Header, fileID, newName string) error {
 	return c.request(h, http.MethodPatch, fmt.Sprintf("/v1/file/%s/%s", fileID, newName), nil, nil)
 }
 
-// DeleteFile deletes a file.
+// DeleteFile moves a file to the trash.
 func (c *Client) DeleteFile(h http.Header, fileID string) error {
 	return c.request(h, http.MethodDelete, fmt.Sprintf("/v1/file/%s", fileID), nil, nil)
+}
+
+// RestoreFile restores a trashed file.
+func (c *Client) RestoreFile(h http.Header, fileID string) error {
+	return c.request(h, http.MethodPatch, fmt.Sprintf("/v1/file/%s/restore", fileID), nil, nil)
+}
+
+// PurgeFile permanently deletes a trashed file.
+func (c *Client) PurgeFile(h http.Header, fileID string) error {
+	return c.request(h, http.MethodDelete, fmt.Sprintf("/v1/file/%s/purge", fileID), nil, nil)
+}
+
+// ListTrash lists the files and folders the user has trashed.
+func (c *Client) ListTrash(h http.Header) (V1TrashResponse, error) {
+	var out V1TrashResponse
+	err := c.request(h, http.MethodGet, "/v1/trash", nil, &out)
+	return out, err
+}
+
+// EmptyTrash permanently deletes everything the user has trashed.
+func (c *Client) EmptyTrash(h http.Header) error {
+	return c.request(h, http.MethodPost, "/v1/trash/empty", nil, nil)
 }

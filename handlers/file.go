@@ -536,6 +536,9 @@ func (s *Server) GetFile(c *gin.Context) {
 	}
 }
 
+// DeleteFile moves a file to the trash. The blob stays on disk and quota
+// usage is untouched until the file is purged. Use RestoreFile to undo, or
+// PurgeFile to permanently delete it.
 func (s *Server) DeleteFile(c *gin.Context) {
 	userID, err := shared.GetUserIDFromContext(c.Request.Context())
 	if err != nil {
@@ -545,28 +548,16 @@ func (s *Server) DeleteFile(c *gin.Context) {
 		})
 		return
 	}
-	f, err := db.GetFileByIDForUser(c.Param("fileID"), userID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-			Message: "error getting file",
-			Error:   err.Error(),
-		})
-		return
-	}
 
-	if err = s.fs.Remove(fmt.Sprintf("/%d/%s", f.CreatedBy, f.UUID)); err != nil {
-		// only error if the file was found
-		// if the file wasn't found, we still want to delete from the system
-		if !errors.Is(err, afero.ErrFileNotFound) {
-			c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-				Message: "error deleting file from file system",
+	if err = db.TrashFileForUser(c.Param("fileID"), userID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			c.JSON(http.StatusNotFound, sdk.MessageResponse{
+				Message: "file not found in db",
 				Error:   err.Error(),
 			})
 			return
 		}
-	}
 
-	if err = db.DeleteFileForUser(c.Param("fileID"), userID); err != nil {
 		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
 			Message: "error deleting file from db",
 			Error:   err.Error(),
@@ -574,18 +565,170 @@ func (s *Server) DeleteFile(c *gin.Context) {
 		return
 	}
 
-	if err = db.DeleteShareLinksByFileID(f.ID); err != nil {
-		logger.Errorf("error deleting share links for file %s: %s", f.UUID, err.Error())
+	c.Status(http.StatusOK)
+}
+
+// RestoreFile restores a trashed file.
+func (s *Server) RestoreFile(c *gin.Context) {
+	userID, err := shared.GetUserIDFromContext(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
+			Message: "could not get user id",
+			Error:   err.Error(),
+		})
+		return
 	}
 
-	err = db.UpdateUsage(f.CreatedBy, -f.FileSize)
+	if err = db.RestoreFileForUser(c.Param("fileID"), userID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			c.JSON(http.StatusNotFound, sdk.MessageResponse{
+				Message: "file not found in trash",
+				Error:   err.Error(),
+			})
+			return
+		}
+
+		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
+			Message: "could not restore file",
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	c.Status(http.StatusOK)
+}
+
+// PurgeFile permanently deletes a trashed file: removes its blob from disk,
+// deletes the db record, and reconciles quota usage.
+func (s *Server) PurgeFile(c *gin.Context) {
+	userID, err := shared.GetUserIDFromContext(c.Request.Context())
 	if err != nil {
-		// todo should we rollback? Or just have a cron that'll reconcile?
+		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
+			Message: "could not get user id",
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	f, err := db.PurgeFileForUser(c.Param("fileID"), userID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			c.JSON(http.StatusNotFound, sdk.MessageResponse{
+				Message: "file not found in trash",
+				Error:   err.Error(),
+			})
+			return
+		}
+
+		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
+			Message: "could not purge file",
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	if err = s.fs.Remove(fmt.Sprintf("/%d/%s", f.CreatedBy, f.UUID)); err != nil && !errors.Is(err, afero.ErrFileNotFound) {
+		logger.Errorf("purge file: remove blob %s: %v", f.UUID, err)
+	}
+
+	if err = db.UpdateUsage(f.CreatedBy, -f.FileSize); err != nil {
 		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
 			Message: "could not update user quota usage",
 			Error:   err.Error(),
 		})
 		return
+	}
+
+	c.Status(http.StatusOK)
+}
+
+// ListTrash lists the files and folders the user has trashed.
+func (s *Server) ListTrash(c *gin.Context) {
+	userID, err := shared.GetUserIDFromContext(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
+			Message: "could not get user id",
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	files, err := db.ListTrashedFiles(userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
+			Message: "could not list trashed files",
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	folders, err := db.ListTrashedFolders(userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
+			Message: "could not list trashed folders",
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, sdk.V1TrashResponse{Files: files, Folders: folders})
+}
+
+// EmptyTrash permanently deletes everything the user has trashed.
+func (s *Server) EmptyTrash(c *gin.Context) {
+	userID, err := shared.GetUserIDFromContext(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
+			Message: "could not get user id",
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	files, err := db.ListTrashedFiles(userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
+			Message: "could not list trashed files",
+			Error:   err.Error(),
+		})
+		return
+	}
+	for _, f := range files {
+		purged, err := db.PurgeFileForUser(f.UUID, userID)
+		if err != nil {
+			logger.Errorf("empty trash: purge file %s: %v", f.UUID, err)
+			continue
+		}
+		if err := s.fs.Remove(fmt.Sprintf("/%d/%s", purged.CreatedBy, purged.UUID)); err != nil && !errors.Is(err, afero.ErrFileNotFound) {
+			logger.Errorf("empty trash: remove blob %s: %v", purged.UUID, err)
+		}
+		if err := db.UpdateUsage(purged.CreatedBy, -purged.FileSize); err != nil {
+			logger.Errorf("empty trash: update usage for user %d: %v", purged.CreatedBy, err)
+		}
+	}
+
+	folders, err := db.ListTrashedFolders(userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
+			Message: "could not list trashed folders",
+			Error:   err.Error(),
+		})
+		return
+	}
+	for _, folder := range folders {
+		purgedFiles, err := db.PurgeFolder(folder.UUID, userID)
+		if err != nil {
+			logger.Errorf("empty trash: purge folder %s: %v", folder.UUID, err)
+			continue
+		}
+		for _, f := range purgedFiles {
+			if err := s.fs.Remove(fmt.Sprintf("/%d/%s", f.CreatedBy, f.UUID)); err != nil && !errors.Is(err, afero.ErrFileNotFound) {
+				logger.Errorf("empty trash: remove blob %s: %v", f.UUID, err)
+			}
+			if err := db.UpdateUsage(f.CreatedBy, -f.FileSize); err != nil {
+				logger.Errorf("empty trash: update usage for user %d: %v", f.CreatedBy, err)
+			}
+		}
 	}
 
 	c.Status(http.StatusOK)

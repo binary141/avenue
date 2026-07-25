@@ -7,23 +7,25 @@ import "time"
 // dependency on the server's db/sqlx internals.
 
 type File struct {
-	ID        int64     `json:"id"`
-	UUID      string    `json:"uuid"`
-	Name      string    `json:"name"`
-	Extension string    `json:"extension"`
-	MimeType  string    `json:"mimeType"`
-	FileSize  int64     `json:"file_size"`
-	Parent    string    `json:"parent"`
-	CreatedBy int64     `json:"created_by"`
-	CreatedAt time.Time `json:"created_at"`
+	ID        int64      `json:"id"`
+	UUID      string     `json:"uuid"`
+	Name      string     `json:"name"`
+	Extension string     `json:"extension"`
+	MimeType  string     `json:"mimeType"`
+	FileSize  int64      `json:"file_size"`
+	Parent    string     `json:"parent"`
+	CreatedBy int64      `json:"created_by"`
+	CreatedAt time.Time  `json:"created_at"`
+	DeletedAt *time.Time `json:"deleted_at,omitempty"`
 }
 
 type Folder struct {
-	ID       int64  `json:"id"`
-	UUID     string `json:"uuid"`
-	Name     string `json:"name"`
-	ParentID int64  `json:"parent_id"`
-	OwnerID  int64  `json:"owner_id"`
+	ID        int64      `json:"id"`
+	UUID      string     `json:"uuid"`
+	Name      string     `json:"name"`
+	ParentID  int64      `json:"parent_id"`
+	OwnerID   int64      `json:"owner_id"`
+	DeletedAt *time.Time `json:"deleted_at,omitempty"`
 }
 
 type User struct {
@@ -105,6 +107,15 @@ type V1FolderContentsResponse struct {
 	Files       []File       `json:"files"`
 	Folders     []Folder     `json:"folders"`
 	BreadCrumbs []Breadcrumb `json:"breadcrumbs"`
+}
+
+// V1TrashResponse lists the top-level trashed items for a user, i.e. the
+// files and folders the user explicitly trashed. Items that are only in the
+// trash because an ancestor folder was trashed are not listed separately —
+// they come back along with their parent on restore.
+type V1TrashResponse struct {
+	Files   []File   `json:"files"`
+	Folders []Folder `json:"folders"`
 }
 
 type V1ShareLinkResponse struct {

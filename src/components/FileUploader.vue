@@ -69,28 +69,17 @@
             </svg>
             <div class="file-item__details">
               <p class="file-item__name">{{ file.name }}</p>
-              <template v-if="isUploading && uploadingFileIndex === index">
+              <template v-if="fileStatus.has(fileKey(file))">
                 <div class="file-item__progress-track">
-                  <div class="file-item__progress-fill" :style="{ width: `${currentFileProgress}%` }"></div>
+                  <div class="file-item__progress-fill" :style="{ width: `${fileStatus.get(fileKey(file))!.progress}%` }"></div>
                 </div>
-                <p class="file-item__speed">{{ currentFileProgress }}% · {{ currentFileSpeed }}</p>
+                <p class="file-item__speed">{{ fileStatus.get(fileKey(file))!.progress }}% · {{ fileStatus.get(fileKey(file))!.speed }}</p>
               </template>
               <p v-else class="file-item__size">{{ formatFileSize(file.size) }}</p>
             </div>
           </div>
           <button
-            v-if="isUploading && uploadingFileIndex === index"
-            type="button"
-            class="file-item__cancel"
-            title="Cancel upload"
-            @click.stop="cancelUpload"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-          <button
-            v-else-if="!isUploading"
+            v-if="!isUploading"
             type="button"
             class="file-item__remove"
             @click.stop="removeFile(index)"
@@ -127,6 +116,15 @@
     >
       Upload {{ selectedFiles.length }} {{ selectedFiles.length === 1 ? 'file' : 'files' }}
     </button>
+
+    <button
+      v-if="isUploading"
+      type="button"
+      class="upload-button upload-button--cancel"
+      @click.stop="cancelUpload"
+    >
+      Cancel upload
+    </button>
   </div>
 </template>
 
@@ -155,6 +153,8 @@ const emit = defineEmits<{
   error: [message: string]
 }>()
 
+const CONCURRENT_UPLOADS = 5
+
 const isDragging = ref(false)
 const fileInput = ref<HTMLInputElement | null>(null)
 const selectedFiles = ref<File[]>([])
@@ -162,10 +162,9 @@ const uploadProgress = ref<number>(0)
 const isUploading = ref(false)
 const formattedSize = ref('')
 
-const uploadingFileIndex = ref(-1)
-const currentFileProgress = ref(0)
-const currentFileSpeed = ref('')
-const currentXHR = ref<XMLHttpRequest | null>(null)
+// Keyed by fileKey(file); present only while that file is actively uploading.
+const fileStatus = ref<Map<string, { progress: number; speed: string }>>(new Map())
+const activeXHRs = new Map<string, XMLHttpRequest>()
 let cancelRequested = false
 
 const formatFileSize = (bytes: number): string => {
@@ -252,10 +251,10 @@ const removeFile = (index: number) => {
   selectedFiles.value.splice(index, 1)
 }
 
-function uploadFileXHR(file: File, formData: FormData, onProgress: (pct: number, speedStr: string) => void): Promise<{ ok: boolean; status: number; body: any; aborted: boolean }> {
+function uploadFileXHR(file: File, formData: FormData, key: string, onProgress: (pct: number, speedStr: string) => void): Promise<{ ok: boolean; status: number; body: any; aborted: boolean }> {
   return new Promise((resolve) => {
     const xhr = new XMLHttpRequest()
-    currentXHR.value = xhr
+    activeXHRs.set(key, xhr)
     const startTime = Date.now()
 
     xhr.upload.onprogress = (e) => {
@@ -269,13 +268,20 @@ function uploadFileXHR(file: File, formData: FormData, onProgress: (pct: number,
     }
 
     xhr.onload = () => {
+      activeXHRs.delete(key)
       let body: any = null
       try { body = JSON.parse(xhr.responseText) } catch { /* ignore */ }
       resolve({ ok: xhr.status >= 200 && xhr.status < 300, status: xhr.status, body, aborted: false })
     }
 
-    xhr.onerror = () => resolve({ ok: false, status: 0, body: null, aborted: false })
-    xhr.onabort = () => resolve({ ok: false, status: 0, body: null, aborted: true })
+    xhr.onerror = () => {
+      activeXHRs.delete(key)
+      resolve({ ok: false, status: 0, body: null, aborted: false })
+    }
+    xhr.onabort = () => {
+      activeXHRs.delete(key)
+      resolve({ ok: false, status: 0, body: null, aborted: true })
+    }
 
     const apiRoot = import.meta.env.VITE_APP_API_URL || ''
     xhr.open('POST', `${apiRoot}v1/file`)
@@ -290,16 +296,16 @@ function uploadFileXHR(file: File, formData: FormData, onProgress: (pct: number,
 
 const cancelUpload = () => {
   cancelRequested = true
-  currentXHR.value?.abort()
+  for (const xhr of activeXHRs.values()) {
+    xhr.abort()
+  }
 }
 
 const resetUploadState = () => {
   isUploading.value = false
-  uploadingFileIndex.value = -1
-  currentFileProgress.value = 0
-  currentFileSpeed.value = ''
   uploadProgress.value = 0
-  currentXHR.value = null
+  fileStatus.value.clear()
+  activeXHRs.clear()
 }
 
 const uploadFiles = async () => {
@@ -312,19 +318,21 @@ const uploadFiles = async () => {
   uploadProgress.value = 0
   cancelRequested = false
 
-  try {
-    const totalFiles = selectedFiles.value.length
-    const uploaded: File[] = []
+  const totalFiles = selectedFiles.value.length
+  // Pending pool: files are pulled off the front by whichever worker frees
+  // up first. Completed files are removed from selectedFiles as they
+  // succeed, so a retry after a failure doesn't re-send finished uploads.
+  const pending = [...selectedFiles.value]
+  const uploaded: File[] = []
+  let uploadError: string | null = null
 
-    // Always upload from the front and shift completed files off the
-    // pending list as they succeed, so that if a later file fails, the
-    // files that already succeeded aren't re-sent on retry.
-    while (selectedFiles.value.length > 0) {
-      const file = selectedFiles.value[0]
-      if (!file) break
-      uploadingFileIndex.value = 0
-      currentFileProgress.value = 0
-      currentFileSpeed.value = ''
+  const worker = async () => {
+    while (!cancelRequested && !uploadError) {
+      const file = pending.shift()
+      if (!file) return
+
+      const key = fileKey(file)
+      fileStatus.value.set(key, { progress: 0, speed: '' })
 
       const formData = new FormData()
       formData.append('file', file)
@@ -332,34 +340,40 @@ const uploadFiles = async () => {
         formData.append('parent', props.parent)
       }
 
-      const response = await uploadFileXHR(file, formData, (pct, speedStr) => {
-        currentFileProgress.value = pct
-        currentFileSpeed.value = speedStr
+      const response = await uploadFileXHR(file, formData, key, (pct, speedStr) => {
+        fileStatus.value.set(key, { progress: pct, speed: speedStr })
       })
 
-      if (response.aborted) {
-        resetUploadState()
-        cancelRequested = false
+      fileStatus.value.delete(key)
+
+      if (response.aborted || cancelRequested) {
         return
       }
 
       if (!response.ok) {
-        const errorMessage = response.body?.error || response.body?.message || 'Upload failed'
-        emit('error', `Failed to upload "${file.name}": ${errorMessage}`)
-        resetUploadState()
+        uploadError = response.body?.error || response.body?.message || 'Upload failed'
+        emit('error', `Failed to upload "${file.name}": ${uploadError}`)
         return
       }
 
-      selectedFiles.value.shift()
+      const idx = selectedFiles.value.indexOf(file)
+      if (idx !== -1) selectedFiles.value.splice(idx, 1)
       uploaded.push(file)
       uploadProgress.value = Math.round((uploaded.length / totalFiles) * 100)
     }
+  }
 
-    emit('upload', uploaded)
+  try {
+    const workerCount = Math.min(CONCURRENT_UPLOADS, pending.length)
+    await Promise.all(Array.from({ length: workerCount }, () => worker()))
+
     resetUploadState()
+    if (uploaded.length > 0) {
+      emit('upload', uploaded)
+    }
   } catch (error) {
-    emit('error', error instanceof Error ? error.message : 'Upload failed')
     resetUploadState()
+    emit('error', error instanceof Error ? error.message : 'Upload failed')
   }
 }
 
@@ -585,5 +599,13 @@ const hasFiles = computed(() => selectedFiles.value.length > 0)
 .upload-button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.upload-button--cancel {
+  background-color: var(--gray-4);
+}
+
+.upload-button--cancel:hover {
+  background-color: #ef4444;
 }
 </style>

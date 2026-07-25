@@ -19,6 +19,7 @@ import (
 	"avenue/backend/logger"
 	"avenue/backend/sdk"
 	"avenue/backend/shared"
+	"avenue/backend/sweeper"
 
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/afero"
@@ -867,7 +868,11 @@ func (s *Server) ListTrash(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, sdk.V1TrashResponse{Files: files, Folders: folders})
+	c.JSON(http.StatusOK, sdk.V1TrashResponse{
+		Files:         files,
+		Folders:       folders,
+		RetentionDays: int(sweeper.Retention().Hours() / 24),
+	})
 }
 
 // EmptyTrash permanently deletes everything the user has trashed.

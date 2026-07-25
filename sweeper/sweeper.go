@@ -16,14 +16,27 @@ import (
 	"github.com/spf13/afero"
 )
 
+const (
+	retentionEnvKey      = "TRASH_RETENTION"
+	defaultRetention     = "720h" // 30 days
+	intervalEnvKey       = "TRASH_SWEEP_INTERVAL"
+	defaultSweepInterval = "5m"
+)
+
+// Retention returns the configured trash retention period — how long an
+// item sits in the trash before the sweeper permanently deletes it.
+func Retention() time.Duration {
+	return shared.GetEnvDuration(retentionEnvKey, defaultRetention)
+}
+
 // Start launches a background goroutine that sweeps the trash on a fixed
 // interval, hard-deleting anything trashed for longer than the retention
 // period. Both are configurable via env vars (Go duration strings, e.g.
 // "5m", "720h"): TRASH_SWEEP_INTERVAL (default 5m) and TRASH_RETENTION
 // (default 720h, i.e. 30 days).
 func Start(fs afero.Fs) {
-	interval := shared.GetEnvDuration("TRASH_SWEEP_INTERVAL", "5m")
-	retention := shared.GetEnvDuration("TRASH_RETENTION", "720h")
+	interval := shared.GetEnvDuration(intervalEnvKey, defaultSweepInterval)
+	retention := Retention()
 
 	go func() {
 		ticker := time.NewTicker(interval)

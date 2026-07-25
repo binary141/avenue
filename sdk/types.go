@@ -116,6 +116,9 @@ type V1FolderContentsResponse struct {
 type V1TrashResponse struct {
 	Files   []File   `json:"files"`
 	Folders []Folder `json:"folders"`
+	// RetentionDays is how many days an item sits in the trash before the
+	// sweeper permanently deletes it.
+	RetentionDays int `json:"retentionDays"`
 }
 
 type V1ShareLinkResponse struct {

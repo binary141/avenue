@@ -20,6 +20,14 @@
 
     <ErrorMessage :msg="error" @clear="error = ''" />
 
+    <p
+      v-if="!loading && retentionDays > 0 && (folders.length > 0 || files.length > 0)"
+      class="text-sm text-center"
+      style="color: var(--text-secondary); max-width: 800px;"
+    >
+      Items in the trash are automatically deleted forever after {{ retentionDays }} day{{ retentionDays === 1 ? '' : 's' }}.
+    </p>
+
     <div v-if="!loading" class="w-full flex flex-col gap-6" style="max-width: 800px;">
       <!-- Empty state -->
       <div v-if="folders.length === 0 && files.length === 0" class="card text-center py-10 flex flex-col items-center gap-3">
@@ -158,6 +166,7 @@ const error = ref('');
 const folders = ref<TrashedFolder[]>([]);
 const files = ref<TrashedFile[]>([]);
 const emptying = ref(false);
+const retentionDays = ref(0);
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' });
@@ -179,6 +188,7 @@ async function loadTrash() {
   if (response.ok && response.body) {
     folders.value = response.body.folders || [];
     files.value = response.body.files || [];
+    retentionDays.value = response.body.retentionDays || 0;
   } else {
     error.value = response.body?.error || 'Failed to load trash';
   }

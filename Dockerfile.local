@@ -1,0 +1,17 @@
+FROM golang:1.26.1-alpine AS builder
+
+WORKDIR /app
+
+COPY go.mod go.sum ./
+
+RUN go mod download
+
+COPY . .
+
+from builder as live-dev
+
+RUN apk add --no-cache curl
+
+RUN curl -sSfL https://raw.githubusercontent.com/air-verse/air/master/install.sh | sh -s -- -b $(go env GOPATH)/bin
+
+CMD ["air", "-c", "/app/.air.toml"]

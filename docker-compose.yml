@@ -3,7 +3,7 @@ services:
     # Build from source only if BACKEND_TARGET is set to a build target
     build:
       context: ./
-      dockerfile: Dockerfile
+      dockerfile: "${DOCKERFILE:-Dockerfile}"
       target: "${BACKEND_TARGET:-live-dev}"  # defaults to live-dev
     # Pull/run prebuilt image if BACKEND_TARGET is 'image' or not set
     image: "${BACKEND_IMAGE:-binary141/avenue:latest}"

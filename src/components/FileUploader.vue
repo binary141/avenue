@@ -193,6 +193,8 @@ const validateFiles = (files: File[]): boolean => {
   return true
 }
 
+const fileKey = (file: File): string => `${file.name}:${file.size}:${file.lastModified}`
+
 const handleFiles = (files: FileList | null) => {
   if (!files || files.length === 0) return
 
@@ -205,7 +207,16 @@ const handleFiles = (files: FileList | null) => {
 
   if (!validateFiles(fileArray)) return
 
-  selectedFiles.value = fileArray
+  if (!props.multiple) {
+    selectedFiles.value = fileArray
+    return
+  }
+
+  // Add to the existing staged selection instead of replacing it, so a
+  // second drag-and-drop doesn't silently discard the first batch.
+  const existingKeys = new Set(selectedFiles.value.map(fileKey))
+  const newFiles = fileArray.filter(f => !existingKeys.has(fileKey(f)))
+  selectedFiles.value = [...selectedFiles.value, ...newFiles]
 }
 
 const handleDrop = (e: DragEvent) => {
@@ -303,11 +314,15 @@ const uploadFiles = async () => {
 
   try {
     const totalFiles = selectedFiles.value.length
-    let uploadedCount = 0
+    const uploaded: File[] = []
 
-    for (let i = 0; i < selectedFiles.value.length; i++) {
-      const file = selectedFiles.value[i]
-      uploadingFileIndex.value = i
+    // Always upload from the front and shift completed files off the
+    // pending list as they succeed, so that if a later file fails, the
+    // files that already succeeded aren't re-sent on retry.
+    while (selectedFiles.value.length > 0) {
+      const file = selectedFiles.value[0]
+      if (!file) break
+      uploadingFileIndex.value = 0
       currentFileProgress.value = 0
       currentFileSpeed.value = ''
 
@@ -335,12 +350,12 @@ const uploadFiles = async () => {
         return
       }
 
-      uploadedCount++
-      uploadProgress.value = Math.round((uploadedCount / totalFiles) * 100)
+      selectedFiles.value.shift()
+      uploaded.push(file)
+      uploadProgress.value = Math.round((uploaded.length / totalFiles) * 100)
     }
 
-    emit('upload', selectedFiles.value)
-    selectedFiles.value = []
+    emit('upload', uploaded)
     resetUploadState()
   } catch (error) {
     emit('error', error instanceof Error ? error.message : 'Upload failed')

@@ -55,7 +55,7 @@
       @error="handleUploadError"
       :multiple=true
       :maxSize=maxFileSize
-      :disabled="usersStore.userData.data.quota !== 0 && usersStore.userData.data.spaceUsed >= usersStore.userData.data.quota" />
+      :disabled="serverMax === 0 || (usersStore.userData.data.quota !== 0 && usersStore.userData.data.spaceUsed >= usersStore.userData.data.quota)" />
 
     <FileUsageBar
       :used="usersStore.userData.data.spaceUsed"

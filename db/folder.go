@@ -327,7 +327,7 @@ func ListChildFolder(parentID, ownerID string, sortDir sdk.SortDirection) ([]sdk
 	} else {
 		rows, err = DB.Query(`
 			SELECT id, uuid, name, COALESCE(parent_id, 0), owner_id FROM folders
-			WHERE parent_id = (SELECT id FROM folders WHERE uuid = $1)
+			WHERE parent_id = (SELECT id FROM folders WHERE uuid = $1 AND owner_id = $2::BIGINT)
 			  AND owner_id = $2::BIGINT AND deleted_at IS NULL ORDER BY name `+string(sortDir),
 			parentID, ownerID,
 		)

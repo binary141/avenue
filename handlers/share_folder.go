@@ -3,7 +3,6 @@ package handlers
 import (
 	"bytes"
 	"crypto/sha256"
-	"database/sql"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -24,30 +23,24 @@ import (
 func (s *Server) CreateFolderShareLink(c *gin.Context) {
 	userID, err := shared.GetUserIDFromContext(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{Error: err.Error()})
+		respond(c, http.StatusInternalServerError, "", err)
 		return
 	}
 
 	folderID := c.Param("folderID")
-	_, err = db.GetFolder(folderID, userID)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			c.JSON(http.StatusNotFound, sdk.MessageResponse{Message: "folder not found"})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{Error: err.Error()})
+	if _, ok := fetchOwnedFolder(c, folderID, userID); !ok {
 		return
 	}
 
 	var req sdk.CreateShareLinkRequest
 	if err := c.ShouldBindJSON(&req); err != nil && err.Error() != "EOF" {
-		c.JSON(http.StatusBadRequest, sdk.MessageResponse{Error: err.Error()})
+		respond(c, http.StatusBadRequest, "", err)
 		return
 	}
 
 	link, err := db.CreateShareFolderLink(folderID, userID, req.ExpiresAt, req.RequireLogin, req.AllowUpload, req.MaxFileSize)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{Error: err.Error()})
+		respond(c, http.StatusInternalServerError, "", err)
 		return
 	}
 
@@ -62,24 +55,18 @@ func (s *Server) CreateFolderShareLink(c *gin.Context) {
 func (s *Server) ListFolderShares(c *gin.Context) {
 	userID, err := shared.GetUserIDFromContext(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{Error: err.Error()})
+		respond(c, http.StatusInternalServerError, "", err)
 		return
 	}
 
 	folderID := c.Param("folderID")
-	_, err = db.GetFolder(folderID, userID)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			c.JSON(http.StatusNotFound, sdk.MessageResponse{Message: "folder not found"})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{Error: err.Error()})
+	if _, ok := fetchOwnedFolder(c, folderID, userID); !ok {
 		return
 	}
 
 	links, err := db.ListShareFoldersByFolder(folderID, userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{Error: err.Error()})
+		respond(c, http.StatusInternalServerError, "", err)
 		return
 	}
 	if links == nil {
@@ -92,13 +79,13 @@ func (s *Server) ListFolderShares(c *gin.Context) {
 func (s *Server) ListUserFolderShares(c *gin.Context) {
 	userID, err := shared.GetUserIDFromContext(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{Error: err.Error()})
+		respond(c, http.StatusInternalServerError, "", err)
 		return
 	}
 
 	links, err := db.ListShareFoldersByUser(userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{Error: err.Error()})
+		respond(c, http.StatusInternalServerError, "", err)
 		return
 	}
 	if links == nil {
@@ -111,13 +98,13 @@ func (s *Server) ListUserFolderShares(c *gin.Context) {
 func (s *Server) ListExpiredUserFolderShares(c *gin.Context) {
 	userID, err := shared.GetUserIDFromContext(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{Error: err.Error()})
+		respond(c, http.StatusInternalServerError, "", err)
 		return
 	}
 
 	links, err := db.ListExpiredShareFoldersByUser(userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{Error: err.Error()})
+		respond(c, http.StatusInternalServerError, "", err)
 		return
 	}
 	if links == nil {
@@ -130,13 +117,13 @@ func (s *Server) ListExpiredUserFolderShares(c *gin.Context) {
 func (s *Server) RevokeShareFolderLink(c *gin.Context) {
 	userID, err := shared.GetUserIDFromContext(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{Error: err.Error()})
+		respond(c, http.StatusInternalServerError, "", err)
 		return
 	}
 
 	token := c.Param("token")
 	if err := db.DeleteShareFolderLink(token, userID); err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{Error: err.Error()})
+		respond(c, http.StatusInternalServerError, "", err)
 		return
 	}
 	c.Status(http.StatusOK)
@@ -151,13 +138,13 @@ func (s *Server) GetSharedFolderContents(c *gin.Context) {
 
 	files, err := db.ListChildFilePublic(link.FolderUUID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{Error: err.Error()})
+		respond(c, http.StatusInternalServerError, "", err)
 		return
 	}
 	ownerID := fmt.Sprint(link.CreatedBy)
 	folders, err := db.ListChildFolder(link.FolderUUID, ownerID, sdk.SortAsc, shared.MAXPAGELIMIT, 0)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{Error: err.Error()})
+		respond(c, http.StatusInternalServerError, "", err)
 		return
 	}
 
@@ -188,25 +175,25 @@ func (s *Server) BrowseSharedSubFolder(c *gin.Context) {
 	subFolderUUID := c.Param("subFolderUUID")
 	inTree, err := db.IsFolderInSubtree(link.FolderIntID, subFolderUUID)
 	if err != nil || !inTree {
-		c.JSON(http.StatusNotFound, sdk.MessageResponse{Message: "folder not found in shared tree"})
+		respond(c, http.StatusNotFound, "folder not found in shared tree", nil)
 		return
 	}
 
 	ownerID := fmt.Sprint(link.CreatedBy)
 	subFolder, err := db.GetFolder(subFolderUUID, ownerID)
 	if err != nil {
-		c.JSON(http.StatusNotFound, sdk.MessageResponse{Message: "folder not found"})
+		respond(c, http.StatusNotFound, "folder not found", nil)
 		return
 	}
 
 	files, err := db.ListChildFilePublic(subFolderUUID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{Error: err.Error()})
+		respond(c, http.StatusInternalServerError, "", err)
 		return
 	}
 	folders, err := db.ListChildFolder(subFolderUUID, ownerID, sdk.SortAsc, shared.MAXPAGELIMIT, 0)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{Error: err.Error()})
+		respond(c, http.StatusInternalServerError, "", err)
 		return
 	}
 
@@ -235,7 +222,7 @@ func (s *Server) UploadToSharedFolder(c *gin.Context) {
 	}
 
 	if !link.AllowUpload {
-		c.JSON(http.StatusForbidden, sdk.MessageResponse{Message: "uploads are not allowed for this share link"})
+		respond(c, http.StatusForbidden, "uploads are not allowed for this share link", nil)
 		return
 	}
 
@@ -248,7 +235,7 @@ func (s *Server) UploadToSharedFolder(c *gin.Context) {
 
 	creator, err := db.GetUserByIDStr(creatorIDStr)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{Error: err.Error()})
+		respond(c, http.StatusInternalServerError, "", err)
 		return
 	}
 
@@ -257,11 +244,11 @@ func (s *Server) UploadToSharedFolder(c *gin.Context) {
 	if creator.Quota != 0 {
 		totalUsed, err := db.GetUserUsage(creatorID)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, sdk.MessageResponse{Error: err.Error()})
+			respond(c, http.StatusInternalServerError, "", err)
 			return
 		}
 		if totalUsed >= creator.Quota {
-			c.JSON(http.StatusUnprocessableEntity, sdk.MessageResponse{Error: "creator quota reached"})
+			respond(c, http.StatusUnprocessableEntity, "", errors.New("creator quota reached"))
 			return
 		}
 		remaining := creator.Quota - totalUsed
@@ -277,7 +264,7 @@ func (s *Server) UploadToSharedFolder(c *gin.Context) {
 	} else {
 		inTree, err := db.IsFolderInSubtree(link.FolderIntID, targetFolderUUID)
 		if err != nil || !inTree {
-			c.JSON(http.StatusNotFound, sdk.MessageResponse{Message: "target folder not found in shared tree"})
+			respond(c, http.StatusNotFound, "target folder not found in shared tree", nil)
 			return
 		}
 	}
@@ -286,7 +273,7 @@ func (s *Server) UploadToSharedFolder(c *gin.Context) {
 
 	mr, err := c.Request.MultipartReader()
 	if err != nil {
-		c.JSON(http.StatusBadRequest, sdk.MessageResponse{Error: err.Error()})
+		respond(c, http.StatusBadRequest, "", err)
 		return
 	}
 
@@ -302,7 +289,7 @@ func (s *Server) UploadToSharedFolder(c *gin.Context) {
 			break
 		}
 		if err != nil {
-			c.JSON(http.StatusBadRequest, sdk.MessageResponse{Error: err.Error()})
+			respond(c, http.StatusBadRequest, "", err)
 			return
 		}
 
@@ -313,7 +300,7 @@ func (s *Server) UploadToSharedFolder(c *gin.Context) {
 			buf := make([]byte, 512)
 			n, err := io.ReadAtLeast(part, buf, 1)
 			if err != nil && err != io.ErrUnexpectedEOF {
-				c.JSON(http.StatusInternalServerError, sdk.MessageResponse{Error: err.Error()})
+				respond(c, http.StatusInternalServerError, "", err)
 				return
 			}
 			contentType = http.DetectContentType(buf[:n])
@@ -326,20 +313,20 @@ func (s *Server) UploadToSharedFolder(c *gin.Context) {
 				CreatedBy: creatorID,
 			})
 			if err != nil {
-				c.JSON(http.StatusInternalServerError, sdk.MessageResponse{Error: err.Error()})
+				respond(c, http.StatusInternalServerError, "", err)
 				return
 			}
 
 			if err := shared.EnsureBlobDir(s.fs, fileID); err != nil {
 				_ = db.DeleteFile(fileID, creatorIDStr)
-				c.JSON(http.StatusInternalServerError, sdk.MessageResponse{Error: err.Error()})
+				respond(c, http.StatusInternalServerError, "", err)
 				return
 			}
 
 			dst, err := s.fs.Create(shared.BlobPath(fileID))
 			if err != nil {
 				_ = db.DeleteFile(fileID, creatorIDStr)
-				c.JSON(http.StatusInternalServerError, sdk.MessageResponse{Error: err.Error()})
+				respond(c, http.StatusInternalServerError, "", err)
 				return
 			}
 
@@ -349,7 +336,7 @@ func (s *Server) UploadToSharedFolder(c *gin.Context) {
 			written, err := io.Copy(mw, bytes.NewReader(buf[:n]))
 			if err != nil {
 				_ = db.DeleteFile(fileID, creatorIDStr)
-				c.JSON(http.StatusInternalServerError, sdk.MessageResponse{Error: err.Error()})
+				respond(c, http.StatusInternalServerError, "", err)
 				return
 			}
 			total += written
@@ -360,10 +347,10 @@ func (s *Server) UploadToSharedFolder(c *gin.Context) {
 				_ = db.DeleteFile(fileID, creatorIDStr)
 				var maxErr *http.MaxBytesError
 				if errors.As(err, &maxErr) || errors.Is(err, http.ErrBodyReadAfterClose) {
-					c.JSON(http.StatusRequestEntityTooLarge, sdk.MessageResponse{Error: "file too large"})
+					respond(c, http.StatusRequestEntityTooLarge, "", errors.New("file too large"))
 					return
 				}
-				c.JSON(http.StatusInternalServerError, sdk.MessageResponse{Error: err.Error()})
+				respond(c, http.StatusInternalServerError, "", err)
 				return
 			}
 			total += written
@@ -374,7 +361,7 @@ func (s *Server) UploadToSharedFolder(c *gin.Context) {
 	}
 
 	if fileID == "" {
-		c.JSON(http.StatusBadRequest, sdk.MessageResponse{Message: "no file provided"})
+		respond(c, http.StatusBadRequest, "no file provided", nil)
 		return
 	}
 
@@ -387,12 +374,12 @@ func (s *Server) UploadToSharedFolder(c *gin.Context) {
 		MimeType:  contentType,
 		Parent:    targetFolderUUID,
 	}, creatorIDStr); err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{Error: err.Error()})
+		respond(c, http.StatusInternalServerError, "", err)
 		return
 	}
 
 	if err := db.UpdateUsage(creatorID, total); err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{Error: err.Error()})
+		respond(c, http.StatusInternalServerError, "", err)
 		return
 	}
 
@@ -409,13 +396,13 @@ func (s *Server) DownloadSharedFolderFile(c *gin.Context) {
 	fileUUID := c.Param("fileUUID")
 	inTree, err := db.IsFileInSubtree(link.FolderIntID, fileUUID)
 	if err != nil || !inTree {
-		c.JSON(http.StatusNotFound, sdk.MessageResponse{Message: "file not found in shared folder"})
+		respond(c, http.StatusNotFound, "file not found in shared folder", nil)
 		return
 	}
 
 	file, err := db.GetFileByIDPublic(fileUUID)
 	if err != nil {
-		c.JSON(http.StatusNotFound, sdk.MessageResponse{Message: "file not found"})
+		respond(c, http.StatusNotFound, "file not found", nil)
 		return
 	}
 
@@ -423,10 +410,10 @@ func (s *Server) DownloadSharedFolderFile(c *gin.Context) {
 	fileData, err := s.fs.Open(path)
 	if err != nil {
 		if errors.Is(err, afero.ErrFileNotFound) {
-			c.JSON(http.StatusNotFound, sdk.MessageResponse{Message: "file not found on disk"})
+			respond(c, http.StatusNotFound, "file not found on disk", nil)
 			return
 		}
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{Error: err.Error()})
+		respond(c, http.StatusInternalServerError, "", err)
 		return
 	}
 	defer func() { _ = fileData.Close() }()
@@ -482,11 +469,11 @@ func (s *Server) resolveShareFolderLink(c *gin.Context) (sdk.ShareFolderLink, bo
 	token := c.Param("token")
 	link, err := db.GetShareFolderLink(token)
 	if err != nil {
-		c.JSON(http.StatusNotFound, sdk.MessageResponse{Message: "share link not found or expired"})
+		respond(c, http.StatusNotFound, "share link not found or expired", nil)
 		return sdk.ShareFolderLink{}, false
 	}
 	if link.RequireLogin && !s.isAuthenticated(c) {
-		c.JSON(http.StatusUnauthorized, sdk.MessageResponse{Message: "authentication required"})
+		respond(c, http.StatusUnauthorized, "authentication required", nil)
 		return sdk.ShareFolderLink{}, false
 	}
 	return link, true

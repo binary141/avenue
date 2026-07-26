@@ -57,7 +57,7 @@ func (s *Server) Login(c *gin.Context) {
 
 	session, err := db.CreateSession(u.ID, c.Request.UserAgent(), c.ClientIP())
 	if err != nil {
-		respond(c, http.StatusInternalServerError, fmt.Errorf("create session: %w", err))
+		respond(c, http.StatusInternalServerError, "", fmt.Errorf("create session: %w", err))
 		return
 	}
 
@@ -103,48 +103,48 @@ func (s *Server) Logout(c *gin.Context) {
 	}
 
 	if err = db.DeleteSession(sessID); err != nil {
-		respond(c, http.StatusInternalServerError, fmt.Errorf("delete session: %w", err))
+		respond(c, http.StatusInternalServerError, "", fmt.Errorf("delete session: %w", err))
 		return
 	}
 
-	c.JSON(http.StatusOK, sdk.MessageResponse{Message: "OK"})
+	respond(c, http.StatusOK, "OK", nil)
 }
 
 func (s *Server) Register(c *gin.Context) {
 	enabled := strings.ToLower(shared.GetEnv("REGISTRATION_ENABLED", "false"))
 
 	if enabled == "false" {
-		respond(c, http.StatusBadRequest, errors.New("registration is not enabled"))
+		respond(c, http.StatusBadRequest, "", errors.New("registration is not enabled"))
 		return
 	}
 
 	var req sdk.RegisterRequest
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		respond(c, http.StatusBadRequest, err)
+		respond(c, http.StatusBadRequest, "", err)
 		return
 	}
 
 	if !shared.IsValidEmail(req.Email) {
-		respond(c, http.StatusBadRequest, errors.New("email is not valid"))
+		respond(c, http.StatusBadRequest, "", errors.New("email is not valid"))
 		return
 	}
 
 	if !db.IsUniqueEmail(req.Email) {
-		respond(c, http.StatusConflict, errors.New("email already exists"))
+		respond(c, http.StatusConflict, "", errors.New("email already exists"))
 		return
 	}
 
 	hashedPass, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
-		respond(c, http.StatusInternalServerError, fmt.Errorf("hash password: %w", err))
+		respond(c, http.StatusInternalServerError, "", fmt.Errorf("hash password: %w", err))
 		return
 	}
 
 	isAdmin := false
 	u, err := db.CreateUser(req.Email, string(hashedPass), req.FirstName, req.LastName, isAdmin)
 	if err != nil {
-		respond(c, http.StatusInternalServerError, fmt.Errorf("create user: %w", err))
+		respond(c, http.StatusInternalServerError, "", fmt.Errorf("create user: %w", err))
 		return
 	}
 
@@ -161,39 +161,49 @@ func (s *Server) Register(c *gin.Context) {
 	c.JSON(http.StatusCreated, u)
 }
 
-func (s *Server) CreateUser(c *gin.Context) {
-	ctx := c.Request.Context()
-	userID, err := shared.GetUserIDFromContext(ctx)
+// requireAdmin fetches the authenticated caller and confirms they're an
+// admin. On failure it writes the appropriate response and returns ok=false.
+func requireAdmin(c *gin.Context) (sdk.User, bool) {
+	userID, err := shared.GetUserIDFromContext(c.Request.Context())
 	if err != nil {
-		respond(c, http.StatusForbidden, fmt.Errorf("user id not found: %w", err))
-		return
+		respond(c, http.StatusForbidden, "", fmt.Errorf("user id not found: %w", err))
+		return sdk.User{}, false
 	}
 
 	u, err := db.GetUserByIDStr(userID)
 	if err != nil {
-		respond(c, http.StatusInternalServerError, fmt.Errorf("get user: %w", err))
-		return
+		respond(c, http.StatusInternalServerError, "", fmt.Errorf("get user: %w", err))
+		return sdk.User{}, false
 	}
 
 	if !u.IsAdmin {
-		respond(c, http.StatusUnauthorized, errors.New("you are not an admin"))
+		respond(c, http.StatusUnauthorized, "", errors.New("you are not an admin"))
+		return sdk.User{}, false
+	}
+
+	return u, true
+}
+
+func (s *Server) CreateUser(c *gin.Context) {
+	_, ok := requireAdmin(c)
+	if !ok {
 		return
 	}
 
 	var req sdk.CreateUserRequest
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		respond(c, http.StatusBadRequest, err)
+		respond(c, http.StatusBadRequest, "", err)
 		return
 	}
 
 	if !req.SendEmail && req.Password == nil {
-		respond(c, http.StatusBadRequest, errors.New("password is required when not sending an invite email"))
+		respond(c, http.StatusBadRequest, "", errors.New("password is required when not sending an invite email"))
 		return
 	}
 
 	if !db.IsUniqueEmail(req.Email) {
-		respond(c, http.StatusConflict, errors.New("email already exists"))
+		respond(c, http.StatusConflict, "", errors.New("email already exists"))
 		return
 	}
 
@@ -205,7 +215,7 @@ func (s *Server) CreateUser(c *gin.Context) {
 	} else {
 		b := make([]byte, 32)
 		if _, err := rand.Read(b); err != nil {
-			respond(c, http.StatusInternalServerError, fmt.Errorf("generate password: %w", err))
+			respond(c, http.StatusInternalServerError, "", fmt.Errorf("generate password: %w", err))
 			return
 		}
 		password = hex.EncodeToString(b)
@@ -213,13 +223,13 @@ func (s *Server) CreateUser(c *gin.Context) {
 
 	hashed, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
-		respond(c, http.StatusInternalServerError, fmt.Errorf("hash password: %w", err))
+		respond(c, http.StatusInternalServerError, "", fmt.Errorf("hash password: %w", err))
 		return
 	}
 
 	nu, err := db.CreateUser(req.Email, string(hashed), req.FirstName, req.LastName, req.IsAdmin)
 	if err != nil {
-		respond(c, http.StatusInternalServerError, fmt.Errorf("create user: %w", err))
+		respond(c, http.StatusInternalServerError, "", fmt.Errorf("create user: %w", err))
 		return
 	}
 
@@ -253,7 +263,7 @@ func (s *Server) CreateUser(c *gin.Context) {
 	// todo allow pagination
 	us, err := db.GetUsers()
 	if err != nil {
-		respond(c, http.StatusInternalServerError, fmt.Errorf("list users: %w", err))
+		respond(c, http.StatusInternalServerError, "", fmt.Errorf("list users: %w", err))
 		return
 	}
 
@@ -261,28 +271,15 @@ func (s *Server) CreateUser(c *gin.Context) {
 }
 
 func (s *Server) GetUsers(c *gin.Context) {
-	ctx := c.Request.Context()
-	userID, err := shared.GetUserIDFromContext(ctx)
-	if err != nil {
-		respond(c, http.StatusBadRequest, fmt.Errorf("user id not found: %w", err))
-		return
-	}
-
-	u, err := db.GetUserByIDStr(userID)
-	if err != nil {
-		respond(c, http.StatusInternalServerError, fmt.Errorf("get user: %w", err))
-		return
-	}
-
-	if !u.IsAdmin {
-		respond(c, http.StatusUnauthorized, errors.New("unauthorized"))
+	_, ok := requireAdmin(c)
+	if !ok {
 		return
 	}
 
 	// todo allow pagination
 	us, err := db.GetUsers()
 	if err != nil {
-		respond(c, http.StatusInternalServerError, fmt.Errorf("list users: %w", err))
+		respond(c, http.StatusInternalServerError, "", fmt.Errorf("list users: %w", err))
 		return
 	}
 
@@ -293,57 +290,94 @@ func (s *Server) GetProfile(c *gin.Context) {
 	ctx := c.Request.Context()
 	userID, err := shared.GetUserIDFromContext(ctx)
 	if err != nil {
-		respond(c, http.StatusBadRequest, fmt.Errorf("user id not found: %w", err))
+		respond(c, http.StatusBadRequest, "", fmt.Errorf("user id not found: %w", err))
 		return
 	}
 
 	u, err := db.GetUserByIDStr(userID)
 	if err != nil {
-		respond(c, http.StatusInternalServerError, fmt.Errorf("get user: %w", err))
+		respond(c, http.StatusInternalServerError, "", fmt.Errorf("get user: %w", err))
 		return
 	}
 
 	c.JSON(http.StatusOK, u)
 }
 
+// validateProfileUpdate checks the authorization/validation rules for a
+// profile update against already-fetched state: whether the caller may edit
+// this target, whether the new email conflicts with another account, whether
+// a current password was supplied when required, and whether demoting an
+// admin would leave the app with none. It does not verify the current
+// password's hash — that still requires bcrypt and the target's stored hash,
+// so it stays in the handler.
+func validateProfileUpdate(callerID string, callerIsAdmin bool, req sdk.UpdateProfileRequest, emailConflict bool, hasOtherAdmins bool) error {
+	targetID := fmt.Sprintf("%d", req.ID)
+
+	if targetID != callerID && !callerIsAdmin {
+		return errors.New("only admin users can edit another user's information")
+	}
+
+	if req.Email != nil && emailConflict {
+		return errors.New("email already exists")
+	}
+
+	if req.Password != nil && targetID == callerID {
+		if req.CurrentPassword == nil || *req.CurrentPassword == "" {
+			return errors.New("current password is required")
+		}
+	}
+
+	if req.IsAdmin != nil && callerIsAdmin && !hasOtherAdmins && !*req.IsAdmin {
+		return errors.New("application requires at least one admin user")
+	}
+
+	return nil
+}
+
 func (s *Server) UpdateProfile(c *gin.Context) {
 	ctx := c.Request.Context()
 	userID, err := shared.GetUserIDFromContext(ctx)
 	if err != nil {
-		respond(c, http.StatusBadRequest, errors.New("user id not found"))
+		respond(c, http.StatusBadRequest, "", errors.New("user id not found"))
 		return
 	}
 
 	var req sdk.UpdateProfileRequest
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		respond(c, http.StatusBadRequest, err)
+		respond(c, http.StatusBadRequest, "", err)
 		return
 	}
 
 	u, err := db.GetUserByIDStr(userID)
 	if err != nil {
-		respond(c, http.StatusInternalServerError, fmt.Errorf("get user: %w", err))
-		return
-	}
-
-	if fmt.Sprintf("%d", req.ID) != userID && !u.IsAdmin {
-		respond(c, http.StatusBadRequest, errors.New("only admin users can edit another user's information"))
+		respond(c, http.StatusInternalServerError, "", fmt.Errorf("get user: %w", err))
 		return
 	}
 
 	updatingUser, err := db.GetUserByID(req.ID)
 	if err != nil {
-		respond(c, http.StatusInternalServerError, fmt.Errorf("get target user: %w", err))
+		respond(c, http.StatusInternalServerError, "", fmt.Errorf("get target user: %w", err))
 		return
 	}
 
-	if req.Email != nil && *req.Email != updatingUser.Email {
-		if !db.IsUniqueEmail(*req.Email) {
-			respond(c, http.StatusConflict, errors.New("email already exists"))
-			return
-		}
+	emailConflict := req.Email != nil && *req.Email != updatingUser.Email && !db.IsUniqueEmail(*req.Email)
 
+	var hasOtherAdmins bool
+	if req.IsAdmin != nil && u.IsAdmin {
+		hasOtherAdmins, _ = db.HasOtherAdmins(updatingUser)
+	}
+
+	if err := validateProfileUpdate(userID, u.IsAdmin, req, emailConflict, hasOtherAdmins); err != nil {
+		status := http.StatusBadRequest
+		if err.Error() == "email already exists" {
+			status = http.StatusConflict
+		}
+		respond(c, status, "", err)
+		return
+	}
+
+	if req.Email != nil {
 		updatingUser.Email = *req.Email
 	}
 
@@ -359,32 +393,21 @@ func (s *Server) UpdateProfile(c *gin.Context) {
 		// Only require the current password when users change their own password;
 		// admins resetting another user's password don't know it and shouldn't need to.
 		if fmt.Sprintf("%d", req.ID) == userID {
-			if req.CurrentPassword == nil || *req.CurrentPassword == "" {
-				respond(c, http.StatusBadRequest, errors.New("current password is required"))
-				return
-			}
-
 			if err := bcrypt.CompareHashAndPassword([]byte(updatingUser.Password), []byte(*req.CurrentPassword)); err != nil {
-				respond(c, http.StatusUnauthorized, errors.New("current password is incorrect"))
+				respond(c, http.StatusUnauthorized, "", errors.New("current password is incorrect"))
 				return
 			}
 		}
 
 		hashed, err := bcrypt.GenerateFromPassword([]byte(*req.Password), bcrypt.DefaultCost)
 		if err != nil {
-			respond(c, http.StatusInternalServerError, fmt.Errorf("hash password: %w", err))
+			respond(c, http.StatusInternalServerError, "", fmt.Errorf("hash password: %w", err))
 			return
 		}
 		updatingUser.Password = string(hashed)
 	}
 
 	if req.IsAdmin != nil && u.IsAdmin {
-		otherAdmins, _ := db.HasOtherAdmins(updatingUser)
-		if !otherAdmins && !*req.IsAdmin {
-			respond(c, http.StatusBadRequest, errors.New("application requires at least one admin user"))
-			return
-		}
-
 		updatingUser.IsAdmin = *req.IsAdmin
 	}
 
@@ -394,7 +417,7 @@ func (s *Server) UpdateProfile(c *gin.Context) {
 
 	updatingUser, err = db.UpdateUser(updatingUser)
 	if err != nil {
-		respond(c, http.StatusInternalServerError, fmt.Errorf("update user: %w", err))
+		respond(c, http.StatusInternalServerError, "", fmt.Errorf("update user: %w", err))
 		return
 	}
 
@@ -405,38 +428,38 @@ func (s *Server) UpdatePassword(c *gin.Context) {
 	ctx := c.Request.Context()
 	userID, err := shared.GetUserIDFromContext(ctx)
 	if err != nil {
-		respond(c, http.StatusBadRequest, errors.New("user id not found"))
+		respond(c, http.StatusBadRequest, "", errors.New("user id not found"))
 		return
 	}
 
 	var req sdk.UpdatePasswordRequest
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		respond(c, http.StatusBadRequest, err)
+		respond(c, http.StatusBadRequest, "", err)
 		return
 	}
 
 	u, err := db.GetUserByIDStr(userID)
 	if err != nil {
-		respond(c, http.StatusInternalServerError, fmt.Errorf("get user: %w", err))
+		respond(c, http.StatusInternalServerError, "", fmt.Errorf("get user: %w", err))
 		return
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(u.Password), []byte(req.CurrentPassword)); err != nil {
-		respond(c, http.StatusUnauthorized, errors.New("current password is incorrect"))
+		respond(c, http.StatusUnauthorized, "", errors.New("current password is incorrect"))
 		return
 	}
 
 	hashed, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
-		respond(c, http.StatusInternalServerError, fmt.Errorf("hash password: %w", err))
+		respond(c, http.StatusInternalServerError, "", fmt.Errorf("hash password: %w", err))
 		return
 	}
 	u.Password = string(hashed)
 
 	u, err = db.UpdateUser(u)
 	if err != nil {
-		respond(c, http.StatusInternalServerError, fmt.Errorf("update password: %w", err))
+		respond(c, http.StatusInternalServerError, "", fmt.Errorf("update password: %w", err))
 		return
 	}
 

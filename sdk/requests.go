@@ -67,6 +67,14 @@ type BulkRestoreRequest struct {
 	FolderIDs []string `json:"folderIds"`
 }
 
+// DownloadFilesZipRequest selects what to bundle into a zip download. Either
+// FileIDs or a single-entry FolderIDs may be set, but not both — a folder
+// download walks its whole subtree and can't be combined with other items.
+type DownloadFilesZipRequest struct {
+	FileIDs   []string `form:"ids"`
+	FolderIDs []string `form:"folderIds"`
+}
+
 type CreateShareLinkRequest struct {
 	ExpiresAt    *time.Time `json:"expires_at,omitempty"`
 	RequireLogin bool       `json:"require_login"`

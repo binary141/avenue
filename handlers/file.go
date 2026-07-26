@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math"
 	"net/http"
 	"path/filepath"
 	"strconv"
@@ -26,55 +25,63 @@ import (
 	"github.com/spf13/afero"
 )
 
+// computeUploadLimit derives the max upload size a user may use for a single
+// request. A quota of 0 means unlimited, so the limit is just envMax. With a
+// non-zero quota, usage at or beyond it reports overQuota=true; otherwise the
+// limit is whichever is smaller of the remaining quota and envMax.
+func computeUploadLimit(quota, used, envMax int64) (limit int64, overQuota bool) {
+	if quota == 0 {
+		return envMax, false
+	}
+
+	if used >= quota {
+		return 0, true
+	}
+
+	remaining := quota - used
+	if remaining < envMax {
+		return remaining, false
+	}
+	return envMax, false
+}
+
 func (s *Server) Upload(c *gin.Context) {
 	userID, err := shared.GetUserIDFromContext(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-			Message: "could not get user id",
-			Error:   err.Error(),
-		})
+		respond(c, http.StatusInternalServerError, "could not get user id", err)
 		return
 	}
 
 	user, err := db.GetUserByIDStr(userID)
 	if err != nil {
 		logger.Errorf("error getting user: %s", err.Error())
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-			Error: err.Error(),
-		})
+		respond(c, http.StatusInternalServerError, "", err)
 		return
 	}
 
 	userIDInt, err := strconv.ParseInt(userID, 10, 64)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{Error: err.Error()})
+		respond(c, http.StatusInternalServerError, "", err)
 		return
 	}
 
-	maxFileSize := shared.GetEnvInt64("MAX_FILE_BYTE_SIZE", shared.DEFAULTMAXFILESIZE)
+	envMaxFileSize := shared.GetEnvInt64("MAX_FILE_BYTE_SIZE", shared.DEFAULTMAXFILESIZE)
 	var total int64
 
-	// 0 is unlimited
+	var totalUsed int64
 	if user.Quota != 0 {
-		totalUsed, err := db.GetUserUsage(userIDInt)
+		totalUsed, err = db.GetUserUsage(userIDInt)
 		if err != nil {
 			logger.Errorf("error getting user quota: %s", err.Error())
-			c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-				Error: err.Error(),
-			})
+			respond(c, http.StatusInternalServerError, "", err)
 			return
 		}
+	}
 
-		if totalUsed >= user.Quota {
-			c.JSON(http.StatusUnprocessableEntity, sdk.MessageResponse{
-				Error: "Max quota reached. Please delete files to be able to upload files",
-			})
-			return
-		}
-
-		remainingQuota := user.Quota - totalUsed
-
-		maxFileSize = int64(math.Min(float64(remainingQuota), float64(maxFileSize)))
+	maxFileSize, overQuota := computeUploadLimit(user.Quota, totalUsed, envMaxFileSize)
+	if overQuota {
+		respond(c, http.StatusUnprocessableEntity, "", errors.New("Max quota reached. Please delete files to be able to upload files"))
+		return
 	}
 
 	c.Request.Body = http.MaxBytesReader(
@@ -85,10 +92,7 @@ func (s *Server) Upload(c *gin.Context) {
 
 	mr, err := c.Request.MultipartReader()
 	if err != nil {
-		c.JSON(http.StatusBadRequest, sdk.MessageResponse{
-			Message: "invalid multipart request",
-			Error:   err.Error(),
-		})
+		respond(c, http.StatusBadRequest, "invalid multipart request", err)
 		return
 	}
 
@@ -108,10 +112,7 @@ func (s *Server) Upload(c *gin.Context) {
 			break
 		}
 		if err != nil {
-			c.JSON(http.StatusBadRequest, sdk.MessageResponse{
-				Message: "multipart read error",
-				Error:   err.Error(),
-			})
+			respond(c, http.StatusBadRequest, "multipart read error", err)
 			return
 		}
 
@@ -119,17 +120,14 @@ func (s *Server) Upload(c *gin.Context) {
 		case "parent":
 			buf, err := io.ReadAll(io.LimitReader(part, 1024))
 			if err != nil {
-				c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-					Message: "Unable to read multi part bytes for parent",
-					Error:   err.Error(),
-				})
+				respond(c, http.StatusInternalServerError, "Unable to read multi part bytes for parent", err)
 				return
 			}
 			parent = string(buf)
 		case "file":
 			// only allow one file upload for now
 			if fileSeen {
-				c.JSON(http.StatusBadRequest, sdk.MessageResponse{Message: "only one file allowed"})
+				respond(c, http.StatusBadRequest, "only one file allowed", nil)
 				return
 			}
 			fileSeen = true
@@ -140,10 +138,7 @@ func (s *Server) Upload(c *gin.Context) {
 			buf := make([]byte, 512)
 			n, err := io.ReadAtLeast(part, buf, 1)
 			if err != nil && err != io.ErrUnexpectedEOF {
-				c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-					Message: "Unable to read multi part bytes",
-					Error:   err.Error(),
-				})
+				respond(c, http.StatusInternalServerError, "Unable to read multi part bytes", err)
 				return
 			}
 			contentType = http.DetectContentType(buf[:n])
@@ -158,18 +153,12 @@ func (s *Server) Upload(c *gin.Context) {
 				CreatedBy: userIDInt,
 			})
 			if err != nil {
-				c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-					Message: "could not create file record",
-					Error:   err.Error(),
-				})
+				respond(c, http.StatusInternalServerError, "could not create file record", err)
 				return
 			}
 
 			if err := shared.EnsureBlobDir(s.fs, fileID); err != nil {
-				c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-					Message: "could not ensure dir exists",
-					Error:   err.Error(),
-				})
+				respond(c, http.StatusInternalServerError, "could not ensure dir exists", err)
 				return
 			}
 
@@ -180,17 +169,11 @@ func (s *Server) Upload(c *gin.Context) {
 				deleteErr := db.DeleteFile(fileID, userID)
 				if deleteErr != nil {
 					logger.Errorf("delete file: %v", deleteErr)
-					c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-						Message: "could not delete file in db",
-						Error:   deleteErr.Error(),
-					})
+					respond(c, http.StatusInternalServerError, "could not delete file in db", deleteErr)
 					return
 				}
 
-				c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-					Message: "could not create file",
-					Error:   err.Error(),
-				})
+				respond(c, http.StatusInternalServerError, "could not create file", err)
 				return
 			}
 
@@ -205,17 +188,11 @@ func (s *Server) Upload(c *gin.Context) {
 				deleteErr := db.DeleteFile(fileID, userID)
 				if deleteErr != nil {
 					logger.Errorf("delete file: %v", deleteErr)
-					c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-						Message: "could not delete file in db",
-						Error:   deleteErr.Error(),
-					})
+					respond(c, http.StatusInternalServerError, "could not delete file in db", deleteErr)
 					return
 				}
 
-				c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-					Message: "Unable to read multi part bytes",
-					Error:   err.Error(),
-				})
+				respond(c, http.StatusInternalServerError, "Unable to read multi part bytes", err)
 				return
 			}
 			total += written
@@ -227,32 +204,22 @@ func (s *Server) Upload(c *gin.Context) {
 				deleteErr := db.DeleteFile(fileID, userID)
 				if deleteErr != nil {
 					logger.Errorf("delete file: %v", deleteErr)
-					c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-						Message: "could not delete file in db",
-						Error:   deleteErr.Error(),
-					})
+					respond(c, http.StatusInternalServerError, "could not delete file in db", deleteErr)
 					return
 				}
 
 				var maxErr *http.MaxBytesError
 				if errors.As(err, &maxErr) {
-					c.JSON(http.StatusRequestEntityTooLarge, sdk.MessageResponse{
-						Error: "File too large",
-					})
+					respond(c, http.StatusRequestEntityTooLarge, "", errors.New("File too large"))
 					return
 				}
 
 				if errors.Is(err, http.ErrBodyReadAfterClose) {
-					c.JSON(http.StatusRequestEntityTooLarge, sdk.MessageResponse{
-						Error: "File too large",
-					})
+					respond(c, http.StatusRequestEntityTooLarge, "", errors.New("File too large"))
 					return
 				}
 
-				c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-					Message: "Unable to read multi part bytes",
-					Error:   err.Error(),
-				})
+				respond(c, http.StatusInternalServerError, "Unable to read multi part bytes", err)
 				return
 			}
 
@@ -271,9 +238,7 @@ func (s *Server) Upload(c *gin.Context) {
 	}
 
 	if fileID == "" {
-		c.JSON(http.StatusBadRequest, sdk.MessageResponse{
-			Message: "no file provided",
-		})
+		respond(c, http.StatusBadRequest, "no file provided", nil)
 		return
 	}
 
@@ -289,20 +254,14 @@ func (s *Server) Upload(c *gin.Context) {
 	}, userID)
 	if err != nil {
 		// what do we want to do if we cannot update the filesize?
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-			Message: "could not update file size",
-			Error:   err.Error(),
-		})
+		respond(c, http.StatusInternalServerError, "could not update file size", err)
 		return
 	}
 
 	err = db.UpdateUsage(userIDInt, total)
 	if err != nil {
 		// todo should we rollback? Or just have a cron that'll reconcile?
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-			Message: "could not update user quota usage",
-			Error:   err.Error(),
-		})
+		respond(c, http.StatusInternalServerError, "could not update user quota usage", err)
 		return
 	}
 
@@ -322,19 +281,13 @@ func (s *Server) Upload(c *gin.Context) {
 func (s *Server) ListFiles(c *gin.Context) {
 	userID, err := shared.GetUserIDFromContext(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-			Message: "could not get user id",
-			Error:   err.Error(),
-		})
+		respond(c, http.StatusInternalServerError, "could not get user id", err)
 		return
 	}
 
 	files, err := db.ListFiles(userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-			Message: "could not list files",
-			Error:   err.Error(),
-		})
+		respond(c, http.StatusInternalServerError, "could not list files", err)
 		return
 	}
 	c.JSON(http.StatusOK, files)
@@ -343,27 +296,19 @@ func (s *Server) ListFiles(c *gin.Context) {
 func (s *Server) SearchFiles(c *gin.Context) {
 	userID, err := shared.GetUserIDFromContext(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-			Message: "could not get user id",
-			Error:   err.Error(),
-		})
+		respond(c, http.StatusInternalServerError, "could not get user id", err)
 		return
 	}
 
 	fileName := c.Param("fileName")
 	if fileName == "" {
-		c.JSON(http.StatusBadRequest, sdk.MessageResponse{
-			Message: "search query can't be empty",
-		})
+		respond(c, http.StatusBadRequest, "search query can't be empty", nil)
 		return
 	}
 
 	files, err := db.SearchChildFiles(c.Param("folderID"), userID, fileName)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-			Message: "could not search files",
-			Error:   err.Error(),
-		})
+		respond(c, http.StatusInternalServerError, "could not search files", err)
 		return
 	}
 	c.JSON(http.StatusOK, files)
@@ -372,45 +317,30 @@ func (s *Server) SearchFiles(c *gin.Context) {
 func (s *Server) MoveFile(c *gin.Context) {
 	userID, err := shared.GetUserIDFromContext(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-			Message: "could not get user id",
-			Error:   err.Error(),
-		})
+		respond(c, http.StatusInternalServerError, "could not get user id", err)
 		return
 	}
 
 	var req sdk.MoveFileRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, sdk.MessageResponse{
-			Message: "could not marshal all data to json",
-			Error:   err.Error(),
-		})
+		respond(c, http.StatusBadRequest, "could not marshal all data to json", err)
 		return
 	}
 
 	file, err := db.GetFileByIDForUser(c.Param("fileID"), userID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			c.JSON(http.StatusNotFound, sdk.MessageResponse{
-				Message: "file not found in db",
-				Error:   err.Error(),
-			})
+			respond(c, http.StatusNotFound, "file not found in db", err)
 			return
 		}
 
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-			Message: "could not get file",
-			Error:   err.Error(),
-		})
+		respond(c, http.StatusInternalServerError, "could not get file", err)
 		return
 	}
 
 	if req.Parent != "" {
 		if _, err := db.GetFolder(req.Parent, userID); err != nil {
-			c.JSON(http.StatusBadRequest, sdk.MessageResponse{
-				Message: "destination folder must exist",
-				Error:   err.Error(),
-			})
+			respond(c, http.StatusBadRequest, "destination folder must exist", err)
 			return
 		}
 	}
@@ -418,10 +348,7 @@ func (s *Server) MoveFile(c *gin.Context) {
 	file.Parent = req.Parent
 
 	if err := db.UpdateFile(*file, userID); err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-			Message: "could not move file",
-			Error:   err.Error(),
-		})
+		respond(c, http.StatusInternalServerError, "could not move file", err)
 		return
 	}
 
@@ -431,35 +358,24 @@ func (s *Server) MoveFile(c *gin.Context) {
 func (s *Server) UpdateFileName(c *gin.Context) {
 	userID, err := shared.GetUserIDFromContext(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-			Message: "could not get user id",
-			Error:   err.Error(),
-		})
+		respond(c, http.StatusInternalServerError, "could not get user id", err)
 		return
 	}
 
 	newName := c.Param("fileName")
 	if newName == "" {
-		c.JSON(http.StatusBadRequest, sdk.MessageResponse{
-			Message: "filename can't be empty",
-		})
+		respond(c, http.StatusBadRequest, "filename can't be empty", nil)
 		return
 	}
 
 	file, err := db.GetFileByIDForUser(c.Param("fileID"), userID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			c.JSON(http.StatusNotFound, sdk.MessageResponse{
-				Message: "file not found in db",
-				Error:   err.Error(),
-			})
+			respond(c, http.StatusNotFound, "file not found in db", err)
 			return
 		}
 
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-			Message: "could not get file",
-			Error:   err.Error(),
-		})
+		respond(c, http.StatusInternalServerError, "could not get file", err)
 		return
 	}
 
@@ -467,10 +383,7 @@ func (s *Server) UpdateFileName(c *gin.Context) {
 
 	err = db.UpdateFile(*file, userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-			Message: "could not update file",
-			Error:   err.Error(),
-		})
+		respond(c, http.StatusInternalServerError, "could not update file", err)
 		return
 	}
 
@@ -480,27 +393,18 @@ func (s *Server) UpdateFileName(c *gin.Context) {
 func (s *Server) GetFile(c *gin.Context) {
 	userID, err := shared.GetUserIDFromContext(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-			Message: "could not get user id",
-			Error:   err.Error(),
-		})
+		respond(c, http.StatusInternalServerError, "could not get user id", err)
 		return
 	}
 
 	file, err := db.GetFileByIDForUser(c.Param("fileID"), userID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			c.JSON(http.StatusNotFound, sdk.MessageResponse{
-				Message: "file not found in db",
-				Error:   err.Error(),
-			})
+			respond(c, http.StatusNotFound, "file not found in db", err)
 			return
 		}
 
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-			Message: "could not get file",
-			Error:   err.Error(),
-		})
+		respond(c, http.StatusInternalServerError, "could not get file", err)
 		return
 	}
 
@@ -508,17 +412,11 @@ func (s *Server) GetFile(c *gin.Context) {
 	fileData, err := s.fs.Open(path)
 	if err != nil {
 		if errors.Is(err, afero.ErrFileNotFound) {
-			c.JSON(http.StatusNotFound, sdk.MessageResponse{
-				Message: "could not find file in fs",
-				Error:   err.Error(),
-			})
+			respond(c, http.StatusNotFound, "could not find file in fs", err)
 			return
 		}
 
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-			Message: "could not open file",
-			Error:   err.Error(),
-		})
+		respond(c, http.StatusInternalServerError, "could not open file", err)
 		return
 	}
 	defer func() {
@@ -548,54 +446,44 @@ func (s *Server) GetFile(c *gin.Context) {
 func (s *Server) DownloadFilesZip(c *gin.Context) {
 	userID, err := shared.GetUserIDFromContext(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-			Message: "could not get user id",
-			Error:   err.Error(),
-		})
+		respond(c, http.StatusInternalServerError, "could not get user id", err)
 		return
 	}
 
-	ids := c.QueryArray("ids")
-	folderIDs := c.QueryArray("folderIds")
+	var req sdk.DownloadFilesZipRequest
+	if err := c.ShouldBindQuery(&req); err != nil {
+		respond(c, http.StatusBadRequest, "invalid request", err)
+		return
+	}
 
-	if len(ids) == 0 && len(folderIDs) == 0 {
-		c.JSON(http.StatusBadRequest, sdk.MessageResponse{
-			Message: "no file or folder ids provided",
-		})
+	if len(req.FileIDs) == 0 && len(req.FolderIDs) == 0 {
+		respond(c, http.StatusBadRequest, "no file or folder ids provided", nil)
 		return
 	}
 
 	// Folder downloads walk an entire subtree, so they can't be combined
 	// with other files/folders in the same request — only one folder,
 	// downloaded on its own, is allowed.
-	if len(folderIDs) > 0 {
-		if len(folderIDs) > 1 || len(ids) > 0 {
-			c.JSON(http.StatusBadRequest, sdk.MessageResponse{
-				Message: "a folder can't be downloaded alongside other files or folders",
-			})
+	if len(req.FolderIDs) > 0 {
+		if len(req.FolderIDs) > 1 || len(req.FileIDs) > 0 {
+			respond(c, http.StatusBadRequest, "a folder can't be downloaded alongside other files or folders", nil)
 			return
 		}
 
-		s.downloadFolderZip(c, userID, folderIDs[0])
+		s.downloadFolderZip(c, userID, req.FolderIDs[0])
 		return
 	}
 
-	files := make([]*sdk.File, 0, len(ids))
-	for _, id := range ids {
+	files := make([]*sdk.File, 0, len(req.FileIDs))
+	for _, id := range req.FileIDs {
 		file, err := db.GetFileByIDForUser(id, userID)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
-				c.JSON(http.StatusNotFound, sdk.MessageResponse{
-					Message: fmt.Sprintf("file not found in db: %s", id),
-					Error:   err.Error(),
-				})
+				respond(c, http.StatusNotFound, fmt.Sprintf("file not found in db: %s", id), err)
 				return
 			}
 
-			c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-				Message: "could not get file",
-				Error:   err.Error(),
-			})
+			respond(c, http.StatusInternalServerError, "could not get file", err)
 			return
 		}
 		files = append(files, file)
@@ -648,26 +536,17 @@ func (s *Server) downloadFolderZip(c *gin.Context, userID, folderID string) {
 	folder, err := db.GetFolder(folderID, userID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			c.JSON(http.StatusNotFound, sdk.MessageResponse{
-				Message: "folder not found in db",
-				Error:   err.Error(),
-			})
+			respond(c, http.StatusNotFound, "folder not found in db", err)
 			return
 		}
 
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-			Message: "could not get folder",
-			Error:   err.Error(),
-		})
+		respond(c, http.StatusInternalServerError, "could not get folder", err)
 		return
 	}
 
 	entries, err := db.ListFolderFilesForZip(folderID, userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-			Message: "could not list folder contents",
-			Error:   err.Error(),
-		})
+		respond(c, http.StatusInternalServerError, "could not list folder contents", err)
 		return
 	}
 
@@ -731,26 +610,17 @@ func uniqueZipEntryName(seen map[string]int, name string) string {
 func (s *Server) DeleteFile(c *gin.Context) {
 	userID, err := shared.GetUserIDFromContext(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-			Message: "could not get user id",
-			Error:   err.Error(),
-		})
+		respond(c, http.StatusInternalServerError, "could not get user id", err)
 		return
 	}
 
 	if err = db.TrashFileForUser(c.Param("fileID"), userID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			c.JSON(http.StatusNotFound, sdk.MessageResponse{
-				Message: "file not found in db",
-				Error:   err.Error(),
-			})
+			respond(c, http.StatusNotFound, "file not found in db", err)
 			return
 		}
 
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-			Message: "error deleting file from db",
-			Error:   err.Error(),
-		})
+		respond(c, http.StatusInternalServerError, "error deleting file from db", err)
 		return
 	}
 
@@ -779,35 +649,23 @@ func trashRestoreResponse(userID, message string) (sdk.V1RestoreResponse, error)
 func (s *Server) RestoreFile(c *gin.Context) {
 	userID, err := shared.GetUserIDFromContext(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-			Message: "could not get user id",
-			Error:   err.Error(),
-		})
+		respond(c, http.StatusInternalServerError, "could not get user id", err)
 		return
 	}
 
 	if err = db.RestoreFileForUser(c.Param("fileID"), userID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			c.JSON(http.StatusNotFound, sdk.MessageResponse{
-				Message: "file not found in trash",
-				Error:   err.Error(),
-			})
+			respond(c, http.StatusNotFound, "file not found in trash", err)
 			return
 		}
 
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-			Message: "could not restore file",
-			Error:   err.Error(),
-		})
+		respond(c, http.StatusInternalServerError, "could not restore file", err)
 		return
 	}
 
 	resp, err := trashRestoreResponse(userID, "File restored")
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-			Message: "could not count trashed items",
-			Error:   err.Error(),
-		})
+		respond(c, http.StatusInternalServerError, "could not count trashed items", err)
 		return
 	}
 
@@ -819,27 +677,18 @@ func (s *Server) RestoreFile(c *gin.Context) {
 func (s *Server) PurgeFile(c *gin.Context) {
 	userID, err := shared.GetUserIDFromContext(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-			Message: "could not get user id",
-			Error:   err.Error(),
-		})
+		respond(c, http.StatusInternalServerError, "could not get user id", err)
 		return
 	}
 
 	f, err := db.PurgeFileForUser(c.Param("fileID"), userID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			c.JSON(http.StatusNotFound, sdk.MessageResponse{
-				Message: "file not found in trash",
-				Error:   err.Error(),
-			})
+			respond(c, http.StatusNotFound, "file not found in trash", err)
 			return
 		}
 
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-			Message: "could not purge file",
-			Error:   err.Error(),
-		})
+		respond(c, http.StatusInternalServerError, "could not purge file", err)
 		return
 	}
 
@@ -848,10 +697,7 @@ func (s *Server) PurgeFile(c *gin.Context) {
 	}
 
 	if err = db.UpdateUsage(f.CreatedBy, -f.FileSize); err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-			Message: "could not update user quota usage",
-			Error:   err.Error(),
-		})
+		respond(c, http.StatusInternalServerError, "could not update user quota usage", err)
 		return
 	}
 
@@ -862,10 +708,7 @@ func (s *Server) PurgeFile(c *gin.Context) {
 func (s *Server) ListTrash(c *gin.Context) {
 	userID, err := shared.GetUserIDFromContext(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-			Message: "could not get user id",
-			Error:   err.Error(),
-		})
+		respond(c, http.StatusInternalServerError, "could not get user id", err)
 		return
 	}
 
@@ -886,26 +729,17 @@ func (s *Server) ListTrash(c *gin.Context) {
 
 	items, err := db.ListTrashedItems(userID, sortColumn, sortDir, limit, offset)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-			Message: "could not list trashed items",
-			Error:   err.Error(),
-		})
+		respond(c, http.StatusInternalServerError, "could not list trashed items", err)
 		return
 	}
 	totalFiles, err := db.CountTrashedFiles(userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-			Message: "could not count trashed files",
-			Error:   err.Error(),
-		})
+		respond(c, http.StatusInternalServerError, "could not count trashed files", err)
 		return
 	}
 	totalFolders, err := db.CountTrashedFolders(userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-			Message: "could not count trashed folders",
-			Error:   err.Error(),
-		})
+		respond(c, http.StatusInternalServerError, "could not count trashed folders", err)
 		return
 	}
 
@@ -922,19 +756,13 @@ func (s *Server) ListTrash(c *gin.Context) {
 func (s *Server) EmptyTrash(c *gin.Context) {
 	userID, err := shared.GetUserIDFromContext(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-			Message: "could not get user id",
-			Error:   err.Error(),
-		})
+		respond(c, http.StatusInternalServerError, "could not get user id", err)
 		return
 	}
 
 	files, err := db.ListTrashedFiles(userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-			Message: "could not list trashed files",
-			Error:   err.Error(),
-		})
+		respond(c, http.StatusInternalServerError, "could not list trashed files", err)
 		return
 	}
 	for _, f := range files {
@@ -953,10 +781,7 @@ func (s *Server) EmptyTrash(c *gin.Context) {
 
 	folders, err := db.ListTrashedFolders(userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-			Message: "could not list trashed folders",
-			Error:   err.Error(),
-		})
+		respond(c, http.StatusInternalServerError, "could not list trashed folders", err)
 		return
 	}
 	for _, folder := range folders {

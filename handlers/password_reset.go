@@ -13,7 +13,6 @@ import (
 	"avenue/backend/email"
 	"avenue/backend/logger"
 	"avenue/backend/sdk"
-	"avenue/backend/shared"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
@@ -55,7 +54,7 @@ func (s *Server) ForgotPassword(c *gin.Context) {
 
 	token, err := db.CreatePasswordResetToken(user.ID)
 	if err != nil {
-		respond(c, http.StatusInternalServerError, errors.New("could not create reset token"))
+		respond(c, http.StatusInternalServerError, "", errors.New("could not create reset token"))
 		return
 	}
 
@@ -88,24 +87,24 @@ func (s *Server) ResetPassword(c *gin.Context) {
 
 	userID, err := db.ConsumePasswordResetToken(req.Token)
 	if err != nil {
-		respond(c, http.StatusBadRequest, errors.New("invalid or expired reset token"))
+		respond(c, http.StatusBadRequest, "", errors.New("invalid or expired reset token"))
 		return
 	}
 
 	user, err := db.GetUserByID(userID)
 	if err != nil {
-		respond(c, http.StatusInternalServerError, errors.New("user not found"))
+		respond(c, http.StatusInternalServerError, "", errors.New("user not found"))
 		return
 	}
 
 	hashed, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
 	if err != nil {
-		respond(c, http.StatusInternalServerError, fmt.Errorf("hash password: %w", err))
+		respond(c, http.StatusInternalServerError, "", fmt.Errorf("hash password: %w", err))
 		return
 	}
 
 	if err := db.UpdatePassword(userID, string(hashed)); err != nil {
-		respond(c, http.StatusInternalServerError, fmt.Errorf("update password: %w", err))
+		respond(c, http.StatusInternalServerError, "", fmt.Errorf("update password: %w", err))
 		return
 	}
 
@@ -125,39 +124,26 @@ func (s *Server) ResetPassword(c *gin.Context) {
 }
 
 func (s *Server) AdminSendPasswordReset(c *gin.Context) {
-	ctx := c.Request.Context()
-	callerID, err := shared.GetUserIDFromContext(ctx)
-	if err != nil {
-		respond(c, http.StatusForbidden, fmt.Errorf("user id not found: %w", err))
-		return
-	}
-
-	caller, err := db.GetUserByIDStr(callerID)
-	if err != nil {
-		respond(c, http.StatusInternalServerError, fmt.Errorf("get user: %w", err))
-		return
-	}
-
-	if !caller.IsAdmin {
-		respond(c, http.StatusUnauthorized, errors.New("you are not an admin"))
+	caller, ok := requireAdmin(c)
+	if !ok {
 		return
 	}
 
 	targetID, err := strconv.ParseInt(c.Param("userID"), 10, 64)
 	if err != nil {
-		respond(c, http.StatusBadRequest, errors.New("invalid user id"))
+		respond(c, http.StatusBadRequest, "", errors.New("invalid user id"))
 		return
 	}
 
 	target, err := db.GetUserByID(targetID)
 	if err != nil {
-		respond(c, http.StatusNotFound, errors.New("user not found"))
+		respond(c, http.StatusNotFound, "", errors.New("user not found"))
 		return
 	}
 
 	token, err := db.CreatePasswordResetToken(target.ID)
 	if err != nil {
-		respond(c, http.StatusInternalServerError, fmt.Errorf("create reset token: %w", err))
+		respond(c, http.StatusInternalServerError, "", fmt.Errorf("create reset token: %w", err))
 		return
 	}
 
@@ -174,10 +160,10 @@ func (s *Server) AdminSendPasswordReset(c *gin.Context) {
 		Text:    "An administrator has sent you a password reset for your Avenue account.\n\nClick the link below to set a new password:\n\n" + resetURL + "\n\nThis link expires in 1 hour.",
 	}); err != nil {
 		if errors.Is(err, email.ErrNotConfigured) {
-			respond(c, http.StatusServiceUnavailable, errors.New("email is not configured"))
+			respond(c, http.StatusServiceUnavailable, "", errors.New("email is not configured"))
 			return
 		}
-		respond(c, http.StatusInternalServerError, fmt.Errorf("send email: %w", err))
+		respond(c, http.StatusInternalServerError, "", fmt.Errorf("send email: %w", err))
 		return
 	}
 

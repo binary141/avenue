@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"database/sql"
 	"errors"
 	"fmt"
 	"io"
@@ -18,31 +17,25 @@ import (
 func (s *Server) CreateShareLink(c *gin.Context) {
 	userID, err := shared.GetUserIDFromContext(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{Error: err.Error()})
+		respond(c, http.StatusInternalServerError, "", err)
 		return
 	}
 
 	fileID := c.Param("fileID")
 
-	_, err = db.GetFileByID(fileID, userID)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			c.JSON(http.StatusNotFound, sdk.MessageResponse{Message: "file not found"})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{Error: err.Error()})
+	if _, ok := fetchOwnedFile(c, fileID, userID); !ok {
 		return
 	}
 
 	var req sdk.CreateShareLinkRequest
 	if err := c.ShouldBindJSON(&req); err != nil && err.Error() != "EOF" {
-		c.JSON(http.StatusBadRequest, sdk.MessageResponse{Error: err.Error()})
+		respond(c, http.StatusBadRequest, "", err)
 		return
 	}
 
 	link, err := db.CreateShareLink(fileID, userID, req.ExpiresAt, req.RequireLogin)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{Error: err.Error()})
+		respond(c, http.StatusInternalServerError, "", err)
 		return
 	}
 
@@ -58,18 +51,18 @@ func (s *Server) GetShareLinkMeta(c *gin.Context) {
 
 	link, err := db.GetShareLink(token)
 	if err != nil {
-		c.JSON(http.StatusNotFound, sdk.MessageResponse{Message: "share link not found or expired"})
+		respond(c, http.StatusNotFound, "share link not found or expired", nil)
 		return
 	}
 
 	if link.RequireLogin && !s.isAuthenticated(c) {
-		c.JSON(http.StatusUnauthorized, sdk.MessageResponse{Message: "authentication required"})
+		respond(c, http.StatusUnauthorized, "authentication required", nil)
 		return
 	}
 
 	file, err := db.GetFileByIDPublic(link.FileID)
 	if err != nil {
-		c.JSON(http.StatusNotFound, sdk.MessageResponse{Message: "file not found"})
+		respond(c, http.StatusNotFound, "file not found", nil)
 		return
 	}
 
@@ -85,24 +78,18 @@ func (s *Server) GetShareLinkMeta(c *gin.Context) {
 func (s *Server) ListFileShares(c *gin.Context) {
 	userID, err := shared.GetUserIDFromContext(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{Error: err.Error()})
+		respond(c, http.StatusInternalServerError, "", err)
 		return
 	}
 
 	fileID := c.Param("fileID")
-	_, err = db.GetFileByID(fileID, userID)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			c.JSON(http.StatusNotFound, sdk.MessageResponse{Message: "file not found"})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{Error: err.Error()})
+	if _, ok := fetchOwnedFile(c, fileID, userID); !ok {
 		return
 	}
 
 	links, err := db.ListSharesByFile(fileID, userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{Error: err.Error()})
+		respond(c, http.StatusInternalServerError, "", err)
 		return
 	}
 	if links == nil {
@@ -114,13 +101,13 @@ func (s *Server) ListFileShares(c *gin.Context) {
 func (s *Server) ListUserShares(c *gin.Context) {
 	userID, err := shared.GetUserIDFromContext(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{Error: err.Error()})
+		respond(c, http.StatusInternalServerError, "", err)
 		return
 	}
 
 	links, err := db.ListSharesByUser(userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{Error: err.Error()})
+		respond(c, http.StatusInternalServerError, "", err)
 		return
 	}
 	if links == nil {
@@ -132,13 +119,13 @@ func (s *Server) ListUserShares(c *gin.Context) {
 func (s *Server) ListExpiredUserShares(c *gin.Context) {
 	userID, err := shared.GetUserIDFromContext(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{Error: err.Error()})
+		respond(c, http.StatusInternalServerError, "", err)
 		return
 	}
 
 	links, err := db.ListExpiredSharesByUser(userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{Error: err.Error()})
+		respond(c, http.StatusInternalServerError, "", err)
 		return
 	}
 	if links == nil {
@@ -150,13 +137,13 @@ func (s *Server) ListExpiredUserShares(c *gin.Context) {
 func (s *Server) RevokeShareLink(c *gin.Context) {
 	userID, err := shared.GetUserIDFromContext(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{Error: err.Error()})
+		respond(c, http.StatusInternalServerError, "", err)
 		return
 	}
 
 	token := c.Param("token")
 	if err := db.DeleteShareLink(token, userID); err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{Error: err.Error()})
+		respond(c, http.StatusInternalServerError, "", err)
 		return
 	}
 	c.Status(http.StatusOK)
@@ -167,18 +154,18 @@ func (s *Server) DownloadSharedFile(c *gin.Context) {
 
 	link, err := db.GetShareLink(token)
 	if err != nil {
-		c.JSON(http.StatusNotFound, sdk.MessageResponse{Message: "share link not found or expired"})
+		respond(c, http.StatusNotFound, "share link not found or expired", nil)
 		return
 	}
 
 	if link.RequireLogin && !s.isAuthenticated(c) {
-		c.JSON(http.StatusUnauthorized, sdk.MessageResponse{Message: "authentication required"})
+		respond(c, http.StatusUnauthorized, "authentication required", nil)
 		return
 	}
 
 	file, err := db.GetFileByIDPublic(link.FileID)
 	if err != nil {
-		c.JSON(http.StatusNotFound, sdk.MessageResponse{Message: "file not found"})
+		respond(c, http.StatusNotFound, "file not found", nil)
 		return
 	}
 
@@ -186,10 +173,10 @@ func (s *Server) DownloadSharedFile(c *gin.Context) {
 	fileData, err := s.fs.Open(path)
 	if err != nil {
 		if errors.Is(err, afero.ErrFileNotFound) {
-			c.JSON(http.StatusNotFound, sdk.MessageResponse{Message: "file not found on disk"})
+			respond(c, http.StatusNotFound, "file not found on disk", nil)
 			return
 		}
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{Error: err.Error()})
+		respond(c, http.StatusInternalServerError, "", err)
 		return
 	}
 	defer func() {

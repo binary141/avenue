@@ -12,7 +12,6 @@ import (
 
 	"avenue/backend/db"
 	"avenue/backend/logger"
-	"avenue/backend/sdk"
 	"avenue/backend/shared"
 
 	"github.com/gin-contrib/cors"
@@ -97,22 +96,32 @@ func (s *Server) ServeUI(uiFS embed.FS) {
 	})
 }
 
-// getAuthenticatedUserID extracts the user ID from a token without requiring
-// the session middleware. Returns (userID, true) if valid, (0, false) if not.
-func (s *Server) getAuthenticatedUserID(c *gin.Context) (int64, bool) {
-	h := c.GetHeader(AUTHHEADER)
+// extractSessionToken pulls the raw session token out of an Authorization
+// header (formatted "Token <token>") or, if that's empty, a "token" query
+// param. Returns ("", false) if neither yields a well-formed token.
+func extractSessionToken(authHeader, queryToken string) (string, bool) {
+	h := authHeader
 	if h == "" {
-		q := c.Query("token")
-		if q == "" {
-			return 0, false
+		if queryToken == "" {
+			return "", false
 		}
-		h = fmt.Sprintf("Token %s", q)
+		h = fmt.Sprintf("Token %s", queryToken)
 	}
 	parts := strings.Split(h, "Token ")
 	if len(parts) != 2 {
+		return "", false
+	}
+	return parts[1], true
+}
+
+// getAuthenticatedUserID extracts the user ID from a token without requiring
+// the session middleware. Returns (userID, true) if valid, (0, false) if not.
+func (s *Server) getAuthenticatedUserID(c *gin.Context) (int64, bool) {
+	token, ok := extractSessionToken(c.GetHeader(AUTHHEADER), c.Query("token"))
+	if !ok {
 		return 0, false
 	}
-	session, valid := db.IsValidSession(parts[1])
+	session, valid := db.IsValidSession(token)
 	if !valid {
 		return 0, false
 	}
@@ -120,19 +129,11 @@ func (s *Server) getAuthenticatedUserID(c *gin.Context) (int64, bool) {
 }
 
 func (s *Server) isAuthenticated(c *gin.Context) bool {
-	h := c.GetHeader(AUTHHEADER)
-	if h == "" {
-		q := c.Query("token")
-		if q == "" {
-			return false
-		}
-		h = fmt.Sprintf("Token %s", q)
-	}
-	parts := strings.Split(h, "Token ")
-	if len(parts) != 2 {
+	token, ok := extractSessionToken(c.GetHeader(AUTHHEADER), c.Query("token"))
+	if !ok {
 		return false
 	}
-	_, valid := db.IsValidSession(parts[1])
+	_, valid := db.IsValidSession(token)
 	return valid
 }
 
@@ -156,29 +157,22 @@ func (s *Server) sessionCheckAllowQueryToken(c *gin.Context) {
 }
 
 func (s *Server) sessionCheckImpl(c *gin.Context, allowQueryToken bool) {
-	h := c.GetHeader(AUTHHEADER)
-	if h == "" {
-		if allowQueryToken {
-			if q := c.Query("token"); q != "" {
-				h = fmt.Sprintf("Token %s", q)
-			}
-		}
-		if h == "" {
-			c.AbortWithStatus(http.StatusUnauthorized)
-			return
-		}
+	queryToken := ""
+	if allowQueryToken {
+		queryToken = c.Query("token")
 	}
 
-	parts := strings.Split(h, "Token ")
-
-	if len(parts) != 2 {
-		logger.Warnf("sessionCheck: malformed Authorization header")
+	token, ok := extractSessionToken(c.GetHeader(AUTHHEADER), queryToken)
+	if !ok {
+		if c.GetHeader(AUTHHEADER) != "" {
+			logger.Warnf("sessionCheck: malformed Authorization header")
+		}
 		c.AbortWithStatus(http.StatusUnauthorized)
 		return
 	}
 
 	// see if the session is valid
-	session, valid := db.IsValidSession(parts[1])
+	session, valid := db.IsValidSession(token)
 	if !valid {
 		c.AbortWithStatus(http.StatusUnauthorized)
 		return
@@ -194,7 +188,7 @@ func (s *Server) sessionCheckImpl(c *gin.Context, allowQueryToken bool) {
 	// update the session to be a rolling timeout
 	_, err := db.UpdateSession(session)
 	if err != nil {
-		respond(c, http.StatusInternalServerError, errors.New("could not update session"))
+		respond(c, http.StatusInternalServerError, "", errors.New("could not update session"))
 		return
 	}
 
@@ -202,14 +196,14 @@ func (s *Server) sessionCheckImpl(c *gin.Context, allowQueryToken bool) {
 	// otherwise the browser drops them well before the session expires
 	maxAge := int(SessionRollingWindow.Seconds())
 	c.SetCookie(string(shared.USERCOOKIENAME), fmt.Sprint(session.UserId), maxAge, "/", COOKIEDOMAIN, COOKIESECURE, true)
-	c.SetCookie(string(shared.SESSIONCOOKIENAME), parts[1], maxAge, "/", COOKIEDOMAIN, COOKIESECURE, true)
+	c.SetCookie(string(shared.SESSIONCOOKIENAME), token, maxAge, "/", COOKIEDOMAIN, COOKIESECURE, true)
 
 	rc := c.Request.Context()
 
 	// Add a new value to the context
 	newCtx := context.WithValue(rc, shared.USERCOOKIENAME, session.UserId)
 	// put the session data into the context
-	newCtx = context.WithValue(newCtx, shared.SESSIONCOOKIENAME, parts[1])
+	newCtx = context.WithValue(newCtx, shared.SESSIONCOOKIENAME, token)
 
 	// Update the request with the new context
 	c.Request = c.Request.WithContext(newCtx)
@@ -346,5 +340,5 @@ func (s *Server) Run(address string) error {
 func (s *Server) pingHandler(c *gin.Context) {
 	ctx := c.Request.Context()
 	logger.Debugf("ctx val: %s", ctx.Value(shared.USERCOOKIENAME))
-	c.JSON(200, sdk.MessageResponse{Message: "pong"})
+	respond(c, 200, "pong", nil)
 }

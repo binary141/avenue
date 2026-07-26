@@ -19,18 +19,12 @@ import (
 func (s *Server) CreateFolder(c *gin.Context) {
 	userID, err := shared.GetUserIDFromContext(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-			Message: "could not get user id",
-			Error:   err.Error(),
-		})
+		respond(c, http.StatusInternalServerError, "could not get user id", err)
 		return
 	}
 	var req sdk.CreateFolderRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, sdk.MessageResponse{
-			Message: "could not marshal all data to json",
-			Error:   err.Error(),
-		})
+		respond(c, http.StatusBadRequest, "could not marshal all data to json", err)
 		return
 	}
 
@@ -38,10 +32,7 @@ func (s *Server) CreateFolder(c *gin.Context) {
 	if req.Parent != "" {
 		parentFolder, err := db.GetFolder(req.Parent, userID)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, sdk.MessageResponse{
-				Message: "parent folder must exist",
-				Error:   err.Error(),
-			})
+			respond(c, http.StatusBadRequest, "parent folder must exist", err)
 			return
 		}
 		parentID = parentFolder.ID
@@ -49,7 +40,7 @@ func (s *Server) CreateFolder(c *gin.Context) {
 
 	ownerIDInt, err := strconv.ParseInt(userID, 10, 64)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{Error: err.Error()})
+		respond(c, http.StatusInternalServerError, "", err)
 		return
 	}
 
@@ -59,10 +50,7 @@ func (s *Server) CreateFolder(c *gin.Context) {
 		ParentID: parentID,
 	})
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-			Message: "Internal server error",
-			Error:   err.Error(),
-		})
+		respond(c, http.StatusInternalServerError, "Internal server error", err)
 		return
 	}
 	c.Status(http.StatusCreated)
@@ -73,10 +61,7 @@ func (s *Server) CreateFolder(c *gin.Context) {
 func (s *Server) DeleteFolder(c *gin.Context) {
 	userID, err := shared.GetUserIDFromContext(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-			Message: "could not get user id",
-			Error:   err.Error(),
-		})
+		respond(c, http.StatusInternalServerError, "could not get user id", err)
 		return
 	}
 
@@ -85,24 +70,15 @@ func (s *Server) DeleteFolder(c *gin.Context) {
 	err = db.TrashFolder(folderID, userID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			c.JSON(http.StatusNotFound, sdk.MessageResponse{
-				Message: "folder not found in db",
-				Error:   err.Error(),
-			})
+			respond(c, http.StatusNotFound, "folder not found in db", err)
 			return
 		}
 
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-			Message: "could not delete folder",
-			Error:   err.Error(),
-		})
+		respond(c, http.StatusInternalServerError, "could not delete folder", err)
 		return
 	}
 
-	c.JSON(http.StatusOK, sdk.MessageResponse{
-		Message: "Folder moved to trash",
-		Error:   "",
-	})
+	respond(c, http.StatusOK, "Folder moved to trash", nil)
 }
 
 // BulkDelete moves a batch of files and folders to the trash in a single
@@ -110,40 +86,27 @@ func (s *Server) DeleteFolder(c *gin.Context) {
 func (s *Server) BulkDelete(c *gin.Context) {
 	userID, err := shared.GetUserIDFromContext(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-			Message: "could not get user id",
-			Error:   err.Error(),
-		})
+		respond(c, http.StatusInternalServerError, "could not get user id", err)
 		return
 	}
 
 	var req sdk.BulkDeleteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, sdk.MessageResponse{
-			Message: "could not marshal all data to json",
-			Error:   err.Error(),
-		})
+		respond(c, http.StatusBadRequest, "could not marshal all data to json", err)
 		return
 	}
 
 	if len(req.FileIDs) == 0 && len(req.FolderIDs) == 0 {
-		c.JSON(http.StatusBadRequest, sdk.MessageResponse{
-			Message: "no file or folder ids provided",
-		})
+		respond(c, http.StatusBadRequest, "no file or folder ids provided", nil)
 		return
 	}
 
 	if err := db.BulkTrash(req.FileIDs, req.FolderIDs, userID); err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-			Message: "could not delete items",
-			Error:   err.Error(),
-		})
+		respond(c, http.StatusInternalServerError, "could not delete items", err)
 		return
 	}
 
-	c.JSON(http.StatusOK, sdk.MessageResponse{
-		Message: "Items moved to trash",
-	})
+	respond(c, http.StatusOK, "Items moved to trash", nil)
 }
 
 // BulkRestore restores a batch of trashed files and folders in a single
@@ -151,43 +114,29 @@ func (s *Server) BulkDelete(c *gin.Context) {
 func (s *Server) BulkRestore(c *gin.Context) {
 	userID, err := shared.GetUserIDFromContext(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-			Message: "could not get user id",
-			Error:   err.Error(),
-		})
+		respond(c, http.StatusInternalServerError, "could not get user id", err)
 		return
 	}
 
 	var req sdk.BulkRestoreRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, sdk.MessageResponse{
-			Message: "could not marshal all data to json",
-			Error:   err.Error(),
-		})
+		respond(c, http.StatusBadRequest, "could not marshal all data to json", err)
 		return
 	}
 
 	if len(req.FileIDs) == 0 && len(req.FolderIDs) == 0 {
-		c.JSON(http.StatusBadRequest, sdk.MessageResponse{
-			Message: "no file or folder ids provided",
-		})
+		respond(c, http.StatusBadRequest, "no file or folder ids provided", nil)
 		return
 	}
 
 	if err := db.BulkRestore(req.FileIDs, req.FolderIDs, userID); err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-			Message: "could not restore items",
-			Error:   err.Error(),
-		})
+		respond(c, http.StatusInternalServerError, "could not restore items", err)
 		return
 	}
 
 	resp, err := trashRestoreResponse(userID, "Items restored")
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-			Message: "could not count trashed items",
-			Error:   err.Error(),
-		})
+		respond(c, http.StatusInternalServerError, "could not count trashed items", err)
 		return
 	}
 
@@ -198,36 +147,24 @@ func (s *Server) BulkRestore(c *gin.Context) {
 func (s *Server) RestoreFolder(c *gin.Context) {
 	userID, err := shared.GetUserIDFromContext(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-			Message: "could not get user id",
-			Error:   err.Error(),
-		})
+		respond(c, http.StatusInternalServerError, "could not get user id", err)
 		return
 	}
 
 	err = db.RestoreFolder(c.Param("folderID"), userID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			c.JSON(http.StatusNotFound, sdk.MessageResponse{
-				Message: "folder not found in trash",
-				Error:   err.Error(),
-			})
+			respond(c, http.StatusNotFound, "folder not found in trash", err)
 			return
 		}
 
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-			Message: "could not restore folder",
-			Error:   err.Error(),
-		})
+		respond(c, http.StatusInternalServerError, "could not restore folder", err)
 		return
 	}
 
 	resp, err := trashRestoreResponse(userID, "Folder restored")
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-			Message: "could not count trashed items",
-			Error:   err.Error(),
-		})
+		respond(c, http.StatusInternalServerError, "could not count trashed items", err)
 		return
 	}
 
@@ -239,27 +176,18 @@ func (s *Server) RestoreFolder(c *gin.Context) {
 func (s *Server) PurgeFolder(c *gin.Context) {
 	userID, err := shared.GetUserIDFromContext(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-			Message: "could not get user id",
-			Error:   err.Error(),
-		})
+		respond(c, http.StatusInternalServerError, "could not get user id", err)
 		return
 	}
 
 	purgedFiles, err := db.PurgeFolder(c.Param("folderID"), userID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			c.JSON(http.StatusNotFound, sdk.MessageResponse{
-				Message: "folder not found in trash",
-				Error:   err.Error(),
-			})
+			respond(c, http.StatusNotFound, "folder not found in trash", err)
 			return
 		}
 
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-			Message: "could not purge folder",
-			Error:   err.Error(),
-		})
+		respond(c, http.StatusInternalServerError, "could not purge folder", err)
 		return
 	}
 
@@ -278,35 +206,24 @@ func (s *Server) PurgeFolder(c *gin.Context) {
 func (s *Server) UpdateFolderName(c *gin.Context) {
 	userID, err := shared.GetUserIDFromContext(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-			Message: "could not get user id",
-			Error:   err.Error(),
-		})
+		respond(c, http.StatusInternalServerError, "could not get user id", err)
 		return
 	}
 
 	newName := c.Param("folderName")
 	if newName == "" {
-		c.JSON(http.StatusBadRequest, sdk.MessageResponse{
-			Error: "folder name can't be empty",
-		})
+		respond(c, http.StatusBadRequest, "", errors.New("folder name can't be empty"))
 		return
 	}
 
 	folder, err := db.GetFolder(c.Param("folderID"), userID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			c.JSON(http.StatusNotFound, sdk.MessageResponse{
-				Message: "folder not found in db",
-				Error:   err.Error(),
-			})
+			respond(c, http.StatusNotFound, "folder not found in db", err)
 			return
 		}
 
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-			Message: "could not get folder",
-			Error:   err.Error(),
-		})
+		respond(c, http.StatusInternalServerError, "could not get folder", err)
 		return
 	}
 
@@ -314,23 +231,49 @@ func (s *Server) UpdateFolderName(c *gin.Context) {
 
 	err = db.UpdateFolder(*folder)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-			Message: "could not update folder",
-			Error:   err.Error(),
-		})
+		respond(c, http.StatusInternalServerError, "could not update folder", err)
 		return
 	}
 
 	c.Status(http.StatusOK)
 }
 
+// buildBreadcrumbs turns a folder's ancestor chain (root-first, as returned
+// by db.ListFolderParents) into the UI's breadcrumb trail (leaf-first),
+// skipping the synthetic root entry when listing the root folder itself and
+// appending a trailing "/" crumb (linking back to the root) when browsing a
+// non-root folder.
+func buildBreadcrumbs(folderID string, folderParents []sdk.Folder) []sdk.Breadcrumb {
+	var crumbs []sdk.Breadcrumb
+
+	for _, f := range folderParents {
+		if folderID == "" && f.UUID == shared.ROOTFOLDERID {
+			// an empty folderID in the request if for the root folder
+			continue
+		}
+
+		crumbs = append(crumbs, sdk.Breadcrumb{
+			Label:    f.Name,
+			FolderID: f.UUID,
+		})
+	}
+
+	if folderID != "" && folderID != shared.ROOTFOLDERID {
+		crumbs = append(crumbs, sdk.Breadcrumb{
+			Label:    "/",
+			FolderID: "",
+		})
+	}
+
+	slices.Reverse(crumbs)
+
+	return crumbs
+}
+
 func (s *Server) ListFolderContents(c *gin.Context) {
 	userID, err := shared.GetUserIDFromContext(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-			Message: "could not get user id",
-			Error:   err.Error(),
-		})
+		respond(c, http.StatusInternalServerError, "could not get user id", err)
 		return
 	}
 
@@ -352,26 +295,17 @@ func (s *Server) ListFolderContents(c *gin.Context) {
 	folderID := c.Param("folderID")
 	items, err := db.ListFolderItems(folderID, userID, sortColumn, sortDir, limit, offset)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-			Message: "Internal server error",
-			Error:   err.Error(),
-		})
+		respond(c, http.StatusInternalServerError, "Internal server error", err)
 		return
 	}
 	totalFolders, err := db.CountChildFolders(folderID, userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-			Message: "Internal server error",
-			Error:   err.Error(),
-		})
+		respond(c, http.StatusInternalServerError, "Internal server error", err)
 		return
 	}
 	totalFiles, err := db.CountChildFiles(folderID, userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-			Message: "Internal server error",
-			Error:   err.Error(),
-		})
+		respond(c, http.StatusInternalServerError, "Internal server error", err)
 		return
 	}
 
@@ -379,10 +313,7 @@ func (s *Server) ListFolderContents(c *gin.Context) {
 
 	folderParents, err := db.ListFolderParents(folderID, userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-			Message: "Internal server error",
-			Error:   err.Error(),
-		})
+		respond(c, http.StatusInternalServerError, "Internal server error", err)
 		return
 	}
 
@@ -391,26 +322,7 @@ func (s *Server) ListFolderContents(c *gin.Context) {
 	x.Limit = limit
 	x.Total = totalFolders + totalFiles
 
-	for _, f := range folderParents {
-		if folderID == "" && f.UUID == shared.ROOTFOLDERID {
-			// an empty folderID in the request if for the root folder
-			continue
-		}
-
-		x.BreadCrumbs = append(x.BreadCrumbs, sdk.Breadcrumb{
-			Label:    f.Name,
-			FolderID: f.UUID,
-		})
-	}
-
-	if folderID != "" && folderID != shared.ROOTFOLDERID {
-		x.BreadCrumbs = append(x.BreadCrumbs, sdk.Breadcrumb{
-			Label:    "/",
-			FolderID: "",
-		})
-	}
-
-	slices.Reverse(x.BreadCrumbs)
+	x.BreadCrumbs = buildBreadcrumbs(folderID, folderParents)
 
 	c.JSON(http.StatusOK, x)
 }

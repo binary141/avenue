@@ -21,13 +21,13 @@ func (s *Server) ListSessions(c *gin.Context) {
 	ctx := c.Request.Context()
 	userIDStr, err := shared.GetUserIDFromContext(ctx)
 	if err != nil {
-		respond(c, http.StatusBadRequest, errors.New("user id not found"))
+		respond(c, http.StatusBadRequest, "", errors.New("user id not found"))
 		return
 	}
 
 	userID, err := strconv.ParseInt(userIDStr, 10, 64)
 	if err != nil {
-		respond(c, http.StatusInternalServerError, errors.New("invalid user id"))
+		respond(c, http.StatusInternalServerError, "", errors.New("invalid user id"))
 		return
 	}
 
@@ -35,7 +35,7 @@ func (s *Server) ListSessions(c *gin.Context) {
 
 	sessions, err := db.ListSessionsForUser(userID)
 	if err != nil {
-		respond(c, http.StatusInternalServerError, fmt.Errorf("list sessions: %w", err))
+		respond(c, http.StatusInternalServerError, "", fmt.Errorf("list sessions: %w", err))
 		return
 	}
 
@@ -61,37 +61,37 @@ func (s *Server) RevokeSession(c *gin.Context) {
 	ctx := c.Request.Context()
 	userIDStr, err := shared.GetUserIDFromContext(ctx)
 	if err != nil {
-		respond(c, http.StatusBadRequest, errors.New("user id not found"))
+		respond(c, http.StatusBadRequest, "", errors.New("user id not found"))
 		return
 	}
 
 	userID, err := strconv.ParseInt(userIDStr, 10, 64)
 	if err != nil {
-		respond(c, http.StatusInternalServerError, errors.New("invalid user id"))
+		respond(c, http.StatusInternalServerError, "", errors.New("invalid user id"))
 		return
 	}
 
 	sessionID, err := strconv.ParseInt(c.Param("sessionID"), 10, 64)
 	if err != nil {
-		respond(c, http.StatusBadRequest, errors.New("invalid session id"))
+		respond(c, http.StatusBadRequest, "", errors.New("invalid session id"))
 		return
 	}
 
 	currentSessionID, _ := shared.GetSessionIDFromContext(ctx)
 	sessions, err := db.ListSessionsForUser(userID)
 	if err != nil {
-		respond(c, http.StatusInternalServerError, fmt.Errorf("list sessions: %w", err))
+		respond(c, http.StatusInternalServerError, "", fmt.Errorf("list sessions: %w", err))
 		return
 	}
 	for _, sess := range sessions {
 		if sess.ID == sessionID && sess.SessionID == currentSessionID {
-			respond(c, http.StatusBadRequest, errors.New("cannot revoke your current session; use logout instead"))
+			respond(c, http.StatusBadRequest, "", errors.New("cannot revoke your current session; use logout instead"))
 			return
 		}
 	}
 
 	if err := db.DeleteSessionByIDForUser(sessionID, userID); err != nil {
-		respond(c, http.StatusInternalServerError, fmt.Errorf("revoke session: %w", err))
+		respond(c, http.StatusInternalServerError, "", fmt.Errorf("revoke session: %w", err))
 		return
 	}
 
@@ -104,24 +104,24 @@ func (s *Server) RevokeOtherSessions(c *gin.Context) {
 	ctx := c.Request.Context()
 	userIDStr, err := shared.GetUserIDFromContext(ctx)
 	if err != nil {
-		respond(c, http.StatusBadRequest, errors.New("user id not found"))
+		respond(c, http.StatusBadRequest, "", errors.New("user id not found"))
 		return
 	}
 
 	userID, err := strconv.ParseInt(userIDStr, 10, 64)
 	if err != nil {
-		respond(c, http.StatusInternalServerError, errors.New("invalid user id"))
+		respond(c, http.StatusInternalServerError, "", errors.New("invalid user id"))
 		return
 	}
 
 	currentSessionID, err := shared.GetSessionIDFromContext(ctx)
 	if err != nil {
-		respond(c, http.StatusBadRequest, errors.New("current session not found"))
+		respond(c, http.StatusBadRequest, "", errors.New("current session not found"))
 		return
 	}
 
 	if err := db.DeleteOtherSessions(userID, currentSessionID); err != nil {
-		respond(c, http.StatusInternalServerError, fmt.Errorf("revoke other sessions: %w", err))
+		respond(c, http.StatusInternalServerError, "", fmt.Errorf("revoke other sessions: %w", err))
 		return
 	}
 

@@ -6,6 +6,7 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"net/url"
 )
 
 // UploadFile uploads a file's contents. parent is the destination folder's
@@ -102,7 +103,38 @@ func (c *Client) ListTrash(h http.Header, page, limit int) (V1TrashResponse, err
 	return out, err
 }
 
+// BulkDelete moves a batch of files and folders to the trash in a single
+// request.
+func (c *Client) BulkDelete(h http.Header, req BulkDeleteRequest) (MessageResponse, error) {
+	var out MessageResponse
+	err := c.request(h, http.MethodDelete, "/v1/files/bulk-delete", req, &out)
+	return out, err
+}
+
+// BulkRestore restores a batch of trashed files and folders in a single
+// request.
+func (c *Client) BulkRestore(h http.Header, req BulkRestoreRequest) (V1RestoreResponse, error) {
+	var out V1RestoreResponse
+	err := c.request(h, http.MethodPatch, "/v1/files/bulk-restore", req, &out)
+	return out, err
+}
+
 // EmptyTrash permanently deletes everything the user has trashed.
 func (c *Client) EmptyTrash(h http.Header) error {
 	return c.request(h, http.MethodPost, "/v1/trash/empty", nil, nil)
+}
+
+// DownloadFilesZip streams a zip archive of the requested files, or of a
+// single folder's subtree, as a raw response. The caller must close the
+// returned response body. The archive name is available on
+// resp.Header.Get("Content-Disposition").
+func (c *Client) DownloadFilesZip(h http.Header, req DownloadFilesZipRequest) (*http.Response, error) {
+	q := url.Values{}
+	for _, id := range req.FileIDs {
+		q.Add("ids", id)
+	}
+	for _, id := range req.FolderIDs {
+		q.Add("folderIds", id)
+	}
+	return c.rawRequest(h, http.MethodGet, "/v1/files/zip?"+q.Encode(), nil, "")
 }

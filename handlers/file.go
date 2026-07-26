@@ -80,7 +80,7 @@ func (s *Server) Upload(c *gin.Context) {
 
 	maxFileSize, overQuota := computeUploadLimit(user.Quota, totalUsed, envMaxFileSize)
 	if overQuota {
-		respond(c, http.StatusUnprocessableEntity, "", errors.New("Max quota reached. Please delete files to be able to upload files"))
+		respond(c, http.StatusUnprocessableEntity, "", errors.New("max quota reached. Please delete files to be able to upload files"))
 		return
 	}
 
@@ -210,12 +210,12 @@ func (s *Server) Upload(c *gin.Context) {
 
 				var maxErr *http.MaxBytesError
 				if errors.As(err, &maxErr) {
-					respond(c, http.StatusRequestEntityTooLarge, "", errors.New("File too large"))
+					respond(c, http.StatusRequestEntityTooLarge, "", errors.New("file too large"))
 					return
 				}
 
 				if errors.Is(err, http.ErrBodyReadAfterClose) {
-					respond(c, http.StatusRequestEntityTooLarge, "", errors.New("File too large"))
+					respond(c, http.StatusRequestEntityTooLarge, "", errors.New("file too large"))
 					return
 				}
 

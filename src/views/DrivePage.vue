@@ -205,8 +205,8 @@
                 </svg>
               </span>
 
-              <span class="file-name cursor-pointer flex-1 min-w-0" @click.stop="openFileViewer(item)">
-                {{ formatFileName(item.name) }}
+              <span class="file-name cursor-pointer flex-1 min-w-0" :title="item.name" @click.stop="openFileViewer(item)">
+                {{ item.name }}
                 <span v-if="sharedFileCounts[item.uuid]" class="shared-badge" title="Shared">🔗 {{ sharedFileCounts[item.uuid] }}</span>
               </span>
               <span class="file-size">{{ formatFileSize(item.file_size) }}</span>
@@ -1242,11 +1242,6 @@ async function saveFolderName() {
   } else {
     console.error("Failed to rename folder", response)
   }
-}
-
-function formatFileName(fileName: string): string {
-  const maxNameLength = 35
-  return fileName.length > maxNameLength ? fileName.substring(0, maxNameLength) + "..." : fileName
 }
 
 const IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp'])

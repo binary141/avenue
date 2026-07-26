@@ -78,7 +78,7 @@
               />
             </svg>
             <div class="file-item__details">
-              <p class="file-item__name">{{ file.name }}</p>
+              <p class="file-item__name" :title="file.name">{{ file.name }}</p>
               <template v-if="fileStatus.has(fileKey(file))">
                 <div class="file-item__progress-track">
                   <div class="file-item__progress-fill" :style="{ width: `${fileStatus.get(fileKey(file))!.progress}%` }"></div>

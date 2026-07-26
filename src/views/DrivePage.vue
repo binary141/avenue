@@ -151,7 +151,7 @@
             :key="item.type + '-' + item.uuid"
             class="card flex flex-row items-center gap-3 p-3"
             :class="[item.type === 'folder' ? 'folder-item' : 'file-item', { 'item--selected': isItemSelected(item), 'item--menu-open': openMenuId === item.type + '-' + item.uuid }]"
-            @contextmenu.prevent="toggleRowMenu(item.type + '-' + item.uuid)"
+            @contextmenu.prevent="openRowMenuAt(item.type + '-' + item.uuid, $event)"
           >
             <!-- Checkbox -->
             <input
@@ -178,7 +178,7 @@
               <span class="row-actions flex items-center gap-1" :class="{ 'row-actions--menu-open': openMenuId === 'folder-' + item.uuid }">
                 <span class="row-menu-wrap">
                   <span class="icon-btn" title="More" @click.stop="toggleRowMenu('folder-' + item.uuid)">⋮</span>
-                  <div v-if="openMenuId === 'folder-' + item.uuid" class="row-menu" @click.stop>
+                  <div v-if="openMenuId === 'folder-' + item.uuid" class="row-menu" :style="rowMenuStyle" @click.stop>
                     <button class="row-menu-item" @click="openFolderEditModal(item); openMenuId = null">Rename</button>
                     <button v-if="folderSharingEnabled" class="row-menu-item" @click="openFolderShareModal(item); openMenuId = null">Share</button>
                     <button class="row-menu-item" @click="openMoveModal(item); openMenuId = null">Move to…</button>
@@ -219,7 +219,7 @@
 
                 <span class="row-menu-wrap">
                   <span class="icon-btn" title="More" @click.stop="toggleRowMenu('file-' + item.uuid)">⋮</span>
-                  <div v-if="openMenuId === 'file-' + item.uuid" class="row-menu" @click.stop>
+                  <div v-if="openMenuId === 'file-' + item.uuid" class="row-menu" :style="rowMenuStyle" @click.stop>
                     <button class="row-menu-item" @click="openFileEditModal(item); openMenuId = null">Rename</button>
                     <button class="row-menu-item" @click="openMoveModal(item); openMenuId = null">Move to…</button>
                     <button v-if="fileSharingEnabled" class="row-menu-item" @click="openShareModal(item); openMenuId = null">Share</button>
@@ -798,13 +798,39 @@ watch([sortKey, sortDir], () => {
 
 // ----- Row "more" menu -----
 const openMenuId = ref<string | null>(null)
+// Set only when the menu was opened via right-click, so it renders at the
+// cursor instead of the icon-btn-anchored position from the CSS default.
+const rowMenuPos = ref<{ top: number; left: number } | null>(null)
+
+// Rough menu footprint used to keep it on-screen when opened near an edge;
+// exact size isn't known until render, so this just needs to be a
+// reasonable upper bound for a 3-4 item menu.
+const ROW_MENU_WIDTH = 160
+const ROW_MENU_HEIGHT = 180
+
+const rowMenuStyle = computed(() => {
+  if (!rowMenuPos.value) return undefined
+  return {
+    position: 'fixed' as const,
+    top: `${Math.min(rowMenuPos.value.top, window.innerHeight - ROW_MENU_HEIGHT)}px`,
+    left: `${Math.min(rowMenuPos.value.left, window.innerWidth - ROW_MENU_WIDTH)}px`,
+    right: 'auto',
+  }
+})
 
 function toggleRowMenu(id: string) {
+  rowMenuPos.value = null
   openMenuId.value = openMenuId.value === id ? null : id
+}
+
+function openRowMenuAt(id: string, event: MouseEvent) {
+  rowMenuPos.value = { top: event.clientY, left: event.clientX }
+  openMenuId.value = id
 }
 
 function closeRowMenu() {
   openMenuId.value = null
+  rowMenuPos.value = null
 }
 
 // ----- File type badge -----

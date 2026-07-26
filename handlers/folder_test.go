@@ -20,38 +20,38 @@ func TestBuildBreadcrumbs(t *testing.T) {
 		want          []sdk.Breadcrumb
 	}{
 		{
-			name:          "root folder has no breadcrumbs",
+			name:          "root folder only gets the Drive crumb",
 			folderID:      "",
 			folderParents: []sdk.Folder{root},
-			want:          nil,
+			want: []sdk.Breadcrumb{
+				{Label: "Drive", FolderID: ""},
+			},
 		},
 		{
-			name:          "single-level subfolder gets a crumb and trailing root link",
+			name:          "single-level subfolder gets a leading Drive crumb",
 			folderID:      "docs-uuid",
-			folderParents: []sdk.Folder{root, docs},
+			folderParents: []sdk.Folder{docs, root},
 			want: []sdk.Breadcrumb{
-				{Label: "/", FolderID: ""},
+				{Label: "Drive", FolderID: ""},
 				{Label: "Docs", FolderID: "docs-uuid"},
-				{Label: "root", FolderID: shared.ROOTFOLDERID},
 			},
 		},
 		{
-			name:          "nested subfolder crumbs are leaf-first",
+			name:          "nested subfolder crumbs come back leaf-first and are reordered root-first",
 			folderID:      "photos-uuid",
-			folderParents: []sdk.Folder{root, docs, photos},
+			folderParents: []sdk.Folder{photos, docs, root},
 			want: []sdk.Breadcrumb{
-				{Label: "/", FolderID: ""},
-				{Label: "Photos", FolderID: "photos-uuid"},
+				{Label: "Drive", FolderID: ""},
 				{Label: "Docs", FolderID: "docs-uuid"},
-				{Label: "root", FolderID: shared.ROOTFOLDERID},
+				{Label: "Photos", FolderID: "photos-uuid"},
 			},
 		},
 		{
-			name:          "folderID equal to root UUID gets no trailing crumb",
+			name:          "folderID equal to root UUID still just gets the Drive crumb",
 			folderID:      shared.ROOTFOLDERID,
 			folderParents: []sdk.Folder{root},
 			want: []sdk.Breadcrumb{
-				{Label: "root", FolderID: shared.ROOTFOLDERID},
+				{Label: "Drive", FolderID: ""},
 			},
 		},
 	}

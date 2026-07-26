@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
-	"slices"
 	"strconv"
 
 	"avenue/backend/db"
@@ -273,17 +272,17 @@ func (s *Server) UpdateFolderName(c *gin.Context) {
 	c.Status(http.StatusOK)
 }
 
-// buildBreadcrumbs turns a folder's ancestor chain (root-first, as returned
-// by db.ListFolderParents) into the UI's breadcrumb trail (leaf-first),
-// skipping the synthetic root entry when listing the root folder itself and
-// appending a trailing "/" crumb (linking back to the root) when browsing a
-// non-root folder.
+// buildBreadcrumbs turns a folder's ancestor chain (leaf-first, as returned
+// by db.ListFolderParents: the current folder, then its parent, up to the
+// root) into the UI's breadcrumb trail (root-first), always leading with a
+// "Drive" crumb that links back to the root. The synthetic root folder row
+// itself is skipped since "Drive" already stands in for it.
 func buildBreadcrumbs(folderID string, folderParents []sdk.Folder) []sdk.Breadcrumb {
-	var crumbs []sdk.Breadcrumb
+	crumbs := []sdk.Breadcrumb{{Label: "Drive", FolderID: ""}}
 
-	for _, f := range folderParents {
-		if folderID == "" && f.UUID == shared.ROOTFOLDERID {
-			// an empty folderID in the request if for the root folder
+	for i := len(folderParents) - 1; i >= 0; i-- {
+		f := folderParents[i]
+		if f.UUID == shared.ROOTFOLDERID {
 			continue
 		}
 
@@ -292,15 +291,6 @@ func buildBreadcrumbs(folderID string, folderParents []sdk.Folder) []sdk.Breadcr
 			FolderID: f.UUID,
 		})
 	}
-
-	if folderID != "" && folderID != shared.ROOTFOLDERID {
-		crumbs = append(crumbs, sdk.Breadcrumb{
-			Label:    "/",
-			FolderID: "",
-		})
-	}
-
-	slices.Reverse(crumbs)
 
 	return crumbs
 }

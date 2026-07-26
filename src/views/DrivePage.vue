@@ -1,7 +1,7 @@
 <template>
   <div class="app-page gap-5">
     <div class="flex items-center justify-between mb-4 w-full">
-      <h1 class="text-center flex-1 text-2xl font-bold">Drive</h1>
+      <h1 class="text-center flex-1 text-2xl font-bold">{{ pageTitle }}</h1>
 
       <AppButton
         @click="() => { openCreateFolderModal(); $emit('close-menu')}"
@@ -88,9 +88,11 @@
 
     <ErrorMessage :msg=error @clear="error = ''"/>
 
-    <div class="toolbar flex items-center justify-between gap-3 w-full flex-wrap">
+    <div class="breadcrumb-bar w-full">
       <BreadCrumbs :breadcrumbs=breadcrumbs />
+    </div>
 
+    <div class="toolbar flex items-center justify-between gap-3 w-full flex-wrap">
       <label
         v-if="!loading && filteredItems.length > 0"
         class="flex items-center gap-2 text-sm select-none cursor-pointer"
@@ -529,6 +531,7 @@ const maxFileSize = computed(() => {
 const error = ref<string | undefined>();
 const items = ref<FolderItem[]>([]);
 const breadcrumbs = ref<Breadcrumb[]>([]);
+const pageTitle = computed(() => breadcrumbs.value[breadcrumbs.value.length - 1]?.label ?? 'Drive');
 const page = ref(1);
 const limit = ref(50);
 const total = ref(0);
@@ -1623,6 +1626,12 @@ onUnmounted(() => {
 
 .row-menu-item--danger {
   color: var(--danger);
+}
+
+.breadcrumb-bar {
+  padding-bottom: 0.6rem;
+  border-bottom: 1px solid var(--gray-4);
+  font-size: 0.95rem;
 }
 
 .toolbar {

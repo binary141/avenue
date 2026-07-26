@@ -6,10 +6,12 @@
         :key="breadcrumb.folder_id"
         class="breadcrumb-item"
       >
+        <span v-if="index === 0" class="breadcrumb-icon" aria-hidden="true">📁</span>
+
         <!-- Clickable breadcrumbs (not last) -->
         <button
           v-if="index < breadcrumbs.length - 1"
-          class="app-button breadcrumb-button"
+          class="breadcrumb-button"
           @click="handleClick(breadcrumb)"
         >
           {{ breadcrumb.label }}
@@ -26,7 +28,7 @@
           class="breadcrumb-separator"
           aria-hidden="true"
         >
-          /
+          ›
         </span>
       </li>
     </ul>
@@ -78,37 +80,48 @@ function handleClick(breadcrumb: Breadcrumb) {
   align-items: center;
 }
 
-/* Buttons */
+.breadcrumb-icon {
+  margin-right: 0.4rem;
+  font-size: 0.95em;
+}
+
+/* Buttons (ancestor crumbs) */
 .breadcrumb-button {
   background-color: transparent;
-  color: var(--text);
+  color: var(--text-secondary);
   border: none;
-  padding: 0.25rem 0.5rem;
+  padding: 0.15rem 0.35rem;
+  margin: -0.15rem -0.35rem;
   border-radius: 6px;
+  font-size: inherit;
+  font-weight: 500;
   cursor: pointer;
+  transition: background-color 0.15s, color 0.15s;
 }
 
 .breadcrumb-button:hover {
-  background-color: var(--primary-hover);
+  background-color: var(--gray-4);
+  color: var(--text);
+  text-decoration: underline;
 }
 
 .breadcrumb-button:active {
-  background-color: var(--primary-active);
+  background-color: var(--gray-5);
 }
 
 /* Current breadcrumb */
 .breadcrumb-current {
-  padding: 0.25rem 0.5rem;
-  font-weight: 600;
-  opacity: 0.85;
+  padding: 0.15rem 0.35rem;
+  font-weight: 700;
+  color: var(--text);
   cursor: default;
 }
 
 /* Separator */
 .breadcrumb-separator {
-  margin: 0 0.25rem;
-  opacity: 0.5;
+  margin: 0 0.35rem;
+  color: var(--text-secondary);
+  opacity: 0.6;
   user-select: none;
 }
 </style>
-

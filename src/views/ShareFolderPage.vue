@@ -150,7 +150,7 @@
               <span class="flex-1 font-medium text-gray-800 truncate">{{ file.name }}</span>
               <span class="text-sm text-gray-400 shrink-0">{{ formatFileSize(file.file_size) }}</span>
               <button
-                v-if="usersStore.token && file.created_by === currentUserId"
+                v-if="usersStore.loggedIn && file.created_by === currentUserId"
                 @click.stop="deleteFile(file.uuid)"
                 class="shrink-0 text-red-400 hover:text-red-600 transition-colors p-1"
                 title="Delete"
@@ -217,13 +217,8 @@ const token = computed(() => route.params.token as string);
 const subFolderUUID = computed(() => route.query.sub as string | undefined);
 const currentUserId = computed(() => usersStore.userData.data.id);
 
-function authHeaders(): Record<string, string> {
-  return usersStore.token ? { Authorization: `Token ${usersStore.token}` } : {};
-}
-
 function fileDownloadURL(fileUUID: string): string {
-  const base = `${apiRoot}/api/share/folder/${token.value}/file/${fileUUID}`;
-  return usersStore.token ? `${base}?token=${usersStore.token}` : base;
+  return `${apiRoot}/api/share/folder/${token.value}/file/${fileUUID}`;
 }
 
 function formatFileSize(bytes: number): string {
@@ -299,7 +294,7 @@ async function uploadFiles() {
 
       const res = await fetch(url, {
         method: 'POST',
-        headers: authHeaders(),
+        credentials: 'include',
         body: formData,
       });
 
@@ -328,7 +323,7 @@ async function uploadFiles() {
 async function deleteFile(fileUUID: string) {
   await fetch(`${apiRoot}v1/file/${fileUUID}`, {
     method: 'DELETE',
-    headers: authHeaders(),
+    credentials: 'include',
   });
   await fetchContents();
 }
@@ -344,7 +339,7 @@ async function fetchContents() {
     : `${apiRoot}/api/share/folder/${token.value}`;
 
   try {
-    const res = await fetch(url, { headers: authHeaders() });
+    const res = await fetch(url, { credentials: 'include' });
     if (res.status === 401) {
       loginRequired.value = true;
     } else if (!res.ok) {

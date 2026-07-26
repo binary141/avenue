@@ -60,7 +60,6 @@ import AppButton from './views/components/AppButton.vue';
 import SpinnerView from './views/components/SpinnerView.vue';
 import AppSidebar from './views/components/AppSidebar.vue';
 import { useUsersStore } from './stores/users';
-import { setGlobalRequestHeader } from './utils/api';
 import { useRoute, useRouter } from 'vue-router';
 
 const usersStore = useUsersStore();
@@ -74,17 +73,11 @@ const route = useRoute();
 watch(
   () => route.fullPath,
   () => {
-    if (usersStore.token !== null) {
-      setGlobalRequestHeader("Authorization", `Token ${usersStore.token}`);
-    }
     getUserAndLogin();
   }
 )
 
 onMounted(() => {
-  if (usersStore.token !== null) {
-    setGlobalRequestHeader("Authorization", `Token ${usersStore.token}`);
-  }
   getUserAndLogin();
 })
 
@@ -107,28 +100,31 @@ async function logout() {
 }
 
 async function getUserAndLogin() {
-  if (usersStore.token) {
-    const response = await usersStore.pullMe();
+  // Whether we're already logged in tells us how to react to a 401 below:
+  // a fresh anonymous visit shouldn't be bounced to /login (public routes
+  // like a share link must stay visible), but a session that just expired
+  // mid-visit should be.
+  const wasLoggedIn = usersStore.loggedIn;
+  const response = await usersStore.pullMe();
 
-    if (response.ok) {
-      status.value = "loaded";
-      usersStore.logIn(response.body);
-      isLoggedIn.value = true
+  if (response.ok) {
+    status.value = "loaded";
+    usersStore.logIn(response.body);
+    isLoggedIn.value = true
 
-      const isAdminLocal = usersStore.userData.data.isAdmin;
-      if (isAdminLocal !== undefined) {
-        isAdmin.value = isAdminLocal;
-      }
-    } else if (response.status == 401) {
-      await usersStore.logOut();
-      isLoggedIn.value = false;
-      status.value = "loaded";
+    const isAdminLocal = usersStore.userData.data.isAdmin;
+    if (isAdminLocal !== undefined) {
+      isAdmin.value = isAdminLocal;
+    }
+  } else if (response.status == 401) {
+    usersStore.resetSession();
+    isLoggedIn.value = false;
+    status.value = "loaded";
+    if (wasLoggedIn) {
       router.push({ name: "login", query: { next: route.fullPath } });
-    } else {
-      status.value = "error";
     }
   } else {
-    status.value = "loaded";
+    status.value = "error";
   }
 
   document.documentElement.classList.remove("app-not-launched");

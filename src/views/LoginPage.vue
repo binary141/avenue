@@ -101,7 +101,6 @@ async function handleLogin() {
   submitting.value = false;
 
   if (response.status === 200) {
-    usersStore.setToken(response.body.session_id);
     usersStore.logIn(response.body.user_data);
     const redirect = (route.query.next || route.query.redirect) as string | undefined;
     const saferedirect = redirect && !redirect.startsWith('/logout') ? redirect : undefined;

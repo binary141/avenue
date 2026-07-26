@@ -1,18 +1,8 @@
 import type { LoadableData } from "@/types/base";
 import type { User } from "@/types/users";
-import api, { setGlobalRequestHeader } from "@/utils/api";
+import api from "@/utils/api";
 import { defineStore } from "pinia";
 import { ref } from "vue";
-
-function parseStoredToken(): string | null {
-    const stored = localStorage.getItem("token");
-    if (!stored) return null;
-    try {
-        return JSON.parse(stored);
-    } catch {
-        return stored;
-    }
-}
 
 const userDataDefault: User = {
     id: 1,
@@ -34,24 +24,20 @@ export const useUsersStore = defineStore('users', () => {
         loading: false,
     })
     const loggedIn = ref(false);
-    const token = ref<string | null>(parseStoredToken());
     const fileSharingEnabled = ref(false);
     const folderSharingEnabled = ref(false);
-
-    function setToken(value: string | null) {
-        token.value = value;
-        localStorage.setItem("token", JSON.stringify(value));
-
-        if (value !== null) {
-            setGlobalRequestHeader("Authorization", `Token ${value}`);
-        } else {
-            setGlobalRequestHeader("Authorization", undefined);
-        }
-    }
 
     async function logIn(data: User) {
         userData.value.data = data;
         loggedIn.value = true;
+    }
+
+    // Clears local session state without calling the backend. Use this when
+    // a request already told us the session is gone (e.g. a 401), so there's
+    // nothing left to invalidate server-side.
+    function resetSession() {
+        loggedIn.value = false;
+        userData.value.data = structuredClone(userDataDefault);
     }
 
     async function logInAPI(userData: { email: string; password: string }) {
@@ -84,9 +70,7 @@ export const useUsersStore = defineStore('users', () => {
           return;
         }
 
-        loggedIn.value = false;
-        userData.value.data = structuredClone(userDataDefault);
-        setToken(null);
+        resetSession();
 
         return response;
     }
@@ -95,7 +79,6 @@ export const useUsersStore = defineStore('users', () => {
         const response = await signUpAPI(userData);
 
         if (response.ok || response.status === 201) {
-            setToken(response.body.session_id);
             await logIn(response.body.user_data);
         }
 
@@ -136,7 +119,6 @@ export const useUsersStore = defineStore('users', () => {
         return response;
     }
     async function updateUser(req: Partial<User>) {
-      console.log("req: ", req)
         userData.value.loading = true;
         const response = await api({ url: `v1/user/${userData.value.data.id}`, method: 'PATCH', json: req})
         userData.value.loading = false;
@@ -158,10 +140,10 @@ export const useUsersStore = defineStore('users', () => {
         getUsers,
         createUser,
         loggedIn,
-        token,
         fileSharingEnabled,
         folderSharingEnabled,
         logIn,
+        resetSession,
         logInAPI,
         logOut,
         signUpAPI,
@@ -169,6 +151,5 @@ export const useUsersStore = defineStore('users', () => {
         pullMe,
         updateUser,
         updatePassword,
-        setToken,
     }
 })

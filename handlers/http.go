@@ -114,10 +114,32 @@ func extractSessionToken(authHeader, queryToken string) (string, bool) {
 	return parts[1], true
 }
 
+// requestSessionToken resolves the session token for a request: the
+// Authorization header and (if allowQueryToken) the "token" query param take
+// priority for non-browser API clients, falling back to the HttpOnly session
+// cookie the browser attaches automatically. The cookie is what the SPA
+// itself relies on — it never has JS-readable access to the raw token.
+func requestSessionToken(c *gin.Context, allowQueryToken bool) (string, bool) {
+	queryToken := ""
+	if allowQueryToken {
+		queryToken = c.Query("token")
+	}
+
+	if token, ok := extractSessionToken(c.GetHeader(AUTHHEADER), queryToken); ok {
+		return token, true
+	}
+
+	if token, err := c.Cookie(string(shared.SESSIONCOOKIENAME)); err == nil && token != "" {
+		return token, true
+	}
+
+	return "", false
+}
+
 // getAuthenticatedUserID extracts the user ID from a token without requiring
 // the session middleware. Returns (userID, true) if valid, (0, false) if not.
 func (s *Server) getAuthenticatedUserID(c *gin.Context) (int64, bool) {
-	token, ok := extractSessionToken(c.GetHeader(AUTHHEADER), c.Query("token"))
+	token, ok := requestSessionToken(c, true)
 	if !ok {
 		return 0, false
 	}
@@ -129,7 +151,7 @@ func (s *Server) getAuthenticatedUserID(c *gin.Context) (int64, bool) {
 }
 
 func (s *Server) isAuthenticated(c *gin.Context) bool {
-	token, ok := extractSessionToken(c.GetHeader(AUTHHEADER), c.Query("token"))
+	token, ok := requestSessionToken(c, true)
 	if !ok {
 		return false
 	}
@@ -157,12 +179,7 @@ func (s *Server) sessionCheckAllowQueryToken(c *gin.Context) {
 }
 
 func (s *Server) sessionCheckImpl(c *gin.Context, allowQueryToken bool) {
-	queryToken := ""
-	if allowQueryToken {
-		queryToken = c.Query("token")
-	}
-
-	token, ok := extractSessionToken(c.GetHeader(AUTHHEADER), queryToken)
+	token, ok := requestSessionToken(c, allowQueryToken)
 	if !ok {
 		if c.GetHeader(AUTHHEADER) != "" {
 			logger.Warnf("sessionCheck: malformed Authorization header")
@@ -228,7 +245,7 @@ func (s *Server) folderSharingRequired(c *gin.Context) {
 }
 
 func (s *Server) SetupRoutes() {
-	allowedOrigins := shared.GetEnv("ALLOWED_ORIGINS", "")
+	allowedOrigins := shared.GetEnv("ALLOWED_ORIGINS", "*")
 
 	originsList := strings.Split(allowedOrigins, ",")
 	for i, o := range originsList {
@@ -236,10 +253,15 @@ func (s *Server) SetupRoutes() {
 	}
 
 	c := cors.Config{
-		AllowOrigins:     originsList,
-		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowHeaders:     []string{"Origin", "Content-Type", "content-type", "Accept", "Authorization", "authorization"},
-		AllowCredentials: false,
+		AllowOrigins: originsList,
+		AllowMethods: []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowHeaders: []string{"Origin", "Content-Type", "content-type", "Accept", "Authorization", "authorization"},
+		// The SPA now authenticates via its HttpOnly session cookie rather
+		// than a JS-attached Authorization header, so cross-origin requests
+		// (e.g. the Vite dev server on a different port) need the browser to
+		// send that cookie, which requires AllowCredentials plus an explicit
+		// origin allowlist (never "*") in ALLOWED_ORIGINS.
+		AllowCredentials: true,
 		ExposeHeaders:    []string{"Content-Length"},
 		MaxAge:           12 * time.Hour,
 	}

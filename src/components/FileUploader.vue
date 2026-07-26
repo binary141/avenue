@@ -300,6 +300,10 @@ function uploadFileXHR(file: File, formData: FormData, key: string, onProgress: 
 
     const apiRoot = import.meta.env.VITE_APP_API_URL || ''
     xhr.open('POST', `${apiRoot}v1/file`)
+    // Session auth is an HttpOnly cookie now, not a GLOBAL_HEADERS
+    // Authorization header, so it must be opted into explicitly for
+    // cross-origin requests (e.g. the Vite dev server on a different port).
+    xhr.withCredentials = true
 
     for (const [key, value] of Object.entries(GLOBAL_HEADERS)) {
       if (value !== undefined) xhr.setRequestHeader(key, value)

@@ -87,8 +87,6 @@ async function handleSignUp() {
   submitting.value = false;
 
   if (response.status === 201 || response.status === 200) {
-    // usersStore.setToken(response.body.session_id);
-    // usersStore.logIn(response.body.user_data);
     router.replace({ name: "login" });
   } else {
     error.value = response.body.error || "Sign up failed!";

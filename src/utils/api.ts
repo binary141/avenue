@@ -175,6 +175,11 @@ export default async function api(
   const init: { [key: string]: JsonValue } = {
     method,
     headers,
+    // Session auth is an HttpOnly cookie now, not a JS-attached
+    // Authorization header, so it must be sent explicitly for
+    // cross-origin requests (e.g. the Vite dev server calling the API
+    // on a different port).
+    credentials: "include",
   };
 
   // add global headers if not assigned to something else

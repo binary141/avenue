@@ -115,7 +115,7 @@ async function loadPreview() {
   loadError.value = '';
 
   try {
-    const response = await fetch(props.downloadUrl);
+    const response = await fetch(props.downloadUrl, { credentials: 'include' });
     if (!response.ok) {
       loadError.value = 'Failed to load file preview.';
       return;

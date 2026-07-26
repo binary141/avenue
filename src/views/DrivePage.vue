@@ -999,14 +999,14 @@ function changeFolder(folderId: string) {
 function getDownloadURL(fileId: string): string {
   const baseURL = import.meta.env.VITE_APP_API_URL || '';
 
-  return `${baseURL}v1/file/${fileId}?token=${usersStore.token}`
+  return `${baseURL}v1/file/${fileId}`
 }
 
 function downloadSelectedFiles() {
   if (!canDownloadSelection.value) return;
 
   const baseURL = import.meta.env.VITE_APP_API_URL || '';
-  const params = new URLSearchParams({ token: usersStore.token ?? '' });
+  const params = new URLSearchParams();
 
   if (selectedFolders.value.size > 0) {
     const [folderId] = selectedFolders.value;

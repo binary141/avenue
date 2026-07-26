@@ -58,7 +58,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
-import { useUsersStore } from '../stores/users';
 
 interface ShareMeta {
   file_name: string;
@@ -69,7 +68,6 @@ interface ShareMeta {
 }
 
 const route = useRoute();
-const usersStore = useUsersStore();
 const loading = ref(true);
 const notFound = ref(false);
 const loginRequired = ref(false);
@@ -79,8 +77,7 @@ const apiRoot = (import.meta.env.VITE_APP_API_URL || '').replace(/\/$/, '');
 
 const downloadURL = computed(() => {
   if (!meta.value) return '';
-  const base = `${apiRoot}/api/share/${meta.value.token}/download`;
-  return usersStore.token ? `${base}?token=${usersStore.token}` : base;
+  return `${apiRoot}/api/share/${meta.value.token}/download`;
 });
 
 function formatFileSize(bytes: number): string {
@@ -97,12 +94,8 @@ function formatExpiry(iso: string): string {
 
 onMounted(async () => {
   const token = route.params.token as string;
-  const headers: Record<string, string> = {};
-  if (usersStore.token) {
-    headers['Authorization'] = `Token ${usersStore.token}`;
-  }
   try {
-    const res = await fetch(`${apiRoot}/api/share/${token}`, { headers });
+    const res = await fetch(`${apiRoot}/api/share/${token}`, { credentials: 'include' });
     if (res.status === 401) {
       loginRequired.value = true;
     } else if (!res.ok) {

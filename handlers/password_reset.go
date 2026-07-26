@@ -40,6 +40,14 @@ func (s *Server) ForgotPassword(c *gin.Context) {
 		return
 	}
 
+	// Rate limit before touching the DB so the check can't be used to
+	// distinguish registered from unregistered emails by timing/behavior.
+	// Still returns 204 on limit so the response looks identical either way.
+	if !forgotPasswordIPLimiter.allow(c.ClientIP()) || !forgotPasswordEmailLimiter.allow(normalizeEmailKey(req.Email)) {
+		c.Status(http.StatusNoContent)
+		return
+	}
+
 	user, err := db.GetUserByEmail(req.Email)
 	if err != nil {
 		// Return success regardless so we don't leak which emails are registered.

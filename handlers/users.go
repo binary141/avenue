@@ -49,11 +49,19 @@ func (s *Server) Login(c *gin.Context) {
 		return
 	}
 
+	emailKey := normalizeEmailKey(req.Email)
+	if !loginIPLimiter.allow(c.ClientIP()) || !loginEmailLimiter.allow(emailKey) {
+		c.Status(http.StatusTooManyRequests)
+		return
+	}
+
 	u, err := s.authorize(req.Email, req.Password)
 	if err != nil {
 		c.Status(http.StatusUnauthorized)
 		return
 	}
+
+	loginEmailLimiter.reset(emailKey)
 
 	session, err := db.CreateSession(u.ID, c.Request.UserAgent(), c.ClientIP())
 	if err != nil {

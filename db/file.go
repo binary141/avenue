@@ -229,14 +229,17 @@ func ListTrashedFiles(userID string) ([]sdk.File, error) {
 // ListTrashedFilesPage is the paginated counterpart to ListTrashedFiles, used
 // by the trash-listing endpoint. ListTrashedFiles itself stays unpaginated
 // since EmptyTrash needs every trashed file to purge them all.
-func ListTrashedFilesPage(userID string, limit, offset int) ([]sdk.File, error) {
+// sortBy is constrained by the caller (handlers.ListTrash) to a fixed
+// whitelist of column names before reaching here, so it's safe to
+// concatenate directly into the query string.
+func ListTrashedFilesPage(userID, sortBy string, sortDir sdk.SortDirection, limit, offset int) ([]sdk.File, error) {
 	rows, err := DB.Query(`
 		SELECT f.id, f.uuid, f.name, f.extension, f.mime_type, f.file_size, f.checksum, f.created_by, f.created_at, f.deleted_at
 		FROM files f
 		LEFT JOIN folders p ON p.id = f.parent_id
 		WHERE f.created_by = $1::BIGINT AND f.deleted_at IS NOT NULL
 		  AND (p.id IS NULL OR p.deleted_at IS NULL)
-		ORDER BY f.deleted_at DESC
+		ORDER BY f.`+sortBy+` `+string(sortDir)+`
 		LIMIT $2 OFFSET $3
 	`, userID, limit, offset)
 	if err != nil {

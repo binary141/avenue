@@ -16,20 +16,20 @@
     <table class="min-w-full border border-grey-300 rounded-lg overflow-hidden">
       <thead class="bg-grey-100 border-b border-grey-300">
         <tr>
-          <th class="px-4 py-2 text-left">ID</th>
-          <th class="px-4 py-2 text-left">First Name</th>
-          <th class="px-4 py-2 text-left">Last Name</th>
-          <th class="px-4 py-2 text-left">Email</th>
+          <th class="px-4 py-2 text-left sortable-header" @click="toggleSort('id')">ID{{ sortIndicator('id') }}</th>
+          <th class="px-4 py-2 text-left sortable-header" @click="toggleSort('firstName')">First Name{{ sortIndicator('firstName') }}</th>
+          <th class="px-4 py-2 text-left sortable-header" @click="toggleSort('lastName')">Last Name{{ sortIndicator('lastName') }}</th>
+          <th class="px-4 py-2 text-left sortable-header" @click="toggleSort('email')">Email{{ sortIndicator('email') }}</th>
           <th class="px-4 py-2 text-left">Admin</th>
-          <th class="px-4 py-2 text-left">Storage Used</th>
-          <th class="px-4 py-2 text-left">Quota</th>
+          <th class="px-4 py-2 text-left sortable-header" @click="toggleSort('spaceUsed')">Storage Used{{ sortIndicator('spaceUsed') }}</th>
+          <th class="px-4 py-2 text-left sortable-header" @click="toggleSort('quota')">Quota{{ sortIndicator('quota') }}</th>
           <th class="px-4 py-2 text-left">Actions</th>
         </tr>
       </thead>
 
       <tbody>
         <tr
-          v-for="user in usersList"
+          v-for="user in sortedUsersList"
           :key="user.id"
           class="odd:bg-grey-100 even:bg-grey-50 border-b"
         >
@@ -213,7 +213,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, reactive } from 'vue'
+import { onMounted, ref, reactive, computed } from 'vue'
 import AppButton from './components/AppButton.vue'
 import { useUsersStore } from '@/stores/users'
 import ErrorMessage from './components/ErrorMessage.vue'
@@ -233,6 +233,39 @@ const showPassword = ref(false)
 const sendingResetEmail = ref(false)
 const resetEmailError = ref('')
 const resetEmailSuccess = ref('')
+
+type SortableUserColumn = 'id' | 'firstName' | 'lastName' | 'email' | 'spaceUsed' | 'quota'
+const sortColumn = ref<SortableUserColumn>('id')
+const sortDir = ref<'asc' | 'desc'>('asc')
+
+function toggleSort(column: SortableUserColumn) {
+  if (sortColumn.value === column) {
+    sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc'
+  } else {
+    sortColumn.value = column
+    sortDir.value = 'asc'
+  }
+}
+
+function sortIndicator(column: SortableUserColumn) {
+  if (sortColumn.value !== column) return ''
+  return sortDir.value === 'asc' ? ' ↑' : ' ↓'
+}
+
+const sortedUsersList = computed(() => {
+  const list = usersList.value.slice()
+  const dir = sortDir.value === 'asc' ? 1 : -1
+
+  list.sort((a, b) => {
+    const column = sortColumn.value
+    if (column === 'firstName' || column === 'lastName' || column === 'email') {
+      return (a[column] || '').localeCompare(b[column] || '') * dir
+    }
+    return ((a[column] as number) - (b[column] as number)) * dir
+  })
+
+  return list
+})
 
 interface UserForm {
   firstName: string
@@ -405,6 +438,16 @@ function resetForm() {
 </script>
 
 <style scoped>
+.sortable-header {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.sortable-header:hover {
+  background-color: var(--gray-4, rgba(0, 0, 0, 0.05));
+}
+
 .input {
   width: 100%;
   border: 1px solid #d1d5db;

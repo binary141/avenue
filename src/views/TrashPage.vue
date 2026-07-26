@@ -13,6 +13,22 @@
       </AppButton>
     </div>
 
+    <div v-if="!loading && (folders.length > 0 || files.length > 0)" class="toolbar-controls flex items-center gap-2 mb-2 self-end" style="max-width: 800px; width: 100%; justify-content: flex-end;">
+      <select v-model="sortKey" class="sort-select">
+        <option value="date">Date Deleted</option>
+        <option value="name">Name</option>
+        <option value="size">Size</option>
+      </select>
+      <button
+        type="button"
+        class="sort-dir-button"
+        :title="sortDir === 'asc' ? 'Ascending' : 'Descending'"
+        @click="sortDir = sortDir === 'asc' ? 'desc' : 'asc'"
+      >
+        {{ sortDir === 'asc' ? '↑' : '↓' }}
+      </button>
+    </div>
+
     <div v-if="loading" class="flex flex-col items-center gap-3">
       <SpinnerView />
       <p>Loading trash…</p>
@@ -122,7 +138,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, watch } from 'vue';
 import api from '@/utils/api';
 import AppButton from './components/AppButton.vue';
 import SpinnerView from './components/SpinnerView.vue';
@@ -179,6 +195,8 @@ const page = ref(1);
 const limit = ref(50);
 const totalFiles = ref(0);
 const totalFolders = ref(0);
+const sortKey = ref<'name' | 'size' | 'date'>('date');
+const sortDir = ref<'asc' | 'desc'>('desc');
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' });
@@ -194,7 +212,12 @@ function formatFileSize(bytes: number): string {
 
 async function loadTrash() {
   loading.value = true;
-  const params = new URLSearchParams({ page: String(page.value), limit: String(limit.value) });
+  const params = new URLSearchParams({
+    page: String(page.value),
+    limit: String(limit.value),
+    sort: sortDir.value,
+    sortBy: sortKey.value,
+  });
   const response = await api({ url: `v1/trash?${params.toString()}`, method: 'GET' });
   loading.value = false;
 
@@ -271,6 +294,11 @@ async function confirmEmptyTrash() {
   }
 }
 
+watch([sortKey, sortDir], () => {
+  page.value = 1;
+  loadTrash();
+});
+
 onMounted(loadTrash);
 </script>
 
@@ -283,5 +311,29 @@ onMounted(loadTrash);
 .file-icon-svg {
   width: 2em;
   height: 2em;
+}
+
+.sort-select {
+  height: 36px;
+  background-color: var(--gray-4);
+  color: var(--text);
+  border: none;
+  border-radius: 6px;
+  padding: 0 0.5rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.sort-dir-button {
+  height: 36px;
+  width: 36px;
+  background-color: var(--gray-4);
+  color: var(--text);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.sort-dir-button:hover {
+  background-color: var(--gray-5);
 }
 </style>

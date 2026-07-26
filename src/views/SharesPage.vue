@@ -4,6 +4,21 @@
       <h1 class="text-center flex-1 text-2xl font-bold">Shared Links</h1>
     </div>
 
+    <div v-if="!loading && (shares.length > 0 || folderShares.length > 0)" class="toolbar-controls flex items-center gap-2 mb-2 self-end" style="max-width: 800px; width: 100%; justify-content: flex-end;">
+      <select v-model="sortKey" class="sort-select">
+        <option value="date">Date Created</option>
+        <option value="name">Name</option>
+      </select>
+      <button
+        type="button"
+        class="sort-dir-button"
+        :title="sortDir === 'asc' ? 'Ascending' : 'Descending'"
+        @click="sortDir = sortDir === 'asc' ? 'desc' : 'asc'"
+      >
+        {{ sortDir === 'asc' ? '↑' : '↓' }}
+      </button>
+    </div>
+
     <div v-if="loading" class="flex flex-col items-center gap-3">
       <SpinnerView />
       <p>Loading shared links…</p>
@@ -25,7 +40,7 @@
       <div v-if="shares.length > 0" class="flex flex-col gap-3">
         <h2 class="text-sm font-semibold uppercase tracking-wide" style="color: var(--text-secondary);">Files</h2>
         <div
-          v-for="share in shares"
+          v-for="share in sortedShares"
           :key="share.token"
           class="card flex flex-row items-center gap-3 p-4"
         >
@@ -73,7 +88,7 @@
       <div v-if="folderShares.length > 0" class="flex flex-col gap-3">
         <h2 class="text-sm font-semibold uppercase tracking-wide" style="color: var(--text-secondary);">Folders</h2>
         <div
-          v-for="share in folderShares"
+          v-for="share in sortedFolderShares"
           :key="share.token"
           class="card flex flex-row items-center gap-3 p-4"
         >
@@ -122,7 +137,7 @@
         <h2 class="text-sm font-semibold uppercase tracking-wide" style="color: var(--text-secondary);">Expired</h2>
 
         <div
-          v-for="share in expiredShares"
+          v-for="share in sortedExpiredShares"
           :key="share.token"
           class="card flex flex-row items-center gap-3 p-4 opacity-60"
         >
@@ -148,7 +163,7 @@
         </div>
 
         <div
-          v-for="share in expiredFolderShares"
+          v-for="share in sortedExpiredFolderShares"
           :key="share.token"
           class="card flex flex-row items-center gap-3 p-4 opacity-60"
         >
@@ -178,7 +193,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import api from '@/utils/api';
 import AppButton from './components/AppButton.vue';
 import SpinnerView from './components/SpinnerView.vue';
@@ -211,6 +226,24 @@ const folderShares = ref<FolderShareLink[]>([]);
 const expiredShares = ref<ShareWithFile[]>([]);
 const expiredFolderShares = ref<FolderShareLink[]>([]);
 const copied = ref<Record<string, boolean>>({});
+const sortKey = ref<'name' | 'date'>('date');
+const sortDir = ref<'asc' | 'desc'>('desc');
+
+function sortByKey<T extends { created_at: string }>(list: T[], nameOf: (item: T) => string): T[] {
+  const sorted = list.slice();
+  sorted.sort((a, b) => {
+    const cmp = sortKey.value === 'name'
+      ? nameOf(a).localeCompare(nameOf(b))
+      : new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+    return cmp * (sortDir.value === 'asc' ? 1 : -1);
+  });
+  return sorted;
+}
+
+const sortedShares = computed(() => sortByKey(shares.value, s => s.file_name || ''));
+const sortedFolderShares = computed(() => sortByKey(folderShares.value, s => s.folder_name || ''));
+const sortedExpiredShares = computed(() => sortByKey(expiredShares.value, s => s.file_name || ''));
+const sortedExpiredFolderShares = computed(() => sortByKey(expiredFolderShares.value, s => s.folder_name || ''));
 
 function shareLinkURL(token: string): string {
   return `${window.location.origin}/share/${token}`;
@@ -282,3 +315,29 @@ async function revokeFolderShare(token: string) {
 
 onMounted(loadShares);
 </script>
+
+<style scoped>
+.sort-select {
+  height: 36px;
+  background-color: var(--gray-4);
+  color: var(--text);
+  border: none;
+  border-radius: 6px;
+  padding: 0 0.5rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.sort-dir-button {
+  height: 36px;
+  width: 36px;
+  background-color: var(--gray-4);
+  color: var(--text);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.sort-dir-button:hover {
+  background-color: var(--gray-5);
+}
+</style>

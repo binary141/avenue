@@ -842,9 +842,22 @@ func (s *Server) ListTrash(c *gin.Context) {
 		return
 	}
 
+	sortDir := sdk.SortAsc
+	if c.Query("sort") == string(sdk.SortDesc) {
+		sortDir = sdk.SortDesc
+	}
+
+	sortColumn := "deleted_at"
+	switch c.Query("sortBy") {
+	case "name":
+		sortColumn = "name"
+	case "size":
+		sortColumn = "file_size"
+	}
+
 	page, limit, offset := shared.ParsePagination(c.Query("page"), c.Query("limit"))
 
-	files, err := db.ListTrashedFilesPage(userID, limit, offset)
+	files, err := db.ListTrashedFilesPage(userID, sortColumn, sortDir, limit, offset)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
 			Message: "could not list trashed files",
@@ -861,7 +874,12 @@ func (s *Server) ListTrash(c *gin.Context) {
 		return
 	}
 
-	folders, err := db.ListTrashedFoldersPage(userID, limit, offset)
+	folderSortColumn := sortColumn
+	if folderSortColumn == "file_size" {
+		folderSortColumn = "deleted_at"
+	}
+
+	folders, err := db.ListTrashedFoldersPage(userID, folderSortColumn, sortDir, limit, offset)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
 			Message: "could not list trashed folders",

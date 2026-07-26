@@ -126,25 +126,19 @@
             ✕
           </button>
         </div>
-        <select v-model="sortKey" class="sort-select">
-          <option value="name">Name</option>
-          <option value="size">Size</option>
-          <option value="date">Date</option>
-        </select>
-        <button
-          type="button"
-          class="sort-dir-button"
-          :title="sortDir === 'asc' ? 'Ascending' : 'Descending'"
-          @click="sortDir = sortDir === 'asc' ? 'desc' : 'asc'"
-        >
-          {{ sortDir === 'asc' ? '↑' : '↓' }}
-        </button>
       </div>
     </div>
 
     <div v-if="!loading" class="folder-contents flex flex-col gap-4">
       <!-- Items -->
       <div v-if="filteredItems.length > 0" class="items-section">
+        <div class="items-header flex flex-row items-center gap-3 p-3">
+          <span class="row-checkbox-spacer"></span>
+          <span class="col-header col-name sortable-header" @click="toggleSort('name')">Name{{ sortIndicator('name') }}</span>
+          <span class="col-header col-size sortable-header" @click="toggleSort('size')">Size{{ sortIndicator('size') }}</span>
+          <span class="col-header col-modified sortable-header" @click="toggleSort('date')">Modified{{ sortIndicator('date') }}</span>
+          <span class="row-actions-spacer"></span>
+        </div>
         <div class="items-list flex flex-col gap-2">
           <div
             v-for="(item, index) in filteredItems"
@@ -173,6 +167,8 @@
                   🔗 {{ sharedFolderCounts[item.uuid] }}
                 </span>
               </span>
+              <span class="file-size">—</span>
+              <span class="file-modified">{{ formatModifiedDate(item.created_at) }}</span>
 
               <!-- Actions -->
               <span class="row-actions flex items-center gap-1" :class="{ 'row-actions--menu-open': openMenuId === 'folder-' + item.uuid }">
@@ -211,6 +207,7 @@
                 <span v-if="sharedFileCounts[item.uuid]" class="shared-badge" title="Shared">🔗 {{ sharedFileCounts[item.uuid] }}</span>
               </span>
               <span class="file-size">{{ formatFileSize(item.file_size) }}</span>
+              <span class="file-modified">{{ formatModifiedDate(item.created_at) }}</span>
 
               <span class="row-actions flex items-center gap-1" :class="{ 'row-actions--menu-open': openMenuId === 'file-' + item.uuid }">
                 <span class="icon-btn" title="Download">
@@ -730,8 +727,27 @@ const sharedFolderCounts = ref<Record<string, number>>({});
 
 // ----- Search / Sort -----
 const searchQuery = ref('')
-const sortKey = ref<'name' | 'size' | 'date'>('name')
+type SortKey = 'name' | 'size' | 'date'
+const sortKey = ref<SortKey>('name')
 const sortDir = ref<'asc' | 'desc'>('asc')
+
+function toggleSort(column: SortKey) {
+  if (sortKey.value === column) {
+    sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc'
+  } else {
+    sortKey.value = column
+    sortDir.value = 'asc'
+  }
+}
+
+function sortIndicator(column: SortKey) {
+  if (sortKey.value !== column) return ''
+  return sortDir.value === 'asc' ? ' ↑' : ' ↓'
+}
+
+function formatModifiedDate(dateStr: string) {
+  return new Date(dateStr).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+}
 
 // Folder search stays client-side (folders aren't covered by the search API).
 // File search hits the backend, which does a `name LIKE 'query%'` prefix match.
@@ -1482,6 +1498,62 @@ onUnmounted(() => {
   color: var(--text-secondary, #666);
   font-size: 0.85em;
   white-space: nowrap;
+  width: 90px;
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.file-modified {
+  color: var(--text-secondary, #666);
+  font-size: 0.85em;
+  white-space: nowrap;
+  width: 120px;
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.items-header {
+  width: 100%;
+  font-size: 0.85em;
+  font-weight: 600;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--gray-4);
+}
+
+.row-checkbox-spacer {
+  width: 1.25em;
+  flex-shrink: 0;
+}
+
+.row-actions-spacer {
+  width: 4.3em;
+  flex-shrink: 0;
+}
+
+.col-name {
+  flex: 1;
+  min-width: 0;
+}
+
+.col-size,
+.col-modified {
+  width: 90px;
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.col-modified {
+  width: 120px;
+}
+
+.sortable-header {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.sortable-header:hover {
+  color: var(--text-primary, inherit);
 }
 
 /* Row actions: quieter by default, fully visible on row hover/focus */
@@ -1587,30 +1659,6 @@ onUnmounted(() => {
 .search-clear-button:hover {
   background-color: var(--gray-4);
   color: var(--text);
-}
-
-.sort-select {
-  height: 36px;
-  background-color: var(--gray-4);
-  color: var(--text);
-  border: none;
-  border-radius: 6px;
-  padding: 0 0.5rem;
-  font-size: 0.85rem;
-  cursor: pointer;
-}
-
-.sort-dir-button {
-  height: 36px;
-  width: 36px;
-  background-color: var(--gray-4);
-  color: var(--text);
-  border-radius: 6px;
-  cursor: pointer;
-}
-
-.sort-dir-button:hover {
-  background-color: var(--gray-5);
 }
 
 .empty-state {

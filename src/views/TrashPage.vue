@@ -26,21 +26,6 @@
         </p>
       </div>
 
-      <div class="flex items-center gap-2">
-        <select v-model="sortKey" class="sort-select">
-          <option value="date">Date Deleted</option>
-          <option value="name">Name</option>
-          <option value="size">Size</option>
-        </select>
-        <button
-          type="button"
-          class="sort-dir-button"
-          :title="sortDir === 'asc' ? 'Ascending' : 'Descending'"
-          @click="sortDir = sortDir === 'asc' ? 'desc' : 'asc'"
-        >
-          {{ sortDir === 'asc' ? '↑' : '↓' }}
-        </button>
-      </div>
     </div>
 
     <!-- Bulk Actions -->
@@ -91,6 +76,14 @@
 
       <!-- Items -->
       <div v-else class="flex flex-col gap-3">
+        <div class="items-header flex flex-row items-center gap-3 p-3">
+          <span class="row-checkbox-spacer"></span>
+          <span class="col-icon-spacer"></span>
+          <span class="col-header col-name sortable-header" @click="toggleSort('name')">Name{{ sortIndicator('name') }}</span>
+          <span class="col-header col-size sortable-header" @click="toggleSort('size')">Size{{ sortIndicator('size') }}</span>
+          <span class="col-header col-modified sortable-header" @click="toggleSort('date')">Deleted{{ sortIndicator('date') }}</span>
+          <span class="row-actions-spacer"></span>
+        </div>
         <div
           v-for="(item, index) in items"
           :key="item.type + '-' + item.uuid"
@@ -113,12 +106,9 @@
             </svg>
           </span>
 
-          <div class="flex-1 min-w-0">
-            <p class="font-medium text-sm truncate">{{ item.name }}</p>
-            <p class="text-xs" style="color: var(--text-secondary);">
-              <template v-if="item.type === 'file'">{{ formatFileSize(item.file_size) }} · </template>Deleted {{ formatDate(item.deleted_at) }}
-            </p>
-          </div>
+          <p class="font-medium text-sm truncate flex-1 min-w-0">{{ item.name }}</p>
+          <span class="file-size">{{ item.type === 'file' ? formatFileSize(item.file_size) : '—' }}</span>
+          <span class="file-modified">{{ formatDate(item.deleted_at) }}</span>
 
           <AppButton
             @click="item.type === 'folder' ? restoreFolder(item.uuid) : restoreFile(item.uuid)"
@@ -197,8 +187,23 @@ const limit = ref(50);
 const total = ref(0);
 const currentPageCount = computed(() => items.value.length);
 const totalItemsCount = computed(() => total.value);
-const sortKey = ref<'name' | 'size' | 'date'>('date');
+type SortKey = 'name' | 'size' | 'date'
+const sortKey = ref<SortKey>('date');
 const sortDir = ref<'asc' | 'desc'>('desc');
+
+function toggleSort(column: SortKey) {
+  if (sortKey.value === column) {
+    sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc'
+  } else {
+    sortKey.value = column
+    sortDir.value = 'asc'
+  }
+}
+
+function sortIndicator(column: SortKey) {
+  if (sortKey.value !== column) return ''
+  return sortDir.value === 'asc' ? ' ↑' : ' ↓'
+}
 const selectedFolders = ref<Set<string>>(new Set());
 const selectedFiles = ref<Set<string>>(new Set());
 const lastItemIndex = ref<number | null>(null);
@@ -416,28 +421,72 @@ onMounted(loadTrash);
   height: 2em;
 }
 
-.sort-select {
-  height: 36px;
-  background-color: var(--gray-4);
-  color: var(--text);
-  border: none;
-  border-radius: 6px;
-  padding: 0 0.5rem;
-  font-size: 0.85rem;
-  cursor: pointer;
+.file-size {
+  color: var(--text-secondary, #666);
+  font-size: 0.85em;
+  white-space: nowrap;
+  width: 90px;
+  flex-shrink: 0;
+  text-align: right;
 }
 
-.sort-dir-button {
-  height: 36px;
-  width: 36px;
-  background-color: var(--gray-4);
-  color: var(--text);
-  border-radius: 6px;
-  cursor: pointer;
+.file-modified {
+  color: var(--text-secondary, #666);
+  font-size: 0.85em;
+  white-space: nowrap;
+  width: 130px;
+  flex-shrink: 0;
+  text-align: right;
 }
 
-.sort-dir-button:hover {
-  background-color: var(--gray-5);
+.items-header {
+  width: 100%;
+  font-size: 0.85em;
+  font-weight: 600;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--gray-4);
+}
+
+.row-checkbox-spacer {
+  width: 1.25em;
+  flex-shrink: 0;
+}
+
+.col-icon-spacer {
+  width: 2em;
+  flex-shrink: 0;
+}
+
+.row-actions-spacer {
+  width: 12em;
+  flex-shrink: 0;
+}
+
+.col-name {
+  flex: 1;
+  min-width: 0;
+}
+
+.col-size {
+  width: 90px;
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.col-modified {
+  width: 130px;
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.sortable-header {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.sortable-header:hover {
+  color: var(--text-primary, inherit);
 }
 
 .bulk-actions-bar {

@@ -152,6 +152,7 @@ import SpinnerView from './components/SpinnerView.vue';
 import ErrorMessage from './components/ErrorMessage.vue';
 import PaginationControls from './components/PaginationControls.vue';
 import type { FolderItem } from '@/types/folder';
+import { confirm } from '@/composables/confirm';
 
 const FILE_BADGE_COLORS: Record<string, string> = {
   pdf: '#d64545',
@@ -359,7 +360,13 @@ async function bulkRestore() {
 }
 
 async function confirmPurgeFolder(folder: FolderItem) {
-  if (!window.confirm(`Permanently delete "${folder.name}" and everything inside it? This can't be undone.`)) return;
+  const ok = await confirm({
+    title: 'Delete folder forever?',
+    message: `Permanently delete "${folder.name}" and everything inside it? This can't be undone.`,
+    confirmLabel: 'Delete Forever',
+    danger: true,
+  });
+  if (!ok) return;
 
   const response = await api({ url: `v1/folder/${folder.uuid}/purge`, method: 'DELETE' });
   if (response.ok) {
@@ -370,7 +377,13 @@ async function confirmPurgeFolder(folder: FolderItem) {
 }
 
 async function confirmPurgeFile(file: FolderItem) {
-  if (!window.confirm(`Permanently delete "${file.name}"? This can't be undone.`)) return;
+  const ok = await confirm({
+    title: 'Delete file forever?',
+    message: `Permanently delete "${file.name}"? This can't be undone.`,
+    confirmLabel: 'Delete Forever',
+    danger: true,
+  });
+  if (!ok) return;
 
   const response = await api({ url: `v1/file/${file.uuid}/purge`, method: 'DELETE' });
   if (response.ok) {
@@ -381,7 +394,13 @@ async function confirmPurgeFile(file: FolderItem) {
 }
 
 async function confirmEmptyTrash() {
-  if (!window.confirm('Permanently delete everything in the trash? This can\'t be undone.')) return;
+  const ok = await confirm({
+    title: 'Empty trash?',
+    message: 'Permanently delete everything in the trash? This can\'t be undone.',
+    confirmLabel: 'Empty Trash',
+    danger: true,
+  });
+  if (!ok) return;
 
   emptying.value = true;
   const response = await api({ url: 'v1/trash/empty', method: 'POST' });

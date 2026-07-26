@@ -180,7 +180,7 @@
                     <button class="row-menu-item" @click="openFolderEditModal(item); openMenuId = null">Rename</button>
                     <button v-if="folderSharingEnabled" class="row-menu-item" @click="openFolderShareModal(item); openMenuId = null">Share</button>
                     <button class="row-menu-item" @click="openMoveModal(item); openMenuId = null">Move to…</button>
-                    <button class="row-menu-item row-menu-item--danger" @click="deleteFolder(item.uuid); openMenuId = null">Delete</button>
+                    <button class="row-menu-item row-menu-item--danger" @click="deleteFolder(item.uuid, item.name); openMenuId = null">Delete</button>
                   </div>
                 </span>
               </span>
@@ -222,7 +222,7 @@
                     <button class="row-menu-item" @click="openFileEditModal(item); openMenuId = null">Rename</button>
                     <button class="row-menu-item" @click="openMoveModal(item); openMenuId = null">Move to…</button>
                     <button v-if="fileSharingEnabled" class="row-menu-item" @click="openShareModal(item); openMenuId = null">Share</button>
-                    <button class="row-menu-item row-menu-item--danger" @click="deleteFile(item.uuid); openMenuId = null">Delete</button>
+                    <button class="row-menu-item row-menu-item--danger" @click="deleteFile(item.uuid, item.name); openMenuId = null">Delete</button>
                   </div>
                 </span>
               </span>
@@ -513,6 +513,7 @@ import FileUploader from '@/components/FileUploader.vue';
 import FileUsageBar from '@/components/FileUsageBar.vue';
 import FileViewer from '@/components/FileViewer.vue';
 import { useUsersStore } from '../stores/users';
+import { confirm } from '@/composables/confirm';
 
 const route = useRoute();
 const emit = defineEmits(['close-menu']);
@@ -958,6 +959,15 @@ function clearSelection() {
 }
 
 async function bulkDelete() {
+  const count = selectedFiles.value.size + selectedFolders.value.size
+  const ok = await confirm({
+    title: 'Move to trash?',
+    message: `Move ${count} selected item${count === 1 ? '' : 's'} to the trash? You can restore them from there later.`,
+    confirmLabel: 'Move to Trash',
+    danger: true,
+  });
+  if (!ok) return;
+
   const response = await api({
     url: 'v1/files/bulk-delete',
     method: 'DELETE',
@@ -1024,12 +1034,28 @@ function downloadSelectedFiles() {
 }
 
 // ----- File Operations -----
-async function deleteFile(fileId: string) {
+async function deleteFile(fileId: string, fileName: string) {
+  const ok = await confirm({
+    title: 'Move to trash?',
+    message: `Move "${fileName}" to the trash? You can restore it from there later.`,
+    confirmLabel: 'Move to Trash',
+    danger: true,
+  });
+  if (!ok) return;
+
   await api({ url: "v1/file/" + fileId, method: "DELETE" })
   refreshCurrentList();
 }
 
-async function deleteFolder(folderId: string) {
+async function deleteFolder(folderId: string, folderName: string) {
+  const ok = await confirm({
+    title: 'Move to trash?',
+    message: `Move "${folderName}" and everything inside it to the trash? You can restore it from there later.`,
+    confirmLabel: 'Move to Trash',
+    danger: true,
+  });
+  if (!ok) return;
+
   const response = await api({ url: "v1/folder/" + folderId, method: "DELETE" });
 
   if (response.status > 399) {

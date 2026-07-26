@@ -42,6 +42,8 @@ services:
       AWS_SECRET_ACCESS_KEY:  ${AWS_SECRET_ACCESS_KEY:-}
       GLOBAL_EMAIL_TO:  ${GLOBAL_EMAIL_TO:-}
 
+      ALLOWED_ORIGINS:  ${ALLOWED_ORIGINS:-}
+
   postgres:
     image: postgres:16.3
     volumes:

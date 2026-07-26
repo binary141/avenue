@@ -245,12 +245,16 @@ func (s *Server) folderSharingRequired(c *gin.Context) {
 }
 
 func (s *Server) SetupRoutes() {
-	allowedOrigins := shared.GetEnv("ALLOWED_ORIGINS", "*")
+	allowedOrigins := shared.GetEnv("ALLOWED_ORIGINS", "")
+
+	logger.Errorf("%+v", allowedOrigins)
 
 	originsList := strings.Split(allowedOrigins, ",")
 	for i, o := range originsList {
 		originsList[i] = strings.TrimSpace(o)
 	}
+
+	logger.Errorf("%+v", originsList)
 
 	c := cors.Config{
 		AllowOrigins: originsList,

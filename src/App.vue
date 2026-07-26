@@ -51,6 +51,8 @@
       </div>
     </div>
   </template>
+
+  <ConfirmDialog />
 </template>
 
 <script setup lang="ts">
@@ -59,6 +61,7 @@ import logo from '@/assets/avenue-logo.png'
 import AppButton from './views/components/AppButton.vue';
 import SpinnerView from './views/components/SpinnerView.vue';
 import AppSidebar from './views/components/AppSidebar.vue';
+import ConfirmDialog from './views/components/ConfirmDialog.vue';
 import { useUsersStore } from './stores/users';
 import { useRoute, useRouter } from 'vue-router';
 

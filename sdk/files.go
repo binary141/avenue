@@ -119,6 +119,14 @@ func (c *Client) BulkRestore(h http.Header, req BulkRestoreRequest) (V1RestoreRe
 	return out, err
 }
 
+// BulkMove moves a batch of files and folders to a new parent folder in a
+// single request.
+func (c *Client) BulkMove(h http.Header, req BulkMoveRequest) (MessageResponse, error) {
+	var out MessageResponse
+	err := c.request(h, http.MethodPatch, "/v1/files/bulk-move", req, &out)
+	return out, err
+}
+
 // EmptyTrash permanently deletes everything the user has trashed.
 func (c *Client) EmptyTrash(h http.Header) error {
 	return c.request(h, http.MethodPost, "/v1/trash/empty", nil, nil)

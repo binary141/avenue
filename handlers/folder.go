@@ -143,6 +143,41 @@ func (s *Server) BulkRestore(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
+// BulkMove moves a batch of files and folders to a new parent folder in a
+// single request, instead of requiring one move call per item.
+func (s *Server) BulkMove(c *gin.Context) {
+	userID, err := shared.GetUserIDFromContext(c.Request.Context())
+	if err != nil {
+		respond(c, http.StatusInternalServerError, "could not get user id", err)
+		return
+	}
+
+	var req sdk.BulkMoveRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		respond(c, http.StatusBadRequest, "could not marshal all data to json", err)
+		return
+	}
+
+	if len(req.FileIDs) == 0 && len(req.FolderIDs) == 0 {
+		respond(c, http.StatusBadRequest, "no file or folder ids provided", nil)
+		return
+	}
+
+	if req.Parent != "" {
+		if _, err := db.GetFolder(req.Parent, userID); err != nil {
+			respond(c, http.StatusBadRequest, "destination folder must exist", err)
+			return
+		}
+	}
+
+	if err := db.BulkMove(req.FileIDs, req.FolderIDs, req.Parent, userID); err != nil {
+		respond(c, http.StatusInternalServerError, "could not move items", err)
+		return
+	}
+
+	respond(c, http.StatusOK, "Items moved", nil)
+}
+
 // RestoreFolder restores a trashed folder and everything nested inside it.
 func (s *Server) RestoreFolder(c *gin.Context) {
 	userID, err := shared.GetUserIDFromContext(c.Request.Context())

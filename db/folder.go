@@ -2,6 +2,7 @@ package db
 
 import (
 	"database/sql"
+	"errors"
 	"time"
 
 	"avenue/backend/sdk"
@@ -292,6 +293,70 @@ func BulkRestore(fileIDs, folderIDs []string, userID string) error {
 			  AND (created_by = $2::BIGINT
 			       OR parent_id IN (SELECT id FROM folders WHERE owner_id = $2::BIGINT))
 		`, pq.Array(fileIDs), userID); err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
+}
+
+// BulkMove moves the given files and folders to a new parent folder (or the
+// root, if parent is "") for userID in a single transaction. IDs that don't
+// exist or aren't owned by userID are silently skipped, matching the
+// ownership semantics of UpdateFile/UpdateFolder. Moving a folder into
+// itself or one of its own descendants is rejected, since that would
+// disconnect it from the tree.
+func BulkMove(fileIDs, folderIDs []string, parent, userID string) error {
+	tx, err := DB.Beginx()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var parentID sql.NullInt64
+	if parent != "" {
+		var id int64
+		if err := tx.QueryRow(
+			`SELECT id FROM folders WHERE uuid=$1 AND owner_id=$2::BIGINT AND deleted_at IS NULL`,
+			parent, userID,
+		).Scan(&id); err != nil {
+			return err
+		}
+		parentID = sql.NullInt64{Int64: id, Valid: true}
+	}
+
+	if len(folderIDs) > 0 && parentID.Valid {
+		var inSubtree bool
+		if err := tx.QueryRow(`
+			WITH RECURSIVE subtree AS (
+				SELECT id FROM folders WHERE uuid = ANY($1::text[]) AND owner_id = $2::BIGINT
+				UNION ALL
+				SELECT f.id FROM folders f INNER JOIN subtree s ON f.parent_id = s.id
+			)
+			SELECT EXISTS(SELECT 1 FROM subtree WHERE id = $3)
+		`, pq.Array(folderIDs), userID, parentID.Int64).Scan(&inSubtree); err != nil {
+			return err
+		}
+		if inSubtree {
+			return errors.New("cannot move a folder into itself or one of its own subfolders")
+		}
+	}
+
+	if len(folderIDs) > 0 {
+		if _, err := tx.Exec(
+			`UPDATE folders SET parent_id=$1 WHERE uuid = ANY($2::text[]) AND owner_id=$3::BIGINT AND deleted_at IS NULL`,
+			parentID, pq.Array(folderIDs), userID,
+		); err != nil {
+			return err
+		}
+	}
+
+	if len(fileIDs) > 0 {
+		if _, err := tx.Exec(`
+			UPDATE files SET parent_id=$1 WHERE uuid = ANY($2::text[]) AND deleted_at IS NULL
+			  AND (created_by=$3::BIGINT
+			       OR parent_id IN (SELECT id FROM folders WHERE owner_id=$3::BIGINT))
+		`, parentID, pq.Array(fileIDs), userID); err != nil {
 			return err
 		}
 	}

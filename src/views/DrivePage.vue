@@ -76,8 +76,7 @@
 
       <AppButton
         class="bg-blue-600 text-white px-3 py-1"
-        :disabled="selectedFiles.size === 0"
-        :title="selectedFolders.size > 0 ? 'Only selected files will be moved — folders can\'t be bulk-moved yet' : ''"
+        :disabled="selectedFiles.size === 0 && selectedFolders.size === 0"
         @click="openBulkMoveModal"
       >
         Move
@@ -200,6 +199,7 @@
                   <div v-if="openMenuId === 'folder-' + item.uuid" class="row-menu" @click.stop>
                     <button class="row-menu-item" @click="openFolderEditModal(item); openMenuId = null">Rename</button>
                     <button v-if="folderSharingEnabled" class="row-menu-item" @click="openFolderShareModal(item); openMenuId = null">Share</button>
+                    <button class="row-menu-item" @click="openMoveModal(item); openMenuId = null">Move to…</button>
                     <button class="row-menu-item row-menu-item--danger" @click="deleteFolder(item.uuid); openMenuId = null">Delete</button>
                   </div>
                 </span>
@@ -518,14 +518,14 @@
       </div>
     </div>
 
-    <!-- Move File Modal -->
+    <!-- Move Items Modal -->
     <div
-      v-if="movingFileIds.length > 0"
+      v-if="movingFileIds.length > 0 || movingFolderIds.length > 0"
       class="fixed inset-0 flex items-center justify-center bg-black/50 z-50"
     >
       <div class="share-modal rounded-lg w-96 p-6 relative shadow-lg flex flex-col">
         <h3 class="text-lg font-bold mb-1">
-          {{ movingSingleFileName ? `Move "${movingSingleFileName}"` : `Move ${movingFileIds.length} files` }}
+          {{ movingSingleName ? `Move "${movingSingleName}"` : `Move ${movingFileIds.length + movingFolderIds.length} items` }}
         </h3>
         <p class="text-sm share-modal-subtext mb-3">Choose a destination folder.</p>
 
@@ -649,9 +649,10 @@ const newFileName = ref('');
 const editingFolder = ref<FolderItem | null>(null);
 const newFolderName = ref('');
 
-// ----- Move File State -----
+// ----- Move Items State -----
 const movingFileIds = ref<string[]>([]);
-const movingSingleFileName = ref<string | null>(null);
+const movingFolderIds = ref<string[]>([]);
+const movingSingleName = ref<string | null>(null);
 const moveFolderId = ref('');
 const moveFolders = ref<FolderItem[]>([]);
 const moveBreadcrumbs = ref<Breadcrumb[]>([]);
@@ -672,44 +673,52 @@ async function loadMoveFolder(folderId: string) {
   }
 }
 
-function openMoveModal(file: FolderItem) {
-  movingFileIds.value = [file.uuid];
-  movingSingleFileName.value = file.name;
+function openMoveModal(item: FolderItem) {
+  if (item.type === 'folder') {
+    movingFolderIds.value = [item.uuid];
+    movingFileIds.value = [];
+  } else {
+    movingFileIds.value = [item.uuid];
+    movingFolderIds.value = [];
+  }
+  movingSingleName.value = item.name;
   loadMoveFolder(currentFolderId.value);
 }
 
 function openBulkMoveModal() {
-  if (selectedFiles.value.size === 0) return;
+  if (selectedFiles.value.size === 0 && selectedFolders.value.size === 0) return;
   movingFileIds.value = Array.from(selectedFiles.value);
-  movingSingleFileName.value = null;
+  movingFolderIds.value = Array.from(selectedFolders.value);
+  movingSingleName.value = null;
   loadMoveFolder(currentFolderId.value);
 }
 
 function closeMoveModal() {
   movingFileIds.value = [];
-  movingSingleFileName.value = null;
+  movingFolderIds.value = [];
+  movingSingleName.value = null;
   moveFolders.value = [];
   moveBreadcrumbs.value = [];
 }
 
 async function confirmMove() {
-  if (movingFileIds.value.length === 0) return;
+  if (movingFileIds.value.length === 0 && movingFolderIds.value.length === 0) return;
   moving.value = true;
 
-  let failures = 0;
-  for (const fileId of movingFileIds.value) {
-    const response = await api({
-      url: `v1/file/${fileId}/move`,
-      method: 'PATCH',
-      json: { parent: moveFolderId.value },
-    });
-    if (!response.ok) failures++;
-  }
+  const response = await api({
+    url: 'v1/files/bulk-move',
+    method: 'PATCH',
+    json: {
+      fileIds: movingFileIds.value,
+      folderIds: movingFolderIds.value,
+      parent: moveFolderId.value,
+    },
+  });
 
   moving.value = false;
 
-  if (failures > 0) {
-    error.value = `Failed to move ${failures} of ${movingFileIds.value.length} file(s)`;
+  if (!response.ok) {
+    error.value = response.body?.error || 'Failed to move selected items';
   }
 
   clearSelection();

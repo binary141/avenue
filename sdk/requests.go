@@ -67,6 +67,12 @@ type BulkRestoreRequest struct {
 	FolderIDs []string `json:"folderIds"`
 }
 
+type BulkMoveRequest struct {
+	FileIDs   []string `json:"fileIds"`
+	FolderIDs []string `json:"folderIds"`
+	Parent    string   `json:"parent"`
+}
+
 // DownloadFilesZipRequest selects what to bundle into a zip download. Either
 // FileIDs or a single-entry FolderIDs may be set, but not both — a folder
 // download walks its whole subtree and can't be combined with other items.

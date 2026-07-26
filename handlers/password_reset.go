@@ -109,6 +109,10 @@ func (s *Server) ResetPassword(c *gin.Context) {
 		return
 	}
 
+	if err := db.DeleteSessionsForUser(userID); err != nil {
+		logger.Errorf("revoke sessions after password reset: %v", err)
+	}
+
 	if err := email.Send(email.Message{
 		To:      user.Email,
 		Subject: "Your password was changed",

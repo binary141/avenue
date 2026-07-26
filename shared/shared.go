@@ -87,3 +87,13 @@ func GetUserIDFromContext(ctx context.Context) (string, error) {
 
 	return fmt.Sprint(val), nil
 }
+
+func GetSessionIDFromContext(ctx context.Context) (string, error) {
+	val := ctx.Value(SESSIONCOOKIENAME)
+
+	if val == nil {
+		return "", fmt.Errorf("unable to cast cookie val: '%v' to string", val)
+	}
+
+	return fmt.Sprint(val), nil
+}

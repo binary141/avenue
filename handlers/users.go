@@ -416,5 +416,11 @@ func (s *Server) UpdatePassword(c *gin.Context) {
 		return
 	}
 
+	if currentSessionID, err := shared.GetSessionIDFromContext(ctx); err == nil {
+		if err := db.DeleteOtherSessions(u.ID, currentSessionID); err != nil {
+			logger.Errorf("revoke other sessions after password change: %v", err)
+		}
+	}
+
 	c.JSON(http.StatusOK, u)
 }

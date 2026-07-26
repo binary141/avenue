@@ -1,55 +1,57 @@
 <template>
-  <div class="viewer-backdrop fixed inset-0 z-50 flex flex-col" @click.self="emit('close')">
-    <!-- Header -->
-    <div class="viewer-header flex items-center justify-between px-4 py-3 shrink-0">
-      <span class="viewer-filename truncate">{{ file.name }}</span>
-      <div class="flex items-center gap-3">
-        <a :href="downloadUrl" :download="file.name">
-          <AppButton>Download</AppButton>
-        </a>
-        <button class="viewer-close" @click="emit('close')" aria-label="Close">&times;</button>
+  <Transition name="viewer-fade" appear>
+    <div class="viewer-backdrop fixed inset-0 z-50 flex flex-col" @click.self="emit('close')">
+      <!-- Header -->
+      <div class="viewer-header flex items-center justify-between px-4 py-3 shrink-0">
+        <span class="viewer-filename truncate">{{ file.name }}</span>
+        <div class="flex items-center gap-3">
+          <a :href="downloadUrl" :download="file.name">
+            <AppButton>Download</AppButton>
+          </a>
+          <button class="viewer-close" @click="emit('close')" aria-label="Close">&times;</button>
+        </div>
+      </div>
+
+      <!-- Content area -->
+      <div class="viewer-content flex-1 overflow-hidden flex items-center justify-center">
+        <div v-if="loading" class="flex flex-col items-center gap-3">
+          <SpinnerView :size="36" color="var(--text-secondary)" />
+          <span class="viewer-loading-text">Loading preview...</span>
+        </div>
+
+        <p v-else-if="loadError" class="viewer-error">{{ loadError }}</p>
+
+        <!-- Image -->
+        <img
+          v-else-if="viewType === 'image'"
+          :src="blobUrl"
+          :alt="file.name"
+          class="max-w-full max-h-full object-contain"
+        />
+
+        <!-- PDF -->
+        <iframe
+          v-else-if="viewType === 'pdf'"
+          :src="blobUrl"
+          class="w-full h-full border-0"
+          title="PDF viewer"
+        />
+
+        <!-- Text -->
+        <div v-else-if="viewType === 'text'" class="viewer-text-wrap w-full h-full overflow-auto p-6">
+          <pre class="viewer-pre">{{ textContent }}</pre>
+        </div>
+
+        <!-- Unsupported -->
+        <div v-else class="flex flex-col items-center gap-4">
+          <p class="viewer-unsupported-msg">No preview available for this file type.</p>
+          <a :href="downloadUrl" :download="file.name">
+            <AppButton>Download to view</AppButton>
+          </a>
+        </div>
       </div>
     </div>
-
-    <!-- Content area -->
-    <div class="viewer-content flex-1 overflow-hidden flex items-center justify-center">
-      <div v-if="loading" class="flex flex-col items-center gap-3">
-        <SpinnerView :size="36" color="var(--text-secondary)" />
-        <span class="viewer-loading-text">Loading preview...</span>
-      </div>
-
-      <p v-else-if="loadError" class="viewer-error">{{ loadError }}</p>
-
-      <!-- Image -->
-      <img
-        v-else-if="viewType === 'image'"
-        :src="blobUrl"
-        :alt="file.name"
-        class="max-w-full max-h-full object-contain"
-      />
-
-      <!-- PDF -->
-      <iframe
-        v-else-if="viewType === 'pdf'"
-        :src="blobUrl"
-        class="w-full h-full border-0"
-        title="PDF viewer"
-      />
-
-      <!-- Text -->
-      <div v-else-if="viewType === 'text'" class="viewer-text-wrap w-full h-full overflow-auto p-6">
-        <pre class="viewer-pre">{{ textContent }}</pre>
-      </div>
-
-      <!-- Unsupported -->
-      <div v-else class="flex flex-col items-center gap-4">
-        <p class="viewer-unsupported-msg">No preview available for this file type.</p>
-        <a :href="downloadUrl" :download="file.name">
-          <AppButton>Download to view</AppButton>
-        </a>
-      </div>
-    </div>
-  </div>
+  </Transition>
 </template>
 
 <script setup lang="ts">
@@ -204,5 +206,14 @@ onUnmounted(() => {
   white-space: pre-wrap;
   word-break: break-words;
   margin: 0;
+}
+
+.viewer-fade-enter-active,
+.viewer-fade-leave-active {
+  transition: opacity 0.15s ease;
+}
+.viewer-fade-enter-from,
+.viewer-fade-leave-to {
+  opacity: 0;
 }
 </style>

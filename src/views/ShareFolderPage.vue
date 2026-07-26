@@ -110,10 +110,7 @@
           <button
             v-if="selectedFiles.length > 0 && !uploading"
             @click="uploadFiles"
-            class="w-full py-3 text-white rounded text-sm font-semibold transition-colors"
-            style="background-color: #3b82f6;"
-            @mouseenter="$event.currentTarget.style.backgroundColor = '#2563eb'"
-            @mouseleave="$event.currentTarget.style.backgroundColor = '#3b82f6'"
+            class="upload-btn w-full py-3 text-white rounded text-sm font-semibold transition-colors"
           >
             Upload {{ selectedFiles.length }} {{ selectedFiles.length === 1 ? 'file' : 'files' }}
           </button>
@@ -383,3 +380,13 @@ function navigateTo(crumb: Crumb | null) {
 watch(subFolderUUID, fetchContents);
 onMounted(fetchContents);
 </script>
+
+<style scoped>
+.upload-btn {
+  background-color: #3b82f6;
+}
+
+.upload-btn:hover {
+  background-color: #2563eb;
+}
+</style>

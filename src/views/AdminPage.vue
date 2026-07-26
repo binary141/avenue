@@ -1,5 +1,5 @@
 <template>
-  <div class="page gap-5">
+  <div class="app-page gap-5">
     <!-- Header -->
     <div class="flex items-center justify-between mb-4 w-full">
       <h1 class="text-2xl font-bold">Admin</h1>
@@ -12,68 +12,77 @@
     </div>
 
     <!-- Users Table -->
-    <table class="admin-table min-w-full rounded-lg overflow-hidden">
-      <thead class="admin-table-head">
-        <tr>
-          <th class="px-4 py-2 text-left sortable-header" @click="toggleSort('id')">ID{{ sortIndicator('id') }}</th>
-          <th class="px-4 py-2 text-left sortable-header" @click="toggleSort('firstName')">First Name{{ sortIndicator('firstName') }}</th>
-          <th class="px-4 py-2 text-left sortable-header" @click="toggleSort('lastName')">Last Name{{ sortIndicator('lastName') }}</th>
-          <th class="px-4 py-2 text-left sortable-header" @click="toggleSort('email')">Email{{ sortIndicator('email') }}</th>
-          <th class="px-4 py-2 text-left">Admin</th>
-          <th class="px-4 py-2 text-left sortable-header" @click="toggleSort('spaceUsed')">Storage Used{{ sortIndicator('spaceUsed') }}</th>
-          <th class="px-4 py-2 text-left sortable-header" @click="toggleSort('quota')">Quota{{ sortIndicator('quota') }}</th>
-          <th class="px-4 py-2 text-left">Actions</th>
-        </tr>
-      </thead>
+    <div class="admin-table-scroll">
+      <table class="admin-table min-w-full rounded-lg overflow-hidden">
+        <colgroup>
+          <col style="width: 6%;" />
+          <col style="width: 12%;" />
+          <col style="width: 12%;" />
+          <col style="width: 24%;" />
+          <col style="width: 8%;" />
+          <col style="width: 12%;" />
+          <col style="width: 12%;" />
+          <col style="width: 14%;" />
+        </colgroup>
+        <thead class="admin-table-head">
+          <tr>
+            <th class="px-4 py-2 text-left sortable-header" @click="toggleSort('id')">ID{{ sortIndicator('id') }}</th>
+            <th class="px-4 py-2 text-left sortable-header" @click="toggleSort('firstName')">First Name{{ sortIndicator('firstName') }}</th>
+            <th class="px-4 py-2 text-left sortable-header" @click="toggleSort('lastName')">Last Name{{ sortIndicator('lastName') }}</th>
+            <th class="px-4 py-2 text-left sortable-header" @click="toggleSort('email')">Email{{ sortIndicator('email') }}</th>
+            <th class="px-4 py-2 text-left">Admin</th>
+            <th class="px-4 py-2 text-left sortable-header" @click="toggleSort('spaceUsed')">Storage Used{{ sortIndicator('spaceUsed') }}</th>
+            <th class="px-4 py-2 text-left sortable-header" @click="toggleSort('quota')">Quota{{ sortIndicator('quota') }}</th>
+            <th class="px-4 py-2 text-left">Actions</th>
+          </tr>
+        </thead>
 
-      <tbody>
-        <tr
-          v-for="user in sortedUsersList"
-          :key="user.id"
-          class="admin-table-row"
-        >
-          <td class="px-4 py-2">{{ user.id }}</td>
-          <td class="px-4 py-2">{{ user.firstName }}</td>
-          <td class="px-4 py-2">{{ user.lastName }}</td>
-          <td class="px-4 py-2">{{ user.email }}</td>
-          <td class="px-4 py-2">
-            <span
-              v-if="user.isAdmin"
-              class="px-2 py-1 text-xs rounded bg-green-600 text-white"
-            >
-              Admin
-            </span>
-            <span v-else class="opacity-60 text-sm">User</span>
-          </td>
-          <td class="px-4 py-2">
-            {{ formatBytes(user.spaceUsed) }}
-          </td>
-          <td class="px-4 py-2">
-            {{ formatQuota(user.quota) }}
-          </td>
-          <td class="px-4 py-2">
-            <AppButton
-              variant="secondary"
-              size="sm"
-              @click="() => { emit('close-menu'); openEditModal(user) }"
-            >
-              Edit
-            </AppButton>
-          </td>
-        </tr>
-      </tbody>
-    </table>
+        <tbody>
+          <tr
+            v-for="user in sortedUsersList"
+            :key="user.id"
+            class="admin-table-row"
+          >
+            <td class="px-4 py-2 admin-table-cell">{{ user.id }}</td>
+            <td class="px-4 py-2 admin-table-cell" :title="user.firstName ?? undefined">{{ user.firstName }}</td>
+            <td class="px-4 py-2 admin-table-cell" :title="user.lastName ?? undefined">{{ user.lastName }}</td>
+            <td class="px-4 py-2 admin-table-cell" :title="user.email">{{ user.email }}</td>
+            <td class="px-4 py-2 admin-table-cell">
+              <span
+                v-if="user.isAdmin"
+                class="px-2 py-1 text-xs rounded bg-green-600 text-white"
+              >
+                Admin
+              </span>
+              <span v-else class="opacity-60 text-sm">User</span>
+            </td>
+            <td class="px-4 py-2 admin-table-cell">
+              {{ formatBytes(user.spaceUsed) }}
+            </td>
+            <td class="px-4 py-2 admin-table-cell">
+              {{ formatQuota(user.quota) }}
+            </td>
+            <td class="px-4 py-2 admin-table-cell">
+              <AppButton
+                variant="secondary"
+                size="sm"
+                @click="() => { emit('close-menu'); openEditModal(user) }"
+              >
+                Edit
+              </AppButton>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
 
     <!-- User Modal (Create + Edit) -->
-    <div
-      v-if="showModal"
-      class="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
+    <AppModal
+      :show="showModal"
+      :title="modalMode === 'create' ? 'Create User' : 'Edit User'"
+      width="24rem"
+      @close="closeModal"
     >
-      <div class="admin-modal p-6 rounded-lg w-96">
-        <h2 class="text-lg font-semibold mb-4">
-          {{ modalMode === 'create' ? 'Create User' : 'Edit User' }}
-        </h2>
-
         <form @submit.prevent="submitUser" class="space-y-4">
           <div>
             <label class="block text-sm font-medium mb-1">First Name</label>
@@ -124,7 +133,7 @@
                 placeholder="0 = Unlimited"
               />
 
-              <select v-model="form.quotaUnit" class="w-24">
+              <select v-model="form.quotaUnit" class="w-24 quota-unit-select">
                 <option value="MiB">MiB</option>
                 <option value="GiB">GiB</option>
               </select>
@@ -210,14 +219,14 @@
             </AppButton>
           </div>
         </form>
-      </div>
-    </div>
+    </AppModal>
   </div>
 </template>
 
 <script setup lang="ts">
 import { onMounted, ref, reactive, computed } from 'vue'
 import AppButton from './components/AppButton.vue'
+import AppModal from './components/AppModal.vue'
 import { useUsersStore } from '@/stores/users'
 import ErrorMessage from './components/ErrorMessage.vue'
 import SuccessMessage from './components/SuccessMessage.vue'
@@ -441,8 +450,22 @@ function resetForm() {
 </script>
 
 <style scoped>
+.admin-table-scroll {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
 .admin-table {
   border: 1px solid var(--gray-4);
+  width: 100%;
+  table-layout: fixed;
+}
+
+.admin-table-cell {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .admin-table-head {
@@ -468,11 +491,6 @@ function resetForm() {
   background-color: var(--gray-4);
 }
 
-.admin-modal {
-  background-color: var(--gray-2);
-  color: var(--text);
-}
-
 .admin-checkbox {
   accent-color: var(--primary-active);
 }
@@ -486,7 +504,7 @@ function resetForm() {
   padding: 0.5rem 0.75rem;
 }
 
-.admin-modal select {
+.quota-unit-select {
   background-color: var(--gray-4);
   color: var(--text);
   border: none;

@@ -1,5 +1,5 @@
 <template>
-  <div class="page gap-5">
+  <div class="app-page gap-5">
     <h1>Profile</h1>
 
     <form @submit.prevent="updateProfile" class="login-form card flex flex-col w-full gap-4">

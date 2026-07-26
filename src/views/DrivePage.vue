@@ -1,5 +1,5 @@
 <template>
-  <div class="page gap-5">
+  <div class="app-page gap-5">
     <div class="flex items-center justify-between mb-4 w-full">
       <h1 class="text-center flex-1 text-2xl font-bold">Drive</h1>
 
@@ -11,43 +11,21 @@
     </div>
 
     <!-- create folder dialog -->
-    <div
-      v-if="show"
-      class="fixed inset-0 flex items-center justify-center bg-black/50 z-50"
-    >
-      <div class="share-modal p-6 rounded-lg w-96 shadow-lg">
-        <h2 class="text-lg font-semibold mb-4">Create Folder</h2>
+    <AppModal :show="show" title="Create Folder" width="24rem" @close="show = false">
+      <label class="block text-sm font-medium mb-1 share-modal-subtext">Folder Name</label>
+      <input
+        ref="inputRef"
+        v-model="folderName"
+        type="text"
+        class="w-full"
+        @keyup.enter="createFolder"
+      />
 
-        <div>
-          <label class="block text-sm font-medium mb-1 share-modal-subtext">Folder Name</label>
-          <input
-            ref="inputRef"
-            v-model="folderName"
-            type="text"
-            class="w-full"
-            @keyup.enter="createFolder"
-          />
-        </div>
-
-        <div class="flex justify-end gap-3 mt-6">
-          <AppButton
-            variant="secondary"
-            size="sm"
-            @click="show = false"
-          >
-            Cancel
-          </AppButton>
-
-          <AppButton
-            type="submit"
-            size="sm"
-            @click="createFolder"
-          >
-            Create
-          </AppButton>
-        </div>
-      </div>
-    </div>
+      <template #footer>
+        <AppButton variant="secondary" size="sm" @click="show = false">Cancel</AppButton>
+        <AppButton type="submit" size="sm" @click="createFolder">Create</AppButton>
+      </template>
+    </AppModal>
 
     <FileUploader
       :parent="currentFolderId"
@@ -283,289 +261,248 @@
     </div>
 
     <!-- Rename File Modal -->
-    <div
-      v-if="editingFile"
-      class="fixed inset-0 flex items-center justify-center bg-black/50 z-50"
-    >
-      <!-- Modal content -->
-      <div class="share-modal rounded-lg shadow-lg w-96 p-6 relative">
-        <h3 class="text-lg font-bold mb-4">Rename File</h3>
-        <input
-          v-model="newFileName"
-          class="w-full mb-4"
-          placeholder="Enter new name"
-        />
-        <div class="flex justify-end gap-2">
-          <AppButton @click="closeFileModal" variant="secondary" size="sm">Cancel</AppButton>
-          <AppButton @click="saveFileName" size="sm">Save</AppButton>
-        </div>
-        <button
-          @click="closeFileModal"
-          class="absolute top-2 right-2 share-modal-muted"
-        >
-          ✕
-        </button>
-      </div>
-    </div>
+    <AppModal :show="!!editingFile" title="Rename File" width="24rem" @close="closeFileModal">
+      <input v-model="newFileName" class="w-full" placeholder="Enter new name" @keyup.enter="saveFileName" />
+
+      <template #footer>
+        <AppButton @click="closeFileModal" variant="secondary" size="sm">Cancel</AppButton>
+        <AppButton @click="saveFileName" size="sm">Save</AppButton>
+      </template>
+    </AppModal>
 
     <!-- Rename Folder Modal -->
-    <div
-      v-if="editingFolder"
-      class="fixed inset-0 flex items-center justify-center bg-black/50 z-50"
-    >
-      <!-- Modal content -->
-      <div class="share-modal rounded-lg shadow-lg w-96 p-6 relative">
-        <h3 class="text-lg font-bold mb-4">Rename Folder</h3>
-        <input
-          v-model="newFolderName"
-          class="w-full mb-4"
-          placeholder="Enter new name"
-        />
-        <div class="flex justify-end gap-2">
-          <AppButton @click="closeFolderModal" variant="secondary" size="sm">Cancel</AppButton>
-          <AppButton @click="saveFolderName" size="sm">Save</AppButton>
-        </div>
-        <button
-          @click="closeFolderModal"
-          class="absolute top-2 right-2 share-modal-muted"
-        >
-          ✕
-        </button>
-      </div>
-    </div>
+    <AppModal :show="!!editingFolder" title="Rename Folder" width="24rem" @close="closeFolderModal">
+      <input v-model="newFolderName" class="w-full" placeholder="Enter new name" @keyup.enter="saveFolderName" />
+
+      <template #footer>
+        <AppButton @click="closeFolderModal" variant="secondary" size="sm">Cancel</AppButton>
+        <AppButton @click="saveFolderName" size="sm">Save</AppButton>
+      </template>
+    </AppModal>
 
     <!-- Share File Modal -->
-    <div
-      v-if="sharingFile"
-      class="fixed inset-0 overflow-y-auto bg-black/50 z-50"
-    >
-      <div class="flex min-h-full items-center justify-center p-4">
-      <div class="share-modal rounded shadow-lg w-[520px] p-6 relative flex flex-col">
-        <h3 class="text-lg font-bold mb-1">Share "{{ sharingFile.name }}"</h3>
-        <p class="text-sm share-modal-subtext mb-4">Anyone with the link can view and download this file.</p>
+    <AppModal :show="!!sharingFile" width="520px" @close="closeShareModal">
+      <template #header>
+        <div>
+          <h3 class="text-lg font-bold mb-1">Share "{{ sharingFile?.name }}"</h3>
+          <p class="text-sm share-modal-subtext">Anyone with the link can view and download this file.</p>
+        </div>
+      </template>
 
-        <!-- Loading existing links -->
-        <div v-if="sharesLoading" class="flex justify-center py-6">
-          <svg class="animate-spin h-6 w-6" style="color: var(--primary-active);" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
-          </svg>
+      <!-- Loading existing links -->
+      <div v-if="sharesLoading" class="flex justify-center py-6">
+        <svg class="animate-spin h-6 w-6" style="color: var(--primary-active);" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+        </svg>
+      </div>
+
+      <template v-else>
+        <!-- Active links list -->
+        <div class="mb-4">
+          <p class="text-sm font-semibold share-modal-subtext mb-2">
+            Active links<span v-if="shareLinks.length"> ({{ shareLinks.length }})</span>
+          </p>
+          <div v-if="shareLinks.length === 0" class="text-sm share-modal-muted py-2 text-center">
+            No active links for this file.
+          </div>
+          <div v-else class="flex flex-col gap-2">
+            <div
+              v-for="link in shareLinks"
+              :key="link.token"
+              class="share-link-row flex items-center gap-2 rounded px-3 py-2 text-sm"
+            >
+              <span class="flex-1 font-mono text-xs share-modal-subtext truncate">{{ shareLinkURL(link.token) }}</span>
+              <span class="text-xs share-modal-muted whitespace-nowrap shrink-0">
+                {{ link.expires_at ? formatExpiry(link.expires_at) : 'Never expires' }}
+              </span>
+              <AppButton @click="copyShareToken(link.token)" size="sm" class="shrink-0">
+                {{ shareTokenCopied[link.token] ? '✓' : 'Copy' }}
+              </AppButton>
+              <AppButton @click="revokeShareLink(link.token)" variant="danger-subtle" size="sm" class="shrink-0">
+                Revoke
+              </AppButton>
+            </div>
+          </div>
         </div>
 
-        <template v-else>
-          <!-- Active links list -->
-          <div class="mb-4">
-            <p class="text-sm font-semibold share-modal-subtext mb-2">
-              Active links<span v-if="shareLinks.length"> ({{ shareLinks.length }})</span>
-            </p>
-            <div v-if="shareLinks.length === 0" class="text-sm share-modal-muted py-2 text-center">
-              No active links for this file.
-            </div>
-            <div v-else class="flex flex-col gap-2">
-              <div
-                v-for="link in shareLinks"
-                :key="link.token"
-                class="share-link-row flex items-center gap-2 rounded px-3 py-2 text-sm"
-              >
-                <span class="flex-1 font-mono text-xs share-modal-subtext truncate">{{ shareLinkURL(link.token) }}</span>
-                <span class="text-xs share-modal-muted whitespace-nowrap shrink-0">
-                  {{ link.expires_at ? formatExpiry(link.expires_at) : 'Never expires' }}
-                </span>
-                <AppButton @click="copyShareToken(link.token)" size="sm" class="shrink-0">
-                  {{ shareTokenCopied[link.token] ? '✓' : 'Copy' }}
-                </AppButton>
-                <AppButton @click="revokeShareLink(link.token)" variant="danger-subtle" size="sm" class="shrink-0">
-                  Revoke
-                </AppButton>
-              </div>
-            </div>
-          </div>
+        <hr class="mb-4 share-modal-divider"/>
 
-          <hr class="mb-4 share-modal-divider"/>
+        <!-- New link -->
+        <p class="text-sm font-semibold share-modal-subtext mb-2">Create new link</p>
+        <div class="mb-4">
+          <label class="block text-xs font-medium share-modal-muted mb-1">Expires (optional)</label>
+          <input
+            v-model="shareExpiresAt"
+            type="datetime-local"
+            class="w-full text-sm"
+          />
+        </div>
 
-          <!-- New link -->
-          <p class="text-sm font-semibold share-modal-subtext mb-2">Create new link</p>
-          <div class="mb-4">
-            <label class="block text-xs font-medium share-modal-muted mb-1">Expires (optional)</label>
-            <input
-              v-model="shareExpiresAt"
-              type="datetime-local"
-              class="w-full text-sm"
-            />
-          </div>
+        <div class="flex items-center gap-2">
+          <input
+            id="shareRequireLogin"
+            v-model="shareRequireLogin"
+            type="checkbox"
+            class="rounded"
+          />
+          <label for="shareRequireLogin" class="text-sm share-modal-subtext select-none cursor-pointer">Require login to access</label>
+        </div>
+      </template>
 
-          <div class="mb-4 flex items-center gap-2">
-            <input
-              id="shareRequireLogin"
-              v-model="shareRequireLogin"
-              type="checkbox"
-              class="rounded"
-            />
-            <label for="shareRequireLogin" class="text-sm share-modal-subtext select-none cursor-pointer">Require login to access</label>
-          </div>
-
-          <div class="flex justify-end gap-2">
-            <AppButton @click="closeShareModal" variant="secondary" size="sm">Close</AppButton>
-            <AppButton @click="generateShareLink" :disabled="shareGenerating" size="sm">
-              {{ shareGenerating ? 'Generating…' : 'Generate Link' }}
-            </AppButton>
-          </div>
-        </template>
-
-        <button @click="closeShareModal" class="absolute top-2 right-2 share-modal-muted">✕</button>
-      </div>
-      </div>
-    </div>
+      <template #footer>
+        <AppButton @click="closeShareModal" variant="secondary" size="sm">Close</AppButton>
+        <AppButton @click="generateShareLink" :disabled="shareGenerating || sharesLoading" size="sm">
+          {{ shareGenerating ? 'Generating…' : 'Generate Link' }}
+        </AppButton>
+      </template>
+    </AppModal>
 
     <!-- Share Folder Modal -->
-    <div
-      v-if="sharingFolder"
-      class="fixed inset-0 overflow-y-auto bg-black/50 z-50"
-    >
-      <div class="flex min-h-full items-center justify-center p-4">
-      <div class="share-modal rounded shadow-lg w-[520px] p-6 relative flex flex-col">
-        <h3 class="text-lg font-bold mb-1">Share "{{ sharingFolder.name }}"</h3>
-        <p class="text-sm share-modal-subtext mb-4">Anyone with the link can browse and download all files in this folder.</p>
+    <AppModal :show="!!sharingFolder" width="520px" @close="closeFolderShareModal">
+      <template #header>
+        <div>
+          <h3 class="text-lg font-bold mb-1">Share "{{ sharingFolder?.name }}"</h3>
+          <p class="text-sm share-modal-subtext">Anyone with the link can browse and download all files in this folder.</p>
+        </div>
+      </template>
 
-        <div v-if="folderSharesLoading" class="flex justify-center py-6">
-          <svg class="animate-spin h-6 w-6" style="color: var(--primary-active);" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
-          </svg>
+      <div v-if="folderSharesLoading" class="flex justify-center py-6">
+        <svg class="animate-spin h-6 w-6" style="color: var(--primary-active);" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+        </svg>
+      </div>
+
+      <template v-else>
+        <div class="mb-4">
+          <p class="text-sm font-semibold share-modal-subtext mb-2">
+            Active links<span v-if="folderShareLinks.length"> ({{ folderShareLinks.length }})</span>
+          </p>
+          <div v-if="folderShareLinks.length === 0" class="text-sm share-modal-muted py-2 text-center">
+            No active links for this folder.
+          </div>
+          <div v-else class="flex flex-col gap-2">
+            <div
+              v-for="link in folderShareLinks"
+              :key="link.token"
+              class="share-link-row flex items-center gap-2 rounded px-3 py-2 text-sm"
+            >
+              <span class="flex-1 font-mono text-xs share-modal-subtext truncate">{{ folderShareLinkURL(link.token) }}</span>
+              <span class="text-xs share-modal-muted whitespace-nowrap shrink-0">
+                {{ link.expires_at ? formatExpiry(link.expires_at) : 'Never expires' }}
+              </span>
+              <AppButton @click="copyFolderShareToken(link.token)" size="sm" class="shrink-0">
+                {{ folderShareTokenCopied[link.token] ? '✓' : 'Copy' }}
+              </AppButton>
+              <AppButton @click="revokeFolderShareLink(link.token)" variant="danger-subtle" size="sm" class="shrink-0">
+                Revoke
+              </AppButton>
+            </div>
+          </div>
         </div>
 
-        <template v-else>
-          <div class="mb-4">
-            <p class="text-sm font-semibold share-modal-subtext mb-2">
-              Active links<span v-if="folderShareLinks.length"> ({{ folderShareLinks.length }})</span>
-            </p>
-            <div v-if="folderShareLinks.length === 0" class="text-sm share-modal-muted py-2 text-center">
-              No active links for this folder.
-            </div>
-            <div v-else class="flex flex-col gap-2">
-              <div
-                v-for="link in folderShareLinks"
-                :key="link.token"
-                class="share-link-row flex items-center gap-2 rounded px-3 py-2 text-sm"
-              >
-                <span class="flex-1 font-mono text-xs share-modal-subtext truncate">{{ folderShareLinkURL(link.token) }}</span>
-                <span class="text-xs share-modal-muted whitespace-nowrap shrink-0">
-                  {{ link.expires_at ? formatExpiry(link.expires_at) : 'Never expires' }}
-                </span>
-                <AppButton @click="copyFolderShareToken(link.token)" size="sm" class="shrink-0">
-                  {{ folderShareTokenCopied[link.token] ? '✓' : 'Copy' }}
-                </AppButton>
-                <AppButton @click="revokeFolderShareLink(link.token)" variant="danger-subtle" size="sm" class="shrink-0">
-                  Revoke
-                </AppButton>
-              </div>
-            </div>
-          </div>
+        <hr class="mb-4 share-modal-divider"/>
 
-          <hr class="mb-4 share-modal-divider"/>
+        <p class="text-sm font-semibold share-modal-subtext mb-2">Create new link</p>
+        <div class="mb-4">
+          <label class="block text-xs font-medium share-modal-muted mb-1">Expires (optional)</label>
+          <input
+            v-model="folderShareExpiresAt"
+            type="datetime-local"
+            class="w-full text-sm"
+          />
+        </div>
 
-          <p class="text-sm font-semibold share-modal-subtext mb-2">Create new link</p>
-          <div class="mb-4">
-            <label class="block text-xs font-medium share-modal-muted mb-1">Expires (optional)</label>
-            <input
-              v-model="folderShareExpiresAt"
-              type="datetime-local"
-              class="w-full text-sm"
-            />
-          </div>
+        <div class="mb-4 flex items-center gap-2">
+          <input
+            id="folderShareRequireLogin"
+            v-model="folderShareRequireLogin"
+            type="checkbox"
+            class="rounded"
+          />
+          <label for="folderShareRequireLogin" class="text-sm share-modal-subtext select-none cursor-pointer">Require login to access</label>
+        </div>
 
-          <div class="mb-4 flex items-center gap-2">
-            <input
-              id="folderShareRequireLogin"
-              v-model="folderShareRequireLogin"
-              type="checkbox"
-              class="rounded"
-            />
-            <label for="folderShareRequireLogin" class="text-sm share-modal-subtext select-none cursor-pointer">Require login to access</label>
-          </div>
+        <div class="mb-4 flex items-center gap-2">
+          <input
+            id="folderShareAllowUpload"
+            v-model="folderShareAllowUpload"
+            type="checkbox"
+            class="rounded"
+          />
+          <label for="folderShareAllowUpload" class="text-sm share-modal-subtext select-none cursor-pointer">Allow file uploads</label>
+        </div>
 
-          <div class="mb-4 flex items-center gap-2">
-            <input
-              id="folderShareAllowUpload"
-              v-model="folderShareAllowUpload"
-              type="checkbox"
-              class="rounded"
-            />
-            <label for="folderShareAllowUpload" class="text-sm share-modal-subtext select-none cursor-pointer">Allow file uploads</label>
-          </div>
+        <div v-if="folderShareAllowUpload">
+          <label class="block text-xs font-medium share-modal-muted mb-1">Max upload size in MB (0 = server default)</label>
+          <input
+            v-model.number="folderShareMaxFileSizeMB"
+            type="number"
+            min="0"
+            placeholder="0"
+            class="w-full text-sm"
+          />
+        </div>
+      </template>
 
-          <div v-if="folderShareAllowUpload" class="mb-4">
-            <label class="block text-xs font-medium share-modal-muted mb-1">Max upload size in MB (0 = server default)</label>
-            <input
-              v-model.number="folderShareMaxFileSizeMB"
-              type="number"
-              min="0"
-              placeholder="0"
-              class="w-full text-sm"
-            />
-          </div>
-
-          <div class="flex justify-end gap-2">
-            <AppButton @click="closeFolderShareModal" variant="secondary" size="sm">Close</AppButton>
-            <AppButton @click="generateFolderShareLink" :disabled="folderShareGenerating" size="sm">
-              {{ folderShareGenerating ? 'Generating…' : 'Generate Link' }}
-            </AppButton>
-          </div>
-        </template>
-
-        <button @click="closeFolderShareModal" class="absolute top-2 right-2 share-modal-muted">✕</button>
-      </div>
-      </div>
-    </div>
+      <template #footer>
+        <AppButton @click="closeFolderShareModal" variant="secondary" size="sm">Close</AppButton>
+        <AppButton @click="generateFolderShareLink" :disabled="folderShareGenerating || folderSharesLoading" size="sm">
+          {{ folderShareGenerating ? 'Generating…' : 'Generate Link' }}
+        </AppButton>
+      </template>
+    </AppModal>
 
     <!-- Move Items Modal -->
-    <div
-      v-if="movingFileIds.length > 0 || movingFolderIds.length > 0"
-      class="fixed inset-0 flex items-center justify-center bg-black/50 z-50"
+    <AppModal
+      :show="movingFileIds.length > 0 || movingFolderIds.length > 0"
+      width="24rem"
+      @close="closeMoveModal"
     >
-      <div class="share-modal rounded-lg w-96 p-6 relative shadow-lg flex flex-col">
-        <h3 class="text-lg font-bold mb-1">
-          {{ movingSingleName ? `Move "${movingSingleName}"` : `Move ${movingFileIds.length + movingFolderIds.length} items` }}
-        </h3>
-        <p class="text-sm share-modal-subtext mb-3">Choose a destination folder.</p>
-
-        <div class="move-picker-breadcrumbs flex items-center flex-wrap gap-1 mb-2 text-sm">
-          <button class="move-picker-crumb" @click="loadMoveFolder('')">Home</button>
-          <template v-for="bc in moveBreadcrumbs" :key="bc.folder_id">
-            <span class="share-modal-muted">/</span>
-            <button class="move-picker-crumb" @click="loadMoveFolder(bc.folder_id)">{{ bc.label }}</button>
-          </template>
+      <template #header>
+        <div>
+          <h3 class="text-lg font-bold mb-1">
+            {{ movingSingleName ? `Move "${movingSingleName}"` : `Move ${movingFileIds.length + movingFolderIds.length} items` }}
+          </h3>
+          <p class="text-sm share-modal-subtext">Choose a destination folder.</p>
         </div>
+      </template>
 
-        <div class="move-picker-list">
-          <div v-if="moveLoading" class="flex justify-center py-6">
-            <SpinnerView />
-          </div>
-          <template v-else>
-            <div v-if="moveFolders.length === 0" class="text-sm share-modal-muted text-center py-4">
-              No subfolders here.
-            </div>
-            <button
-              v-for="folder in moveFolders"
-              :key="folder.uuid"
-              class="move-picker-item"
-              @click="loadMoveFolder(folder.uuid)"
-            >
-              📁 {{ folder.name }}
-            </button>
-          </template>
-        </div>
-
-        <div class="flex justify-end gap-2 mt-4">
-          <AppButton @click="closeMoveModal" variant="secondary" size="sm">Cancel</AppButton>
-          <AppButton @click="confirmMove" :disabled="moving || moveLoading" size="sm">
-            {{ moving ? 'Moving…' : 'Move Here' }}
-          </AppButton>
-        </div>
-
-        <button @click="closeMoveModal" class="absolute top-2 right-2 share-modal-muted">✕</button>
+      <div class="move-picker-breadcrumbs flex items-center flex-wrap gap-1 mb-2 text-sm">
+        <button class="move-picker-crumb" @click="loadMoveFolder('')">Home</button>
+        <template v-for="bc in moveBreadcrumbs" :key="bc.folder_id">
+          <span class="share-modal-muted">/</span>
+          <button class="move-picker-crumb" @click="loadMoveFolder(bc.folder_id)">{{ bc.label }}</button>
+        </template>
       </div>
-    </div>
+
+      <div class="move-picker-list">
+        <div v-if="moveLoading" class="flex justify-center py-6">
+          <SpinnerView />
+        </div>
+        <template v-else>
+          <div v-if="moveFolders.length === 0" class="text-sm share-modal-muted text-center py-4">
+            No subfolders here.
+          </div>
+          <button
+            v-for="folder in moveFolders"
+            :key="folder.uuid"
+            class="move-picker-item"
+            @click="loadMoveFolder(folder.uuid)"
+          >
+            📁 {{ folder.name }}
+          </button>
+        </template>
+      </div>
+
+      <template #footer>
+        <AppButton @click="closeMoveModal" variant="secondary" size="sm">Cancel</AppButton>
+        <AppButton @click="confirmMove" :disabled="moving || moveLoading" size="sm">
+          {{ moving ? 'Moving…' : 'Move Here' }}
+        </AppButton>
+      </template>
+    </AppModal>
 
     <!-- File Viewer -->
     <FileViewer
@@ -580,6 +517,7 @@
 
 <script setup lang="ts">
 import AppButton from './components/AppButton.vue'
+import AppModal from './components/AppModal.vue'
 import BreadCrumbs from './components/BreadCrumbs.vue'
 import { ref, onMounted, onUnmounted, watch, nextTick, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
@@ -780,7 +718,7 @@ async function runFileSearch(query: string, folderId: string) {
   const response = await api({ url, method: 'GET' })
   searching.value = false
   fileSearchResults.value = response.ok && Array.isArray(response.body)
-    ? response.body.map((f: Record<string, unknown>) => ({ ...f, type: 'file' as const }))
+    ? response.body.map((f: Record<string, unknown>) => ({ ...f, type: 'file' as const }) as FolderItem)
     : []
 }
 
@@ -998,11 +936,11 @@ function downloadSelectedFiles() {
   if (!canDownloadSelection.value) return;
 
   const baseURL = import.meta.env.VITE_APP_API_URL || '';
-  const params = new URLSearchParams({ token: usersStore.token });
+  const params = new URLSearchParams({ token: usersStore.token ?? '' });
 
   if (selectedFolders.value.size > 0) {
     const [folderId] = selectedFolders.value;
-    params.append('folderIds', folderId);
+    if (folderId) params.append('folderIds', folderId);
   } else {
     for (const fileId of selectedFiles.value) {
       params.append('ids', fileId);
@@ -1447,7 +1385,7 @@ onUnmounted(() => {
 <style scoped>
 .folder-contents {
   width: 100%;
-  max-width: 800px;
+  max-width: 1000px;
 }
 
 .items-section {
@@ -1673,19 +1611,6 @@ onUnmounted(() => {
 .empty-state-hint {
   font-size: 0.85rem;
   margin: 0;
-}
-
-.modal {
-  z-index: 50;
-}
-
-.modal-content {
-  max-width: 400px;
-}
-
-.share-modal {
-  background-color: var(--gray-2);
-  color: var(--text);
 }
 
 .share-modal-subtext {

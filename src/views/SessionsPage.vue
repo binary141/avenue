@@ -1,5 +1,5 @@
 <template>
-  <div class="page gap-5">
+  <div class="app-page gap-5">
     <div class="flex items-center justify-between mb-4 w-full">
       <h1 class="text-center flex-1 text-2xl font-bold">Sessions</h1>
     </div>
@@ -12,7 +12,7 @@
     <ErrorMessage :msg="error" @clear="error = ''" />
     <SuccessMessage :msg="successMsg" @clear="successMsg = ''" />
 
-    <div v-if="!loading" class="w-full flex flex-col gap-6" style="max-width: 800px;">
+    <div v-if="!loading" class="w-full flex flex-col gap-6" style="max-width: 1000px;">
       <div class="flex items-center justify-between w-full">
         <p class="text-sm" style="color: var(--text-secondary);">
           Devices and browsers currently signed in to your account.

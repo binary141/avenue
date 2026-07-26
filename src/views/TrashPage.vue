@@ -1,5 +1,5 @@
 <template>
-  <div class="page gap-5">
+  <div class="app-page gap-5">
     <div class="flex items-center justify-between mb-4 w-full">
       <h1 class="text-center flex-1 text-2xl font-bold">Trash</h1>
 
@@ -14,7 +14,7 @@
       </AppButton>
     </div>
 
-    <div v-if="!loading && items.length > 0" class="toolbar-controls flex items-center gap-2 mb-2 flex-wrap" style="max-width: 800px; width: 100%; justify-content: space-between;">
+    <div v-if="!loading && items.length > 0" class="toolbar-controls flex items-center gap-2 mb-2 flex-wrap" style="max-width: 1000px; width: 100%; justify-content: space-between;">
       <div class="flex items-center gap-3">
         <label class="flex items-center gap-2 text-sm select-none cursor-pointer" style="color: var(--text-secondary);">
           <input type="checkbox" :checked="allSelected" @change="toggleSelectAll" />
@@ -47,7 +47,7 @@
     <div
       v-if="hasSelection"
       class="bulk-actions-bar flex items-center gap-3 mb-2 p-3 rounded"
-      style="max-width: 800px; width: 100%;"
+      style="max-width: 1000px; width: 100%;"
     >
       <span class="text-sm" style="color: var(--text-secondary);">
         Selected:
@@ -74,12 +74,12 @@
     <p
       v-if="!loading && retentionDays > 0 && items.length > 0"
       class="text-sm text-center"
-      style="color: var(--text-secondary); max-width: 800px;"
+      style="color: var(--text-secondary); max-width: 1000px;"
     >
       Items in the trash are automatically deleted forever after {{ retentionDays }} day{{ retentionDays === 1 ? '' : 's' }}.
     </p>
 
-    <div v-if="!loading" class="w-full flex flex-col gap-6" style="max-width: 800px;">
+    <div v-if="!loading" class="w-full flex flex-col gap-6" style="max-width: 1000px;">
       <!-- Empty state -->
       <div v-if="items.length === 0" class="card text-center py-10 flex flex-col items-center gap-3">
         <span style="font-size: 2.5rem;">🗑️</span>

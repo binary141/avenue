@@ -3,70 +3,39 @@
     <div class="content flex flex-col gap-6">
 
       <!-- TOP PURPLE HEADER BAR -->
-      <div class="header flex flex-row items-center px-4">
+      <div class="header flex flex-row items-center px-4 gap-3">
+        <button
+          v-if="isLoggedIn"
+          class="mobile-menu-btn"
+          aria-label="Toggle navigation"
+          @click="sidebarOpen = !sidebarOpen"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+        </button>
+
         <!-- LEFT BRANDING -->
         <div class="branding flex flex-row items-center gap-3">
           <img :src="logo" alt="Logo" class="logo" @click="home"/>
           <span class="avenue-text">AVENUE</span>
         </div>
+      </div>
 
-        <!-- RIGHT PFP -->
-        <div v-if="isLoggedIn" class="ml-auto relative">
-          <img
-            :src="pfp"
-            class="w-10 h-10 cursor-pointer"
-            @click="showMenu = !showMenu"
-          />
+      <div v-if="isLoggedIn" class="app-shell flex flex-row gap-6 w-full">
+        <AppSidebar
+          :open="sidebarOpen"
+          :is-admin="isAdmin"
+          :sharing-enabled="usersStore.fileSharingEnabled || usersStore.folderSharingEnabled"
+          @close="sidebarOpen = false"
+          @navigate="sidebarOpen = false"
+          @logout="logout"
+        />
 
-          <!-- DROPDOWN MENU -->
-          <div
-            v-if="showMenu"
-            class="user-menu absolute right-0 mt-2 w-40 shadow-lg rounded-xl p-2 flex flex-col z-50"
-          >
-            <button v-if="isAdmin" class="user-menu-item text-left px-3 py-2 rounded-lg"
-                    @click="goToAdmin">
-              Admin
-            </button>
-            <button v-if="usersStore.fileSharingEnabled || usersStore.folderSharingEnabled"
-                    class="user-menu-item text-left px-3 py-2 rounded-lg"
-                    @click="goToShares">
-              Shared Links
-            </button>
-            <button class="user-menu-item text-left px-3 py-2 rounded-lg"
-                    @click="goToTrash">
-              Trash
-            </button>
-            <button class="user-menu-item text-left px-3 py-2 rounded-lg"
-                    @click="goToProfile">
-              Profile Settings
-            </button>
-            <button class="user-menu-item text-left px-3 py-2 rounded-lg"
-                    @click="goToSessions">
-              Sessions
-            </button>
-            <button class="user-menu-item user-menu-item--danger text-left px-3 py-2 rounded-lg"
-                    @click="logout">
-              Logout
-            </button>
-          </div>
+        <div class="app-main flex-1 flex flex-col items-center">
+          <RouterView @close-menu="sidebarOpen = false"/>
         </div>
       </div>
 
-      <div
-        v-if="isLoggedIn && route.path !== '/' && route.path !== '/drive'"
-        class="w-full"
-        style="max-width: 700px;"
-      >
-        <button
-          @click="home"
-          class="flex items-center gap-1 text-sm font-medium"
-          style="color: var(--text-secondary);"
-        >
-          ← Drive
-        </button>
-      </div>
-
-      <RouterView @close-menu="showMenu = false"/>
+      <RouterView v-else />
     </div>
   </template>
 
@@ -87,16 +56,16 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue';
 import logo from '@/assets/avenue-logo.png'
-import pfp from '@/assets/pfp.svg'
 import AppButton from './views/components/AppButton.vue';
 import SpinnerView from './views/components/SpinnerView.vue';
+import AppSidebar from './views/components/AppSidebar.vue';
 import { useUsersStore } from './stores/users';
 import { setGlobalRequestHeader } from './utils/api';
 import { useRoute, useRouter } from 'vue-router';
 
 const usersStore = useUsersStore();
 const status = ref<"loading" | "loaded" | "error">("loading");
-const showMenu = ref(false);
+const sidebarOpen = ref(false);
 const isAdmin = ref(false);
 const isLoggedIn = ref(false);
 const router = useRouter();
@@ -121,32 +90,7 @@ onMounted(() => {
 
 function home() {
   router.push({ path: '/', query: { folderId: '' }})
-  showMenu.value = false
-}
-
-function goToAdmin() {
-  router.push("/admin")
-  showMenu.value = false
-}
-
-function goToShares() {
-  router.push("/shares")
-  showMenu.value = false
-}
-
-function goToTrash() {
-  router.push("/trash")
-  showMenu.value = false
-}
-
-function goToProfile() {
-  router.push("/profile")
-  showMenu.value = false
-}
-
-function goToSessions() {
-  router.push("/sessions")
-  showMenu.value = false
+  sidebarOpen.value = false
 }
 
 async function logout() {
@@ -159,7 +103,7 @@ async function logout() {
   isLoggedIn.value = false
 
   router.push("/login")
-  showMenu.value = false
+  sidebarOpen.value = false
 }
 
 async function getUserAndLogin() {
@@ -225,20 +169,37 @@ async function getUserAndLogin() {
   letter-spacing: 0.5px;
 }
 
-.user-menu {
-  background-color: var(--gray-2);
-  border: 1px solid var(--gray-4);
+.app-shell {
+  align-items: flex-start;
 }
 
-.user-menu-item {
-  color: var(--text);
+.app-main {
+  min-width: 0;
 }
 
-.user-menu-item:hover {
-  background-color: var(--gray-4);
+.mobile-menu-btn {
+  display: none;
+  width: 2.2rem;
+  height: 2.2rem;
+  color: white;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  flex-shrink: 0;
 }
 
-.user-menu-item--danger {
-  color: #e57373;
+.mobile-menu-btn svg {
+  width: 1.4rem;
+  height: 1.4rem;
+}
+
+.mobile-menu-btn:hover {
+  background-color: rgba(255, 255, 255, 0.12);
+}
+
+@media (max-width: 860px) {
+  .mobile-menu-btn {
+    display: inline-flex;
+  }
 }
 </style>

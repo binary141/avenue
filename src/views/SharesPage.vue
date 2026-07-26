@@ -1,10 +1,10 @@
 <template>
-  <div class="page gap-5">
+  <div class="app-page gap-5">
     <div class="flex items-center justify-between mb-4 w-full">
       <h1 class="text-center flex-1 text-2xl font-bold">Shared Links</h1>
     </div>
 
-    <div v-if="!loading && (shares.length > 0 || folderShares.length > 0)" class="toolbar-controls flex items-center gap-2 mb-2 self-end" style="max-width: 800px; width: 100%; justify-content: flex-end;">
+    <div v-if="!loading && (shares.length > 0 || folderShares.length > 0)" class="toolbar-controls flex items-center gap-2 mb-2 self-end" style="max-width: 1000px; width: 100%; justify-content: flex-end;">
       <select v-model="sortKey" class="sort-select">
         <option value="date">Date Created</option>
         <option value="name">Name</option>
@@ -26,7 +26,7 @@
 
     <ErrorMessage :msg="error" @clear="error = ''" />
 
-    <div v-if="!loading" class="w-full flex flex-col gap-6" style="max-width: 800px;">
+    <div v-if="!loading" class="w-full flex flex-col gap-6" style="max-width: 1000px;">
       <!-- Empty state -->
       <div v-if="shares.length === 0 && folderShares.length === 0" class="card text-center py-10 flex flex-col items-center gap-3">
         <span style="font-size: 2.5rem;">🔗</span>

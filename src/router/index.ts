@@ -47,6 +47,7 @@ const router = createRouter({
             path: '/admin',
             name: 'admin',
             component: () => import('@/views/AdminPage.vue'),
+            meta: { requiresAdmin: true },
         },
         {
             path: '/share/:token',
@@ -107,20 +108,29 @@ router.beforeEach(async (to, from, next) => {
     }
 
     if (
-        to.matched.some((record) => record.meta.allowAnonymous) ||
-        store.loggedIn
+        !to.matched.some((record) => record.meta.allowAnonymous) &&
+        !store.loggedIn
     ) {
-        if (from.path) {
-            scrollPositions[from.path] = document.documentElement.scrollTop;
-        }
-
-        next();
-    }  else {
         next({
             name: "login",
             query: { next: to.fullPath },
         });
+        return;
     }
+
+    if (
+        to.matched.some((record) => record.meta.requiresAdmin) &&
+        !store.userData.data.isAdmin
+    ) {
+        next({ name: "drive" });
+        return;
+    }
+
+    if (from.path) {
+        scrollPositions[from.path] = document.documentElement.scrollTop;
+    }
+
+    next();
 });
 
 export default router;

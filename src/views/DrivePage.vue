@@ -151,6 +151,7 @@
             :key="item.type + '-' + item.uuid"
             class="card flex flex-row items-center gap-3 p-3"
             :class="[item.type === 'folder' ? 'folder-item' : 'file-item', { 'item--selected': isItemSelected(item), 'item--menu-open': openMenuId === item.type + '-' + item.uuid }]"
+            @contextmenu.prevent="toggleRowMenu(item.type + '-' + item.uuid)"
           >
             <!-- Checkbox -->
             <input

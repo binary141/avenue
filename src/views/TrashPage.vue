@@ -98,6 +98,7 @@
         >
           <input
             type="checkbox"
+            class="row-checkbox"
             :checked="selectedFolders.has(folder.uuid)"
             @click.stop="onFolderCheckboxClick(folder.uuid, index, $event)"
           />
@@ -137,6 +138,7 @@
         >
           <input
             type="checkbox"
+            class="row-checkbox"
             :checked="selectedFiles.has(file.uuid)"
             @click.stop="onFileCheckboxClick(file.uuid, index, $event)"
           />
@@ -468,6 +470,13 @@ onMounted(loadTrash);
 </script>
 
 <style scoped>
+.row-checkbox {
+  width: 1.25em;
+  height: 1.25em;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
 .file-icon-badge {
   flex-shrink: 0;
   display: inline-flex;

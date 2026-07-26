@@ -111,6 +111,15 @@
     <div class="toolbar flex items-center justify-between gap-3 w-full flex-wrap">
       <BreadCrumbs :breadcrumbs=breadcrumbs />
 
+      <label
+        v-if="!loading && (filteredFolders.length > 0 || filteredFiles.length > 0)"
+        class="flex items-center gap-2 text-sm select-none cursor-pointer"
+        style="color: var(--text-secondary);"
+      >
+        <input type="checkbox" :checked="allSelected" @change="toggleSelectAll" />
+        Select all
+      </label>
+
       <p
         v-if="!loading && !searching && !searchQuery.trim() && totalItemsCount > 0"
         class="item-count-label text-sm"
@@ -167,6 +176,7 @@
             <!-- Checkbox -->
             <input
               type="checkbox"
+              class="row-checkbox"
               :checked="selectedFolders.has(folder.uuid)"
               @click.stop="onFolderCheckboxClick(folder.uuid, index, $event)"
             />
@@ -211,6 +221,7 @@
             <!-- Checkbox -->
             <input
               type="checkbox"
+              class="row-checkbox"
               :checked="selectedFiles.has(file.uuid)"
               @click.stop="onFileCheckboxClick(file.uuid, index, $event)"
             />
@@ -928,6 +939,22 @@ const hasSelection = computed(
   () => selectedFolders.value.size > 0 || selectedFiles.value.size > 0
 )
 
+const allSelected = computed(() => {
+  const totalItems = filteredFolders.value.length + filteredFiles.value.length
+  if (totalItems === 0) return false
+  return selectedFolders.value.size === filteredFolders.value.length
+    && selectedFiles.value.size === filteredFiles.value.length
+})
+
+function toggleSelectAll() {
+  if (allSelected.value) {
+    clearSelection()
+  } else {
+    selectedFolders.value = new Set(filteredFolders.value.map(f => f.uuid))
+    selectedFiles.value = new Set(filteredFiles.value.map(f => f.uuid))
+  }
+}
+
 // A folder download walks the whole subtree on the backend, so it can only
 // be requested on its own — not alongside other files or folders.
 const canDownloadSelection = computed(() => {
@@ -1504,6 +1531,13 @@ onUnmounted(() => {
 .item--selected {
   background-color: var(--gray-3);
   box-shadow: inset 0 0 0 1px var(--primary-active);
+}
+
+.row-checkbox {
+  width: 1.25em;
+  height: 1.25em;
+  flex-shrink: 0;
+  cursor: pointer;
 }
 
 .folder-icon {

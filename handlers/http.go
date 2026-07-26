@@ -246,7 +246,6 @@ func (s *Server) SetupRoutes() {
 	s.router.Use(cors.New(c))
 
 	unsecuredRouter := s.router.Group("")
-	unsecuredRouterV1 := s.router.Group("/v1")
 
 	unsecuredRouter.GET("/ping", s.pingHandler)
 	unsecuredRouter.POST("/login", s.Login)
@@ -323,7 +322,7 @@ func (s *Server) SetupRoutes() {
 	securedRouterV1.POST("/trash/empty", s.EmptyTrash)
 
 	// --- users routes --- //
-	unsecuredRouterV1.POST("/logout", s.Logout)
+	securedRouterV1.POST("/logout", s.Logout)
 	securedRouterV1.GET("/user/profile", s.GetProfile)
 	securedRouterV1.GET("/users", s.GetUsers)
 	securedRouterV1.POST("/user", s.CreateUser) // todo might be able to remove this route and have the ui do some work

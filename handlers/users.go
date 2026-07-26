@@ -91,8 +91,12 @@ func (s *Server) authorize(email, password string) (sdk.User, error) {
 
 func (s *Server) Logout(c *gin.Context) {
 	c.SetCookie(string(shared.USERCOOKIENAME), "", -1, "/", COOKIEDOMAIN, COOKIESECURE, true)
+	c.SetCookie(string(shared.SESSIONCOOKIENAME), "", -1, "/", COOKIEDOMAIN, COOKIESECURE, true)
 
-	sessID, err := c.Cookie(string(shared.SESSIONCOOKIENAME))
+	// sessionCheck (required by the secured route this handler is mounted on)
+	// authenticates via the Authorization header, not the ambient cookie, so
+	// logging out can't be triggered cross-site.
+	sessID, err := shared.GetSessionIDFromContext(c.Request.Context())
 	if err != nil {
 		c.Status(http.StatusOK)
 		return

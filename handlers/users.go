@@ -61,8 +61,8 @@ func (s *Server) Login(c *gin.Context) {
 		return
 	}
 
-	c.SetCookie(string(shared.USERCOOKIENAME), fmt.Sprintf("%d", u.ID), 600, "/", "localhost", false, true)
-	c.SetCookie(string(shared.SESSIONCOOKIENAME), session.SessionID, 600, "/", "localhost", false, true)
+	c.SetCookie(string(shared.USERCOOKIENAME), fmt.Sprintf("%d", u.ID), 600, "/", COOKIEDOMAIN, COOKIESECURE, true)
+	c.SetCookie(string(shared.SESSIONCOOKIENAME), session.SessionID, 600, "/", COOKIEDOMAIN, COOKIESECURE, true)
 
 	c.JSON(http.StatusOK, sdk.V1LoginResponse{
 		Message:   "OK",
@@ -89,7 +89,7 @@ func (s *Server) authorize(email, password string) (sdk.User, error) {
 }
 
 func (s *Server) Logout(c *gin.Context) {
-	c.SetCookie(string(shared.USERCOOKIENAME), "", -1, "/", "localhost", false, true)
+	c.SetCookie(string(shared.USERCOOKIENAME), "", -1, "/", COOKIEDOMAIN, COOKIESECURE, true)
 
 	sessID, err := c.Cookie(string(shared.SESSIONCOOKIENAME))
 	if err != nil {

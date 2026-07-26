@@ -142,17 +142,31 @@ func (s *Server) userIDExists(userID string) bool {
 }
 
 func (s *Server) sessionCheck(c *gin.Context) {
+	s.sessionCheckImpl(c, false)
+}
+
+// sessionCheckAllowQueryToken behaves like sessionCheck but also accepts the
+// session token via a "token" query param. This exists only for endpoints the
+// UI reaches via direct browser navigation (file downloads/thumbnails), which
+// can't attach an Authorization header. Query params can leak into logs,
+// proxies, and Referer headers, so this must not be used as the default for
+// the whole secured API.
+func (s *Server) sessionCheckAllowQueryToken(c *gin.Context) {
+	s.sessionCheckImpl(c, true)
+}
+
+func (s *Server) sessionCheckImpl(c *gin.Context, allowQueryToken bool) {
 	h := c.GetHeader(AUTHHEADER)
 	if h == "" {
-		// use a query param as a default
-		// this is used in places where we can't send a cookie value (such as browser downloads)
-		q := c.Query("token")
-		if q == "" {
+		if allowQueryToken {
+			if q := c.Query("token"); q != "" {
+				h = fmt.Sprintf("Token %s", q)
+			}
+		}
+		if h == "" {
 			c.AbortWithStatus(http.StatusUnauthorized)
 			return
 		}
-
-		h = fmt.Sprintf("Token %s", q)
 	}
 
 	parts := strings.Split(h, "Token ")
@@ -280,8 +294,15 @@ func (s *Server) SetupRoutes() {
 	securedRouterV1.GET("/file/list", s.ListFiles)
 	securedRouterV1.GET("/folder/files/:fileName", s.SearchFiles) // search root folder
 	securedRouterV1.GET("/folder/:folderID/files/:fileName", s.SearchFiles)
-	securedRouterV1.GET("/file/:fileID", s.GetFile)
-	securedRouterV1.GET("/files/zip", s.DownloadFilesZip)
+
+	// these two are reached via direct browser navigation (img src / <a> download
+	// links) rather than fetch(), so they can't send an Authorization header and
+	// need to accept the session token as a query param instead.
+	downloadRoutesV1 := s.router.Group("/v1")
+	downloadRoutesV1.Use(s.sessionCheckAllowQueryToken)
+	downloadRoutesV1.GET("/file/:fileID", s.GetFile)
+	downloadRoutesV1.GET("/files/zip", s.DownloadFilesZip)
+
 	securedRouterV1.PATCH("/file/:fileID/move", s.MoveFile)
 	securedRouterV1.PATCH("/file/:fileID/:fileName", s.UpdateFileName)
 	securedRouterV1.DELETE("/file/:fileID", s.DeleteFile)

@@ -41,7 +41,7 @@ func main() {
 
 	server.SetupRoutes()
 
-	if shared.GetEnv("APP_ENV", "dev") == "production" {
+	if shared.GetEnv("APP_ENV", "production") == "production" {
 		server.ServeUI(frontendFS)
 	}
 

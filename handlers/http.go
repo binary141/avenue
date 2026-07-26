@@ -26,6 +26,13 @@ type Server struct {
 	fs     afero.Fs
 }
 
+var (
+	AUTHHEADER   = "Authorization"
+	APPENV       = shared.GetEnv("APP_ENV", "production")
+	COOKIEDOMAIN = shared.GetEnv("COOKIE_DOMAIN", "")
+	COOKIESECURE = APPENV == "production"
+)
+
 // FS returns the server's jailed filesystem, for callers outside the
 // handlers package (e.g. the trash sweeper) that need to remove blobs.
 func (s *Server) FS() afero.Fs {
@@ -33,7 +40,7 @@ func (s *Server) FS() afero.Fs {
 }
 
 func SetupServer() Server {
-	prod := shared.GetEnv("APP_ENV", "dev") == "production"
+	prod := APPENV == "production"
 	if prod {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -51,13 +58,6 @@ func SetupServer() Server {
 		router: r,
 	}
 }
-
-var (
-	MASTERAUTHHEADER = shared.GetEnv("AUTH_HEADER", "my-auth-header")
-	AUTHHEADER       = "Authorization"
-	AUTHKEY          = shared.GetEnv("AUTH_KEY", "MY-AUTH-VAL")
-	USERIDHEADER     = shared.GetEnv("USER_HEADER", "user-id")
-)
 
 func (s *Server) ServeUI(uiFS embed.FS) {
 	distFS, err := fs.Sub(uiFS, "dist")
@@ -138,23 +138,6 @@ func (s *Server) userIDExists(userID string) bool {
 }
 
 func (s *Server) sessionCheck(c *gin.Context) {
-	// if the auth header is present with the needed fields, we can allow them to bypass the cookie check :)
-	if h := c.GetHeader(MASTERAUTHHEADER); h != "" {
-		if u := c.GetHeader(USERIDHEADER); u != "" {
-			if h == AUTHKEY && s.userIDExists(u) {
-				rc := c.Request.Context()
-
-				// Add a new value to the context
-				newCtx := context.WithValue(rc, shared.USERCOOKIENAME, u)
-
-				// Update the request with the new context
-				c.Request = c.Request.WithContext(newCtx)
-				c.Next()
-				return
-			}
-		}
-	}
-
 	h := c.GetHeader(AUTHHEADER)
 	if h == "" {
 		// use a query param as a default

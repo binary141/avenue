@@ -21,30 +21,30 @@
           <!-- DROPDOWN MENU -->
           <div
             v-if="showMenu"
-            class="absolute right-0 mt-2 w-40 bg-white shadow-lg rounded-xl p-2 flex flex-col z-50"
+            class="user-menu absolute right-0 mt-2 w-40 shadow-lg rounded-xl p-2 flex flex-col z-50"
           >
-            <button v-if="isAdmin" class="text-left px-3 py-2 hover:bg-gray-100 rounded-lg text-black"
+            <button v-if="isAdmin" class="user-menu-item text-left px-3 py-2 rounded-lg"
                     @click="goToAdmin">
               Admin
             </button>
             <button v-if="usersStore.fileSharingEnabled || usersStore.folderSharingEnabled"
-                    class="text-left px-3 py-2 hover:bg-gray-100 rounded-lg text-black"
+                    class="user-menu-item text-left px-3 py-2 rounded-lg"
                     @click="goToShares">
               Shared Links
             </button>
-            <button class="text-left px-3 py-2 hover:bg-gray-100 rounded-lg text-black"
+            <button class="user-menu-item text-left px-3 py-2 rounded-lg"
                     @click="goToTrash">
               Trash
             </button>
-            <button class="text-left px-3 py-2 hover:bg-gray-100 rounded-lg text-black"
+            <button class="user-menu-item text-left px-3 py-2 rounded-lg"
                     @click="goToProfile">
               Profile Settings
             </button>
-            <button class="text-left px-3 py-2 hover:bg-gray-100 rounded-lg text-black"
+            <button class="user-menu-item text-left px-3 py-2 rounded-lg"
                     @click="goToSessions">
               Sessions
             </button>
-            <button class="text-left px-3 py-2 hover:bg-gray-100 rounded-lg text-red-600"
+            <button class="user-menu-item user-menu-item--danger text-left px-3 py-2 rounded-lg"
                     @click="logout">
               Logout
             </button>
@@ -192,8 +192,6 @@ async function getUserAndLogin() {
 </script>
 
 <style scoped>
-@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@600;700&display=swap');
-
 .header {
   width: calc(100% + 2 * var(--page-padding));
   margin: calc(-1 * var(--page-padding)) calc(-1 * var(--page-padding)) 0;
@@ -225,5 +223,22 @@ async function getUserAndLogin() {
   font-weight: 700;
   color: white;
   letter-spacing: 0.5px;
+}
+
+.user-menu {
+  background-color: var(--gray-2);
+  border: 1px solid var(--gray-4);
+}
+
+.user-menu-item {
+  color: var(--text);
+}
+
+.user-menu-item:hover {
+  background-color: var(--gray-4);
+}
+
+.user-menu-item--danger {
+  color: #e57373;
 }
 </style>

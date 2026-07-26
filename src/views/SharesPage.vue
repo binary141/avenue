@@ -70,14 +70,17 @@
 
           <AppButton
             @click="copyLink(share.token, 'file')"
-            class="px-3 py-1 bg-blue-600 text-white text-sm rounded shrink-0"
+            size="sm"
+            class="shrink-0"
           >
             {{ copied[share.token] ? '✓ Copied' : 'Copy Link' }}
           </AppButton>
 
           <AppButton
             @click="revoke(share.token)"
-            class="px-3 py-1 bg-red-100 text-red-600 text-sm rounded shrink-0"
+            variant="danger-subtle"
+            size="sm"
+            class="shrink-0"
           >
             Revoke
           </AppButton>
@@ -118,14 +121,17 @@
 
           <AppButton
             @click="copyLink(share.token, 'folder')"
-            class="px-3 py-1 bg-blue-600 text-white text-sm rounded shrink-0"
+            size="sm"
+            class="shrink-0"
           >
             {{ copied[share.token] ? '✓ Copied' : 'Copy Link' }}
           </AppButton>
 
           <AppButton
             @click="revokeFolderShare(share.token)"
-            class="px-3 py-1 bg-red-100 text-red-600 text-sm rounded shrink-0"
+            variant="danger-subtle"
+            size="sm"
+            class="shrink-0"
           >
             Revoke
           </AppButton>
@@ -156,7 +162,9 @@
 
           <AppButton
             @click="revoke(share.token)"
-            class="px-3 py-1 bg-red-100 text-red-600 text-sm rounded shrink-0"
+            variant="danger-subtle"
+            size="sm"
+            class="shrink-0"
           >
             Delete
           </AppButton>
@@ -182,7 +190,9 @@
 
           <AppButton
             @click="revokeFolderShare(share.token)"
-            class="px-3 py-1 bg-red-100 text-red-600 text-sm rounded shrink-0"
+            variant="danger-subtle"
+            size="sm"
+            class="shrink-0"
           >
             Delete
           </AppButton>

@@ -1,7 +1,8 @@
 <template>
   <div v-if="totalPages > 1" class="flex flex-row items-center justify-center gap-3 pagination-controls">
     <AppButton
-      class="px-3 py-1 text-sm"
+      variant="secondary"
+      size="sm"
       :disabled="page <= 1"
       @click="$emit('update:page', page - 1)"
     >
@@ -13,7 +14,8 @@
     </span>
 
     <AppButton
-      class="px-3 py-1 text-sm"
+      variant="secondary"
+      size="sm"
       :disabled="page >= totalPages"
       @click="$emit('update:page', page + 1)"
     >

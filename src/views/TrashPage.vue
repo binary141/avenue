@@ -6,7 +6,8 @@
       <AppButton
         v-if="items.length > 0"
         @click="confirmEmptyTrash"
-        class="px-3 py-2 bg-red-600 text-white rounded text-sm"
+        variant="danger"
+        size="sm"
         :disabled="emptying"
       >
         {{ emptying ? 'Emptying…' : 'Empty Trash' }}
@@ -54,11 +55,11 @@
         {{ selectedFiles.size }} files
       </span>
 
-      <AppButton class="bg-blue-600 text-white px-3 py-1" @click="bulkRestore">
+      <AppButton size="sm" @click="bulkRestore">
         Restore Selected
       </AppButton>
 
-      <AppButton class="modal-secondary-button px-3 py-1" @click="clearSelection">
+      <AppButton variant="secondary" size="sm" @click="clearSelection">
         Clear
       </AppButton>
     </div>
@@ -121,14 +122,17 @@
 
           <AppButton
             @click="item.type === 'folder' ? restoreFolder(item.uuid) : restoreFile(item.uuid)"
-            class="px-3 py-1 bg-blue-600 text-white text-sm rounded shrink-0"
+            size="sm"
+            class="shrink-0"
           >
             Restore
           </AppButton>
 
           <AppButton
             @click="item.type === 'folder' ? confirmPurgeFolder(item) : confirmPurgeFile(item)"
-            class="px-3 py-1 bg-red-100 text-red-600 text-sm rounded shrink-0"
+            variant="danger-subtle"
+            size="sm"
+            class="shrink-0"
           >
             Delete Forever
           </AppButton>
@@ -441,8 +445,4 @@ onMounted(loadTrash);
   border: 1px solid var(--gray-4);
 }
 
-.modal-secondary-button {
-  background-color: var(--gray-4);
-  color: var(--text);
-}
 </style>

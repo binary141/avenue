@@ -6,15 +6,14 @@
 
       <AppButton
         @click="openCreateModal"
-        class="px-4 py-2 bg-blue-600 text-grey rounded"
       >
         Create User
       </AppButton>
     </div>
 
     <!-- Users Table -->
-    <table class="min-w-full border border-grey-300 rounded-lg overflow-hidden">
-      <thead class="bg-grey-100 border-b border-grey-300">
+    <table class="admin-table min-w-full rounded-lg overflow-hidden">
+      <thead class="admin-table-head">
         <tr>
           <th class="px-4 py-2 text-left sortable-header" @click="toggleSort('id')">ID{{ sortIndicator('id') }}</th>
           <th class="px-4 py-2 text-left sortable-header" @click="toggleSort('firstName')">First Name{{ sortIndicator('firstName') }}</th>
@@ -31,7 +30,7 @@
         <tr
           v-for="user in sortedUsersList"
           :key="user.id"
-          class="odd:bg-grey-100 even:bg-grey-50 border-b"
+          class="admin-table-row"
         >
           <td class="px-4 py-2">{{ user.id }}</td>
           <td class="px-4 py-2">{{ user.firstName }}</td>
@@ -54,7 +53,8 @@
           </td>
           <td class="px-4 py-2">
             <AppButton
-              class="px-3 py-1 bg-grey-200 rounded"
+              variant="secondary"
+              size="sm"
               @click="() => { emit('close-menu'); openEditModal(user) }"
             >
               Edit
@@ -69,8 +69,8 @@
       v-if="showModal"
       class="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
     >
-      <div class="bg-[#3A3F78] p-6 rounded-lg w-96">
-        <h2 class="text-lg font-semibold mb-4 text-grey-700">
+      <div class="admin-modal p-6 rounded-lg w-96">
+        <h2 class="text-lg font-semibold mb-4">
           {{ modalMode === 'create' ? 'Create User' : 'Edit User' }}
         </h2>
 
@@ -102,7 +102,7 @@
               id="isAdmin"
               type="checkbox"
               v-model="form.isAdmin"
-              class="h-4 w-4 rounded border-grey-300"
+              class="admin-checkbox h-4 w-4 rounded"
             />
             <label for="isAdmin" class="text-sm font-medium">
               Administrator
@@ -141,7 +141,7 @@
               id="sendEmail"
               type="checkbox"
               v-model="form.sendEmail"
-              class="h-4 w-4 rounded border-grey-300"
+              class="admin-checkbox h-4 w-4 rounded"
             />
             <label for="sendEmail" class="text-sm font-medium">
               Send invite email to set password
@@ -181,7 +181,9 @@
             <AppButton
               type="button"
               :disabled="sendingResetEmail"
-              class="w-full px-3 py-2 bg-grey-200 rounded text-sm"
+              variant="secondary"
+              size="sm"
+              class="w-full"
               @click="sendResetEmail"
             >
               {{ sendingResetEmail ? 'Sending…' : 'Send Password Reset Email' }}
@@ -193,7 +195,8 @@
           <div class="flex justify-end gap-3 pt-4">
             <AppButton
               type="button"
-              class="px-3 py-2 bg-grey-200 rounded"
+              variant="secondary"
+              size="sm"
               @click="closeModal"
             >
               Cancel
@@ -201,7 +204,7 @@
 
             <AppButton
               type="submit"
-              class="px-3 py-2 bg-blue-600 text-grey rounded"
+              size="sm"
             >
               Save
             </AppButton>
@@ -438,6 +441,23 @@ function resetForm() {
 </script>
 
 <style scoped>
+.admin-table {
+  border: 1px solid var(--gray-4);
+}
+
+.admin-table-head {
+  background-color: var(--gray-2);
+  border-bottom: 1px solid var(--gray-4);
+}
+
+.admin-table-row {
+  border-bottom: 1px solid var(--gray-4);
+}
+
+.admin-table-row:nth-child(odd) {
+  background-color: var(--gray-2);
+}
+
 .sortable-header {
   cursor: pointer;
   user-select: none;
@@ -445,14 +465,34 @@ function resetForm() {
 }
 
 .sortable-header:hover {
-  background-color: var(--gray-4, rgba(0, 0, 0, 0.05));
+  background-color: var(--gray-4);
+}
+
+.admin-modal {
+  background-color: var(--gray-2);
+  color: var(--text);
+}
+
+.admin-checkbox {
+  accent-color: var(--primary-active);
 }
 
 .input {
   width: 100%;
-  border: 1px solid #d1d5db;
+  background-color: var(--gray-4);
+  color: var(--text);
+  border: none;
   border-radius: 6px;
   padding: 0.5rem 0.75rem;
+}
+
+.admin-modal select {
+  background-color: var(--gray-4);
+  color: var(--text);
+  border: none;
+  border-radius: 6px;
+  padding: 8px;
+  height: auto;
 }
 </style>
 

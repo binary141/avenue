@@ -20,7 +20,9 @@
         <AppButton
           v-if="sessions.length > 1"
           @click="revokeOthers"
-          class="px-3 py-1 bg-red-100 text-red-600 text-sm rounded shrink-0"
+          variant="danger-subtle"
+          size="sm"
+          class="shrink-0"
         >
           Log Out Other Sessions
         </AppButton>
@@ -57,7 +59,9 @@
           <AppButton
             v-if="!session.isCurrent"
             @click="revoke(session.id)"
-            class="px-3 py-1 bg-red-100 text-red-600 text-sm rounded shrink-0"
+            variant="danger-subtle"
+          size="sm"
+          class="shrink-0"
           >
             Log Out
           </AppButton>

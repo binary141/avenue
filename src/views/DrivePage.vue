@@ -5,7 +5,6 @@
 
       <AppButton
         @click="() => { show = true; $emit('close-menu')}"
-        class="px-4 py-2 bg-blue-600 text-white rounded"
       >
         Create Folder
       </AppButton>
@@ -32,16 +31,17 @@
 
         <div class="flex justify-end gap-3 mt-6">
           <AppButton
+            variant="secondary"
+            size="sm"
             @click="show = false"
-            class="px-3 py-2 modal-secondary-button rounded"
           >
             Cancel
           </AppButton>
 
           <AppButton
             type="submit"
+            size="sm"
             @click="createFolder"
-            class="px-3 py-2 bg-blue-600 text-white rounded"
           >
             Create
           </AppButton>
@@ -75,7 +75,7 @@
       </span>
 
       <AppButton
-        class="bg-blue-600 text-white px-3 py-1"
+        size="sm"
         :disabled="selectedFiles.size === 0 && selectedFolders.size === 0"
         @click="openBulkMoveModal"
       >
@@ -83,7 +83,7 @@
       </AppButton>
 
       <AppButton
-        class="bg-blue-600 text-white px-3 py-1"
+        size="sm"
         :disabled="!canDownloadSelection"
         :title="downloadDisabledReason"
         @click="downloadSelectedFiles"
@@ -91,11 +91,11 @@
         Download
       </AppButton>
 
-      <AppButton class="bg-red-600 text-white px-3 py-1" @click="bulkDelete">
+      <AppButton variant="danger" size="sm" @click="bulkDelete">
         Delete
       </AppButton>
 
-      <AppButton class="modal-secondary-button px-3 py-1" @click="clearSelection">
+      <AppButton variant="secondary" size="sm" @click="clearSelection">
         Clear
       </AppButton>
     </div>
@@ -169,7 +169,7 @@
             v-for="(item, index) in filteredItems"
             :key="item.type + '-' + item.uuid"
             class="card flex flex-row items-center gap-3 p-3"
-            :class="[item.type === 'folder' ? 'folder-item' : 'file-item', { 'item--selected': isItemSelected(item) }]"
+            :class="[item.type === 'folder' ? 'folder-item' : 'file-item', { 'item--selected': isItemSelected(item), 'item--menu-open': openMenuId === item.type + '-' + item.uuid }]"
           >
             <!-- Checkbox -->
             <input
@@ -193,7 +193,7 @@
               </span>
 
               <!-- Actions -->
-              <span class="row-actions flex items-center gap-1">
+              <span class="row-actions flex items-center gap-1" :class="{ 'row-actions--menu-open': openMenuId === 'folder-' + item.uuid }">
                 <span class="row-menu-wrap">
                   <span class="icon-btn" title="More" @click.stop="toggleRowMenu('folder-' + item.uuid)">⋮</span>
                   <div v-if="openMenuId === 'folder-' + item.uuid" class="row-menu" @click.stop>
@@ -230,7 +230,7 @@
               </span>
               <span class="file-size">{{ formatFileSize(item.file_size) }}</span>
 
-              <span class="row-actions flex items-center gap-1">
+              <span class="row-actions flex items-center gap-1" :class="{ 'row-actions--menu-open': openMenuId === 'file-' + item.uuid }">
                 <span class="icon-btn" title="Download">
                   <a @click.stop :href="getDownloadURL(item.uuid)" :download="item.name">⬇️</a>
                 </span>
@@ -296,8 +296,8 @@
           placeholder="Enter new name"
         />
         <div class="flex justify-end gap-2">
-          <AppButton @click="closeFileModal" class="px-3 py-2 modal-secondary-button rounded text-sm">Cancel</AppButton>
-          <AppButton @click="saveFileName" class="px-3 py-2 bg-blue-600 text-white rounded text-sm">Save</AppButton>
+          <AppButton @click="closeFileModal" variant="secondary" size="sm">Cancel</AppButton>
+          <AppButton @click="saveFileName" size="sm">Save</AppButton>
         </div>
         <button
           @click="closeFileModal"
@@ -322,8 +322,8 @@
           placeholder="Enter new name"
         />
         <div class="flex justify-end gap-2">
-          <AppButton @click="closeFolderModal" class="px-3 py-2 modal-secondary-button rounded text-sm">Cancel</AppButton>
-          <AppButton @click="saveFolderName" class="px-3 py-2 bg-blue-600 text-white rounded text-sm">Save</AppButton>
+          <AppButton @click="closeFolderModal" variant="secondary" size="sm">Cancel</AppButton>
+          <AppButton @click="saveFolderName" size="sm">Save</AppButton>
         </div>
         <button
           @click="closeFolderModal"
@@ -371,10 +371,10 @@
                 <span class="text-xs share-modal-muted whitespace-nowrap shrink-0">
                   {{ link.expires_at ? formatExpiry(link.expires_at) : 'Never expires' }}
                 </span>
-                <AppButton @click="copyShareToken(link.token)" class="px-2 py-1 bg-blue-600 text-white text-xs rounded shrink-0">
+                <AppButton @click="copyShareToken(link.token)" size="sm" class="shrink-0">
                   {{ shareTokenCopied[link.token] ? '✓' : 'Copy' }}
                 </AppButton>
-                <AppButton @click="revokeShareLink(link.token)" class="px-2 py-1 revoke-button text-xs rounded shrink-0">
+                <AppButton @click="revokeShareLink(link.token)" variant="danger-subtle" size="sm" class="shrink-0">
                   Revoke
                 </AppButton>
               </div>
@@ -405,8 +405,8 @@
           </div>
 
           <div class="flex justify-end gap-2">
-            <AppButton @click="closeShareModal" class="px-3 py-2 modal-secondary-button rounded text-sm">Close</AppButton>
-            <AppButton @click="generateShareLink" :disabled="shareGenerating" class="px-3 py-2 bg-blue-600 text-white rounded text-sm">
+            <AppButton @click="closeShareModal" variant="secondary" size="sm">Close</AppButton>
+            <AppButton @click="generateShareLink" :disabled="shareGenerating" size="sm">
               {{ shareGenerating ? 'Generating…' : 'Generate Link' }}
             </AppButton>
           </div>
@@ -452,10 +452,10 @@
                 <span class="text-xs share-modal-muted whitespace-nowrap shrink-0">
                   {{ link.expires_at ? formatExpiry(link.expires_at) : 'Never expires' }}
                 </span>
-                <AppButton @click="copyFolderShareToken(link.token)" class="px-2 py-1 bg-blue-600 text-white text-xs rounded shrink-0">
+                <AppButton @click="copyFolderShareToken(link.token)" size="sm" class="shrink-0">
                   {{ folderShareTokenCopied[link.token] ? '✓' : 'Copy' }}
                 </AppButton>
-                <AppButton @click="revokeFolderShareLink(link.token)" class="px-2 py-1 revoke-button text-xs rounded shrink-0">
+                <AppButton @click="revokeFolderShareLink(link.token)" variant="danger-subtle" size="sm" class="shrink-0">
                   Revoke
                 </AppButton>
               </div>
@@ -506,8 +506,8 @@
           </div>
 
           <div class="flex justify-end gap-2">
-            <AppButton @click="closeFolderShareModal" class="px-3 py-2 modal-secondary-button rounded text-sm">Close</AppButton>
-            <AppButton @click="generateFolderShareLink" :disabled="folderShareGenerating" class="px-3 py-2 bg-blue-600 text-white rounded text-sm">
+            <AppButton @click="closeFolderShareModal" variant="secondary" size="sm">Close</AppButton>
+            <AppButton @click="generateFolderShareLink" :disabled="folderShareGenerating" size="sm">
               {{ folderShareGenerating ? 'Generating…' : 'Generate Link' }}
             </AppButton>
           </div>
@@ -557,8 +557,8 @@
         </div>
 
         <div class="flex justify-end gap-2 mt-4">
-          <AppButton @click="closeMoveModal" class="px-3 py-2 modal-secondary-button rounded text-sm">Cancel</AppButton>
-          <AppButton @click="confirmMove" :disabled="moving || moveLoading" class="px-3 py-2 bg-blue-600 text-white rounded text-sm">
+          <AppButton @click="closeMoveModal" variant="secondary" size="sm">Cancel</AppButton>
+          <AppButton @click="confirmMove" :disabled="moving || moveLoading" size="sm">
             {{ moving ? 'Moving…' : 'Move Here' }}
           </AppButton>
         </div>
@@ -1469,7 +1469,8 @@ onUnmounted(() => {
 }
 
 .folder-item:hover,
-.file-item:hover {
+.file-item:hover,
+.item--menu-open {
   background-color: var(--gray-3);
 }
 
@@ -1530,7 +1531,8 @@ onUnmounted(() => {
 
 .folder-item:hover .row-actions,
 .file-item:hover .row-actions,
-.item--selected .row-actions {
+.item--selected .row-actions,
+.row-actions--menu-open {
   opacity: 1;
 }
 
@@ -1701,16 +1703,6 @@ onUnmounted(() => {
 .share-link-row {
   background-color: var(--gray);
   border: 1px solid var(--gray-4);
-}
-
-.revoke-button {
-  background-color: rgba(229, 115, 115, 0.15);
-  color: #e57373;
-}
-
-.modal-secondary-button {
-  background-color: var(--gray-4);
-  color: var(--text);
 }
 
 .move-picker-breadcrumbs {

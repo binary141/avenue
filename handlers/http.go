@@ -33,6 +33,10 @@ var (
 	COOKIESECURE = APPENV == "production"
 )
 
+// SessionRollingWindow is how long a session (and its cookies) stays valid
+// after the most recent authenticated request.
+const SessionRollingWindow = 15 * time.Minute
+
 // FS returns the server's jailed filesystem, for callers outside the
 // handlers package (e.g. the trash sweeper) that need to remove blobs.
 func (s *Server) FS() afero.Fs {
@@ -171,7 +175,7 @@ func (s *Server) sessionCheck(c *gin.Context) {
 		return
 	}
 
-	session.ExpiresAt = time.Now().Add(15 * time.Minute).Unix()
+	session.ExpiresAt = time.Now().Add(SessionRollingWindow).Unix()
 
 	// update the session to be a rolling timeout
 	_, err := db.UpdateSession(session)
@@ -179,6 +183,12 @@ func (s *Server) sessionCheck(c *gin.Context) {
 		respond(c, http.StatusInternalServerError, errors.New("could not update session"))
 		return
 	}
+
+	// keep the cookies' Max-Age in sync with the rolling session window,
+	// otherwise the browser drops them well before the session expires
+	maxAge := int(SessionRollingWindow.Seconds())
+	c.SetCookie(string(shared.USERCOOKIENAME), fmt.Sprint(session.UserId), maxAge, "/", COOKIEDOMAIN, COOKIESECURE, true)
+	c.SetCookie(string(shared.SESSIONCOOKIENAME), parts[1], maxAge, "/", COOKIEDOMAIN, COOKIESECURE, true)
 
 	rc := c.Request.Context()
 

@@ -61,8 +61,9 @@ func (s *Server) Login(c *gin.Context) {
 		return
 	}
 
-	c.SetCookie(string(shared.USERCOOKIENAME), fmt.Sprintf("%d", u.ID), 600, "/", COOKIEDOMAIN, COOKIESECURE, true)
-	c.SetCookie(string(shared.SESSIONCOOKIENAME), session.SessionID, 600, "/", COOKIEDOMAIN, COOKIESECURE, true)
+	maxAge := int(SessionRollingWindow.Seconds())
+	c.SetCookie(string(shared.USERCOOKIENAME), fmt.Sprintf("%d", u.ID), maxAge, "/", COOKIEDOMAIN, COOKIESECURE, true)
+	c.SetCookie(string(shared.SESSIONCOOKIENAME), session.SessionID, maxAge, "/", COOKIEDOMAIN, COOKIESECURE, true)
 
 	c.JSON(http.StatusOK, sdk.V1LoginResponse{
 		Message:   "OK",

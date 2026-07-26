@@ -130,6 +130,7 @@
           <option value="name">Name</option>
           <option value="size">Size</option>
           <option value="date">Date</option>
+          <option value="type">Type (grouped)</option>
         </select>
         <button
           type="button"
@@ -703,7 +704,7 @@ const folderName = ref('');
 
 // ----- Search / Sort -----
 const searchQuery = ref('')
-const sortKey = ref<'name' | 'size' | 'date'>('name')
+const sortKey = ref<'name' | 'size' | 'date' | 'type'>('type')
 const sortDir = ref<'asc' | 'desc'>('asc')
 
 // Folder search stays client-side (folders aren't covered by the search API).
@@ -738,6 +739,13 @@ watch([searchQuery, currentFolderId], ([query, folderId]) => {
 })
 
 function compareItems(a: FolderItem, b: FolderItem): number {
+  if (sortKey.value === 'type') {
+    // Folders before files regardless of direction, matching the server's
+    // "type" sort; name breaks ties within each group in the chosen direction.
+    if (a.type !== b.type) return a.type === 'folder' ? -1 : 1
+    return a.name.localeCompare(b.name) * (sortDir.value === 'asc' ? 1 : -1)
+  }
+
   let cmp = 0
   if (sortKey.value === 'name') cmp = a.name.localeCompare(b.name)
   else if (sortKey.value === 'size') cmp = a.file_size - b.file_size

@@ -40,7 +40,8 @@ func scanFolderItems(rows *sql.Rows) ([]sdk.FolderItem, error) {
 // were previously two separately-paginated queries (ListChildFolder,
 // ListChildFile) so a page boundary can't split inconsistently between the
 // two types. sortBy must already be validated by the caller to be one of
-// "name", "file_size", or "created_at"; sortBy/sortDir are interpolated
+// "name", "file_size", "created_at", or the folders-first grouping
+// expression used for the "type" sort; sortBy/sortDir are interpolated
 // directly since placeholders can't parameterize ORDER BY, and sortDir is a
 // typed sdk.SortDirection so callers can't pass arbitrary strings. A
 // trailing "uuid ASC" tiebreak keeps LIMIT/OFFSET pagination stable when the

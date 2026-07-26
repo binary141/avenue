@@ -5,7 +5,7 @@ import "net/http"
 // Ping checks that the server is reachable.
 func (c *Client) Ping(h http.Header) (MessageResponse, error) {
 	var out MessageResponse
-	err := c.request(h, http.MethodGet, "/v1/ping", nil, &out)
+	err := c.request(h, http.MethodGet, "/ping", nil, &out)
 	return out, err
 }
 

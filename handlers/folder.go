@@ -3,7 +3,6 @@ package handlers
 import (
 	"database/sql"
 	"errors"
-	"fmt"
 	"net/http"
 	"slices"
 	"strconv"
@@ -167,7 +166,7 @@ func (s *Server) PurgeFolder(c *gin.Context) {
 	}
 
 	for _, f := range purgedFiles {
-		if err := s.fs.Remove(fmt.Sprintf("/%d/%s", f.CreatedBy, f.UUID)); err != nil && !errors.Is(err, afero.ErrFileNotFound) {
+		if err := s.fs.Remove(shared.BlobPath(f.UUID)); err != nil && !errors.Is(err, afero.ErrFileNotFound) {
 			logger.Errorf("purge folder: remove file blob %s: %v", f.UUID, err)
 		}
 		if err := db.UpdateUsage(f.CreatedBy, -f.FileSize); err != nil {

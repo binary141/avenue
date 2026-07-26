@@ -36,13 +36,15 @@ func CreateFile(file *sdk.File) (string, error) {
 
 func GetFileByID(id, creatorID string) (*sdk.File, error) {
 	var f sdk.File
+	var checksum sql.NullString
 	err := DB.QueryRow(`
-		SELECT id, uuid, name, extension, mime_type, file_size, created_by, created_at
+		SELECT id, uuid, name, extension, mime_type, file_size, checksum, created_by, created_at
 		FROM files WHERE uuid=$1 AND created_by=$2::BIGINT AND deleted_at IS NULL
-	`, id, creatorID).Scan(&f.ID, &f.UUID, &f.Name, &f.Extension, &f.MimeType, &f.FileSize, &f.CreatedBy, &f.CreatedAt)
+	`, id, creatorID).Scan(&f.ID, &f.UUID, &f.Name, &f.Extension, &f.MimeType, &f.FileSize, &checksum, &f.CreatedBy, &f.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
+	f.Checksum = checksum.String
 	return &f, nil
 }
 
@@ -54,37 +56,40 @@ func GetFileByID(id, creatorID string) (*sdk.File, error) {
 // parent_id — UpdateFile treats an empty Parent as "move to root".
 func GetFileByIDForUser(id, userID string) (*sdk.File, error) {
 	var f sdk.File
-	var parent sql.NullString
+	var parent, checksum sql.NullString
 	err := DB.QueryRow(`
-		SELECT f.id, f.uuid, f.name, f.extension, f.mime_type, f.file_size, f.created_by, f.created_at, p.uuid
+		SELECT f.id, f.uuid, f.name, f.extension, f.mime_type, f.file_size, f.checksum, f.created_by, f.created_at, p.uuid
 		FROM files f
 		LEFT JOIN folders p ON p.id = f.parent_id
 		WHERE f.uuid=$1 AND f.deleted_at IS NULL
 		  AND (f.created_by=$2::BIGINT
 		       OR f.parent_id IN (SELECT id FROM folders WHERE owner_id=$2::BIGINT))
-	`, id, userID).Scan(&f.ID, &f.UUID, &f.Name, &f.Extension, &f.MimeType, &f.FileSize, &f.CreatedBy, &f.CreatedAt, &parent)
+	`, id, userID).Scan(&f.ID, &f.UUID, &f.Name, &f.Extension, &f.MimeType, &f.FileSize, &checksum, &f.CreatedBy, &f.CreatedAt, &parent)
 	if err != nil {
 		return nil, err
 	}
 	f.Parent = parent.String
+	f.Checksum = checksum.String
 	return &f, nil
 }
 
 func GetFileByIDPublic(id string) (*sdk.File, error) {
 	var f sdk.File
+	var checksum sql.NullString
 	err := DB.QueryRow(`
-		SELECT id, uuid, name, extension, mime_type, file_size, created_by, created_at
+		SELECT id, uuid, name, extension, mime_type, file_size, checksum, created_by, created_at
 		FROM files WHERE uuid=$1 AND deleted_at IS NULL
-	`, id).Scan(&f.ID, &f.UUID, &f.Name, &f.Extension, &f.MimeType, &f.FileSize, &f.CreatedBy, &f.CreatedAt)
+	`, id).Scan(&f.ID, &f.UUID, &f.Name, &f.Extension, &f.MimeType, &f.FileSize, &checksum, &f.CreatedBy, &f.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
+	f.Checksum = checksum.String
 	return &f, nil
 }
 
 func ListFiles(creatorID string) ([]sdk.File, error) {
 	rows, err := DB.Query(`
-		SELECT id, uuid, name, extension, mime_type, file_size, created_by, created_at
+		SELECT id, uuid, name, extension, mime_type, file_size, checksum, created_by, created_at
 		FROM files WHERE created_by=$1::BIGINT AND deleted_at IS NULL
 	`, creatorID)
 	if err != nil {
@@ -95,9 +100,11 @@ func ListFiles(creatorID string) ([]sdk.File, error) {
 	var files []sdk.File
 	for rows.Next() {
 		var f sdk.File
-		if err := rows.Scan(&f.ID, &f.UUID, &f.Name, &f.Extension, &f.MimeType, &f.FileSize, &f.CreatedBy, &f.CreatedAt); err != nil {
+		var checksum sql.NullString
+		if err := rows.Scan(&f.ID, &f.UUID, &f.Name, &f.Extension, &f.MimeType, &f.FileSize, &checksum, &f.CreatedBy, &f.CreatedAt); err != nil {
 			return nil, err
 		}
+		f.Checksum = checksum.String
 		files = append(files, f)
 	}
 	return files, rows.Err()
@@ -194,7 +201,7 @@ func PurgeFileForUser(id, userID string) (*sdk.File, error) {
 // they come back into view when that folder is restored.
 func ListTrashedFiles(userID string) ([]sdk.File, error) {
 	rows, err := DB.Query(`
-		SELECT f.id, f.uuid, f.name, f.extension, f.mime_type, f.file_size, f.created_by, f.created_at, f.deleted_at
+		SELECT f.id, f.uuid, f.name, f.extension, f.mime_type, f.file_size, f.checksum, f.created_by, f.created_at, f.deleted_at
 		FROM files f
 		LEFT JOIN folders p ON p.id = f.parent_id
 		WHERE f.created_by = $1::BIGINT AND f.deleted_at IS NOT NULL
@@ -209,9 +216,11 @@ func ListTrashedFiles(userID string) ([]sdk.File, error) {
 	var files []sdk.File
 	for rows.Next() {
 		var f sdk.File
-		if err := rows.Scan(&f.ID, &f.UUID, &f.Name, &f.Extension, &f.MimeType, &f.FileSize, &f.CreatedBy, &f.CreatedAt, &f.DeletedAt); err != nil {
+		var checksum sql.NullString
+		if err := rows.Scan(&f.ID, &f.UUID, &f.Name, &f.Extension, &f.MimeType, &f.FileSize, &checksum, &f.CreatedBy, &f.CreatedAt, &f.DeletedAt); err != nil {
 			return nil, err
 		}
+		f.Checksum = checksum.String
 		files = append(files, f)
 	}
 	return files, rows.Err()
@@ -250,7 +259,7 @@ func ListExpiredTrashedFiles(cutoff time.Time) ([]sdk.File, error) {
 // Used by public shared folder endpoints.
 func ListChildFilePublic(parentID string) ([]sdk.File, error) {
 	rows, err := DB.Query(`
-		SELECT id, uuid, name, extension, mime_type, file_size, created_by, created_at
+		SELECT id, uuid, name, extension, mime_type, file_size, checksum, created_by, created_at
 		FROM files
 		WHERE parent_id = (SELECT id FROM folders WHERE uuid = $1) AND deleted_at IS NULL
 	`, parentID)
@@ -262,9 +271,11 @@ func ListChildFilePublic(parentID string) ([]sdk.File, error) {
 	var files []sdk.File
 	for rows.Next() {
 		var f sdk.File
-		if err := rows.Scan(&f.ID, &f.UUID, &f.Name, &f.Extension, &f.MimeType, &f.FileSize, &f.CreatedBy, &f.CreatedAt); err != nil {
+		var checksum sql.NullString
+		if err := rows.Scan(&f.ID, &f.UUID, &f.Name, &f.Extension, &f.MimeType, &f.FileSize, &checksum, &f.CreatedBy, &f.CreatedAt); err != nil {
 			return nil, err
 		}
+		f.Checksum = checksum.String
 		files = append(files, f)
 	}
 	return files, rows.Err()
@@ -286,13 +297,13 @@ func ListChildFile(parentID, ownerID, sortBy string, sortDir sdk.SortDirection) 
 	if parentID == "" {
 		// Root: only files the user themselves created with no parent
 		rows, err = DB.Query(`
-			SELECT id, uuid, name, extension, mime_type, file_size, created_by, created_at
+			SELECT id, uuid, name, extension, mime_type, file_size, checksum, created_by, created_at
 			FROM files WHERE parent_id IS NULL AND created_by=$1::BIGINT AND deleted_at IS NULL
 		`+orderBy, ownerID)
 	} else {
 		// Folder: all files inside a folder owned by this user, regardless of uploader
 		rows, err = DB.Query(`
-			SELECT id, uuid, name, extension, mime_type, file_size, created_by, created_at
+			SELECT id, uuid, name, extension, mime_type, file_size, checksum, created_by, created_at
 			FROM files
 			WHERE parent_id = (SELECT id FROM folders WHERE uuid = $1 AND owner_id = $2::BIGINT) AND deleted_at IS NULL
 		`+orderBy, parentID, ownerID)
@@ -305,9 +316,11 @@ func ListChildFile(parentID, ownerID, sortBy string, sortDir sdk.SortDirection) 
 	var files []sdk.File
 	for rows.Next() {
 		var f sdk.File
-		if err := rows.Scan(&f.ID, &f.UUID, &f.Name, &f.Extension, &f.MimeType, &f.FileSize, &f.CreatedBy, &f.CreatedAt); err != nil {
+		var checksum sql.NullString
+		if err := rows.Scan(&f.ID, &f.UUID, &f.Name, &f.Extension, &f.MimeType, &f.FileSize, &checksum, &f.CreatedBy, &f.CreatedAt); err != nil {
 			return nil, err
 		}
+		f.Checksum = checksum.String
 		files = append(files, f)
 	}
 	return files, rows.Err()
@@ -332,13 +345,13 @@ func SearchChildFiles(parentID, ownerID, namePrefix string) ([]sdk.File, error) 
 
 	if parentID == "" {
 		rows, err = DB.Query(`
-			SELECT id, uuid, name, extension, mime_type, file_size, created_by, created_at
+			SELECT id, uuid, name, extension, mime_type, file_size, checksum, created_by, created_at
 			FROM files
 			WHERE parent_id IS NULL AND created_by=$1::BIGINT AND name LIKE $2 ESCAPE '\' AND deleted_at IS NULL
 		`, ownerID, pattern)
 	} else {
 		rows, err = DB.Query(`
-			SELECT id, uuid, name, extension, mime_type, file_size, created_by, created_at
+			SELECT id, uuid, name, extension, mime_type, file_size, checksum, created_by, created_at
 			FROM files
 			WHERE parent_id = (SELECT id FROM folders WHERE uuid = $1 AND owner_id = $3::BIGINT)
 			  AND name LIKE $2 ESCAPE '\' AND deleted_at IS NULL
@@ -352,9 +365,11 @@ func SearchChildFiles(parentID, ownerID, namePrefix string) ([]sdk.File, error) 
 	var files []sdk.File
 	for rows.Next() {
 		var f sdk.File
-		if err := rows.Scan(&f.ID, &f.UUID, &f.Name, &f.Extension, &f.MimeType, &f.FileSize, &f.CreatedBy, &f.CreatedAt); err != nil {
+		var checksum sql.NullString
+		if err := rows.Scan(&f.ID, &f.UUID, &f.Name, &f.Extension, &f.MimeType, &f.FileSize, &checksum, &f.CreatedBy, &f.CreatedAt); err != nil {
 			return nil, err
 		}
+		f.Checksum = checksum.String
 		files = append(files, f)
 	}
 	return files, rows.Err()
@@ -362,11 +377,50 @@ func SearchChildFiles(parentID, ownerID, namePrefix string) ([]sdk.File, error) 
 
 func UpdateFile(f sdk.File) error {
 	_, err := DB.Exec(`
-		UPDATE files SET name=$2, extension=$3, mime_type=$4, file_size=$5,
+		UPDATE files SET name=$2, extension=$3, mime_type=$4, file_size=$5, checksum=$7,
 			parent_id = CASE WHEN $6 = '' THEN NULL
 			                 ELSE (SELECT id FROM folders WHERE uuid = $6)
 			            END
 		WHERE uuid=$1
-	`, f.UUID, f.Name, f.Extension, f.MimeType, f.FileSize, f.Parent)
+	`, f.UUID, f.Name, f.Extension, f.MimeType, f.FileSize, f.Parent, sql.NullString{String: f.Checksum, Valid: f.Checksum != ""})
+	return err
+}
+
+// FileBlobRef is the minimal info needed to locate and reshard a file's blob
+// on disk. Used by blob-storage maintenance tasks (see cmd/reshard-blobs)
+// rather than normal request handling.
+type FileBlobRef struct {
+	UUID      string
+	CreatedBy int64
+	FileSize  int64
+	Checksum  string
+}
+
+// ListAllFileBlobRefs returns every file row, including trashed ones whose
+// blob hasn't been purged yet, for blob-storage maintenance tasks.
+func ListAllFileBlobRefs() ([]FileBlobRef, error) {
+	rows, err := DB.Query(`SELECT uuid, created_by, file_size, checksum FROM files`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var refs []FileBlobRef
+	for rows.Next() {
+		var ref FileBlobRef
+		var checksum sql.NullString
+		if err := rows.Scan(&ref.UUID, &ref.CreatedBy, &ref.FileSize, &checksum); err != nil {
+			return nil, err
+		}
+		ref.Checksum = checksum.String
+		refs = append(refs, ref)
+	}
+	return refs, rows.Err()
+}
+
+// SetFileChecksum backfills the checksum for a single file by uuid. Used by
+// blob-storage maintenance tasks.
+func SetFileChecksum(uuid, checksum string) error {
+	_, err := DB.Exec(`UPDATE files SET checksum=$2 WHERE uuid=$1`, uuid, checksum)
 	return err
 }

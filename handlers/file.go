@@ -3,13 +3,14 @@ package handlers
 import (
 	"archive/zip"
 	"bytes"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
 	"math"
 	"net/http"
-	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -24,21 +25,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/afero"
 )
-
-func ensureDir(fs afero.Fs, path string) error {
-	exists, err := afero.DirExists(fs, path)
-	if err != nil {
-		return err
-	}
-	if !exists {
-		err := fs.Mkdir(path, os.ModePerm)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
 
 func (s *Server) Upload(c *gin.Context) {
 	userID, err := shared.GetUserIDFromContext(c.Request.Context())
@@ -97,15 +83,6 @@ func (s *Server) Upload(c *gin.Context) {
 		maxFileSize,
 	)
 
-	err = ensureDir(s.fs, fmt.Sprintf("/%s", userID))
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-			Message: "could not ensure dir exists",
-			Error:   err.Error(),
-		})
-		return
-	}
-
 	mr, err := c.Request.MultipartReader()
 	if err != nil {
 		c.JSON(http.StatusBadRequest, sdk.MessageResponse{
@@ -121,6 +98,7 @@ func (s *Server) Upload(c *gin.Context) {
 	var fileID string
 	var fileSeen bool
 	var createdAt time.Time
+	var checksum string
 
 	contentType := "application/octet-stream" // will be overwritten with the actual content type once we start streaming the file data
 
@@ -187,8 +165,16 @@ func (s *Server) Upload(c *gin.Context) {
 				return
 			}
 
+			if err := shared.EnsureBlobDir(s.fs, fileID); err != nil {
+				c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
+					Message: "could not ensure dir exists",
+					Error:   err.Error(),
+				})
+				return
+			}
+
 			// Create destination file
-			dstPath := fmt.Sprintf("/%s/%s", userID, fileID)
+			dstPath := shared.BlobPath(fileID)
 			dst, err := s.fs.Create(dstPath)
 			if err != nil {
 				deleteErr := db.DeleteFile(fileID, userID)
@@ -208,8 +194,11 @@ func (s *Server) Upload(c *gin.Context) {
 				return
 			}
 
+			hasher := sha256.New()
+			mw := io.MultiWriter(dst, hasher)
+
 			r := bytes.NewReader(buf)
-			written, err := io.Copy(dst, r)
+			written, err := io.Copy(mw, r)
 			if err != nil {
 				dst.Close()
 				_ = s.fs.Remove(dstPath)
@@ -231,7 +220,7 @@ func (s *Server) Upload(c *gin.Context) {
 			}
 			total += written
 
-			written, err = io.Copy(dst, part)
+			written, err = io.Copy(mw, part)
 			if err != nil {
 				dst.Close()
 				_ = s.fs.Remove(dstPath)
@@ -272,6 +261,7 @@ func (s *Server) Upload(c *gin.Context) {
 				logger.Errorf("close upload dest: %v", err)
 			}
 			total += written
+			checksum = hex.EncodeToString(hasher.Sum(nil))
 		}
 
 		err = part.Close()
@@ -291,6 +281,7 @@ func (s *Server) Upload(c *gin.Context) {
 	err = db.UpdateFile(sdk.File{
 		UUID:      fileID,
 		FileSize:  total,
+		Checksum:  checksum,
 		Extension: extension,
 		Name:      filename,
 		MimeType:  contentType,
@@ -321,6 +312,7 @@ func (s *Server) Upload(c *gin.Context) {
 		Extension: extension,
 		MimeType:  contentType,
 		FileSize:  total,
+		Checksum:  checksum,
 		Parent:    parent,
 		CreatedBy: userIDInt,
 		CreatedAt: createdAt,
@@ -512,7 +504,7 @@ func (s *Server) GetFile(c *gin.Context) {
 		return
 	}
 
-	path := fmt.Sprintf("/%d/%s", file.CreatedBy, file.UUID)
+	path := shared.BlobPath(file.UUID)
 	fileData, err := s.fs.Open(path)
 	if err != nil {
 		if errors.Is(err, afero.ErrFileNotFound) {
@@ -623,7 +615,7 @@ func (s *Server) DownloadFilesZip(c *gin.Context) {
 
 	names := make(map[string]int)
 	for _, file := range files {
-		path := fmt.Sprintf("/%d/%s", file.CreatedBy, file.UUID)
+		path := shared.BlobPath(file.UUID)
 		fileData, err := s.fs.Open(path)
 		if err != nil {
 			logger.Errorf("error opening file %s for zip download: %s", file.UUID, err.Error())
@@ -693,7 +685,7 @@ func (s *Server) downloadFolderZip(c *gin.Context, userID, folderID string) {
 
 	names := make(map[string]int)
 	for _, entry := range entries {
-		path := fmt.Sprintf("/%d/%s", entry.CreatedBy, entry.UUID)
+		path := shared.BlobPath(entry.UUID)
 		fileData, err := s.fs.Open(path)
 		if err != nil {
 			logger.Errorf("error opening file %s for folder zip download: %s", entry.UUID, err.Error())
@@ -824,7 +816,7 @@ func (s *Server) PurgeFile(c *gin.Context) {
 		return
 	}
 
-	if err = s.fs.Remove(fmt.Sprintf("/%d/%s", f.CreatedBy, f.UUID)); err != nil && !errors.Is(err, afero.ErrFileNotFound) {
+	if err = s.fs.Remove(shared.BlobPath(f.UUID)); err != nil && !errors.Is(err, afero.ErrFileNotFound) {
 		logger.Errorf("purge file: remove blob %s: %v", f.UUID, err)
 	}
 
@@ -900,7 +892,7 @@ func (s *Server) EmptyTrash(c *gin.Context) {
 			logger.Errorf("empty trash: purge file %s: %v", f.UUID, err)
 			continue
 		}
-		if err := s.fs.Remove(fmt.Sprintf("/%d/%s", purged.CreatedBy, purged.UUID)); err != nil && !errors.Is(err, afero.ErrFileNotFound) {
+		if err := s.fs.Remove(shared.BlobPath(purged.UUID)); err != nil && !errors.Is(err, afero.ErrFileNotFound) {
 			logger.Errorf("empty trash: remove blob %s: %v", purged.UUID, err)
 		}
 		if err := db.UpdateUsage(purged.CreatedBy, -purged.FileSize); err != nil {
@@ -923,7 +915,7 @@ func (s *Server) EmptyTrash(c *gin.Context) {
 			continue
 		}
 		for _, f := range purgedFiles {
-			if err := s.fs.Remove(fmt.Sprintf("/%d/%s", f.CreatedBy, f.UUID)); err != nil && !errors.Is(err, afero.ErrFileNotFound) {
+			if err := s.fs.Remove(shared.BlobPath(f.UUID)); err != nil && !errors.Is(err, afero.ErrFileNotFound) {
 				logger.Errorf("empty trash: remove blob %s: %v", f.UUID, err)
 			}
 			if err := db.UpdateUsage(f.CreatedBy, -f.FileSize); err != nil {

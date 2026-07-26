@@ -13,6 +13,7 @@ type File struct {
 	Extension string     `json:"extension"`
 	MimeType  string     `json:"mimeType"`
 	FileSize  int64      `json:"file_size"`
+	Checksum  string     `json:"checksum,omitempty"`
 	Parent    string     `json:"parent"`
 	CreatedBy int64      `json:"created_by"`
 	CreatedAt time.Time  `json:"created_at"`

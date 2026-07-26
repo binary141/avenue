@@ -4,7 +4,6 @@ package sweeper
 
 import (
 	"errors"
-	"fmt"
 	"strconv"
 	"time"
 
@@ -89,7 +88,7 @@ func sweep(fs afero.Fs, retention time.Duration) {
 }
 
 func removeBlob(fs afero.Fs, f sdk.File) {
-	if err := fs.Remove(fmt.Sprintf("/%d/%s", f.CreatedBy, f.UUID)); err != nil && !errors.Is(err, afero.ErrFileNotFound) {
+	if err := fs.Remove(shared.BlobPath(f.UUID)); err != nil && !errors.Is(err, afero.ErrFileNotFound) {
 		logger.Errorf("trash sweeper: remove blob %s: %v", f.UUID, err)
 	}
 }

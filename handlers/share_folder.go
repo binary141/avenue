@@ -2,7 +2,9 @@ package handlers
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -280,11 +282,6 @@ func (s *Server) UploadToSharedFolder(c *gin.Context) {
 		}
 	}
 
-	if err := ensureDir(s.fs, fmt.Sprintf("/%s", creatorIDStr)); err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{Error: err.Error()})
-		return
-	}
-
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxFileSize)
 
 	mr, err := c.Request.MultipartReader()
@@ -296,6 +293,7 @@ func (s *Server) UploadToSharedFolder(c *gin.Context) {
 	var fileID string
 	var filename, extension string
 	var total int64
+	var checksum string
 	contentType := "application/octet-stream"
 
 	for {
@@ -332,14 +330,23 @@ func (s *Server) UploadToSharedFolder(c *gin.Context) {
 				return
 			}
 
-			dst, err := s.fs.Create(fmt.Sprintf("/%s/%s", creatorIDStr, fileID))
+			if err := shared.EnsureBlobDir(s.fs, fileID); err != nil {
+				_ = db.DeleteFile(fileID, creatorIDStr)
+				c.JSON(http.StatusInternalServerError, sdk.MessageResponse{Error: err.Error()})
+				return
+			}
+
+			dst, err := s.fs.Create(shared.BlobPath(fileID))
 			if err != nil {
 				_ = db.DeleteFile(fileID, creatorIDStr)
 				c.JSON(http.StatusInternalServerError, sdk.MessageResponse{Error: err.Error()})
 				return
 			}
 
-			written, err := io.Copy(dst, bytes.NewReader(buf[:n]))
+			hasher := sha256.New()
+			mw := io.MultiWriter(dst, hasher)
+
+			written, err := io.Copy(mw, bytes.NewReader(buf[:n]))
 			if err != nil {
 				_ = db.DeleteFile(fileID, creatorIDStr)
 				c.JSON(http.StatusInternalServerError, sdk.MessageResponse{Error: err.Error()})
@@ -347,7 +354,7 @@ func (s *Server) UploadToSharedFolder(c *gin.Context) {
 			}
 			total += written
 
-			written, err = io.Copy(dst, part)
+			written, err = io.Copy(mw, part)
 			_ = dst.Close()
 			if err != nil {
 				_ = db.DeleteFile(fileID, creatorIDStr)
@@ -360,6 +367,7 @@ func (s *Server) UploadToSharedFolder(c *gin.Context) {
 				return
 			}
 			total += written
+			checksum = hex.EncodeToString(hasher.Sum(nil))
 		}
 
 		_ = part.Close()
@@ -373,6 +381,7 @@ func (s *Server) UploadToSharedFolder(c *gin.Context) {
 	if err := db.UpdateFile(sdk.File{
 		UUID:      fileID,
 		FileSize:  total,
+		Checksum:  checksum,
 		Extension: extension,
 		Name:      filename,
 		MimeType:  contentType,
@@ -410,7 +419,7 @@ func (s *Server) DownloadSharedFolderFile(c *gin.Context) {
 		return
 	}
 
-	path := fmt.Sprintf("/%d/%s", link.CreatedBy, file.UUID)
+	path := shared.BlobPath(file.UUID)
 	fileData, err := s.fs.Open(path)
 	if err != nil {
 		if errors.Is(err, afero.ErrFileNotFound) {

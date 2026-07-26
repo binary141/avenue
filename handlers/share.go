@@ -182,7 +182,7 @@ func (s *Server) DownloadSharedFile(c *gin.Context) {
 		return
 	}
 
-	path := fmt.Sprintf("/%d/%s", link.CreatedBy, file.UUID)
+	path := shared.BlobPath(file.UUID)
 	fileData, err := s.fs.Open(path)
 	if err != nil {
 		if errors.Is(err, afero.ErrFileNotFound) {

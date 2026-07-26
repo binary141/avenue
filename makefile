@@ -26,4 +26,10 @@ build-ui:
 
 build-image: build-ui
 	docker build --target final -t binary141/personal:avenue .
+
+reshard-blobs:
+	go run ./cmd/reshard-blobs
+
+reshard-blobs-dry-run:
+	go run ./cmd/reshard-blobs -dry-run
 	

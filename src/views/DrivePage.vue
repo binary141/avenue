@@ -4,26 +4,26 @@
       <h1 class="text-center flex-1 text-2xl font-bold">Drive</h1>
 
       <AppButton
-        @click="() => { show = true; $emit('close-menu')}"
+        @click="() => { openCreateFolderModal(); $emit('close-menu')}"
       >
         Create Folder
       </AppButton>
     </div>
 
-    <!-- create folder dialog -->
-    <AppModal :show="show" title="Create Folder" width="24rem" @close="show = false">
-      <label class="block text-sm font-medium mb-1 share-modal-subtext">Folder Name</label>
+    <!-- Name modal: shared by Create Folder, Rename File, and Rename Folder -->
+    <AppModal :show="!!nameModalMode" :title="nameModalTitle" width="24rem" @close="closeNameModal">
+      <label class="block text-sm font-medium mb-1 share-modal-subtext">{{ nameModalLabel }}</label>
       <input
-        ref="inputRef"
-        v-model="folderName"
+        ref="nameInputRef"
+        v-model="nameModalValue"
         type="text"
-        class="w-full"
-        @keyup.enter="createFolder"
+        class="w-full name-input"
+        @keyup.enter="confirmNameModal"
       />
 
       <template #footer>
-        <AppButton variant="secondary" size="sm" @click="show = false">Cancel</AppButton>
-        <AppButton type="submit" size="sm" @click="createFolder">Create</AppButton>
+        <AppButton variant="secondary" size="sm" @click="closeNameModal">Cancel</AppButton>
+        <AppButton type="submit" size="sm" @click="confirmNameModal">{{ nameModalConfirmLabel }}</AppButton>
       </template>
     </AppModal>
 
@@ -262,26 +262,6 @@
         />
       </div>
     </div>
-
-    <!-- Rename File Modal -->
-    <AppModal :show="!!editingFile" title="Rename File" width="24rem" @close="closeFileModal">
-      <input v-model="newFileName" class="w-full" placeholder="Enter new name" @keyup.enter="saveFileName" />
-
-      <template #footer>
-        <AppButton @click="closeFileModal" variant="secondary" size="sm">Cancel</AppButton>
-        <AppButton @click="saveFileName" size="sm">Save</AppButton>
-      </template>
-    </AppModal>
-
-    <!-- Rename Folder Modal -->
-    <AppModal :show="!!editingFolder" title="Rename Folder" width="24rem" @close="closeFolderModal">
-      <input v-model="newFolderName" class="w-full" placeholder="Enter new name" @keyup.enter="saveFolderName" />
-
-      <template #footer>
-        <AppButton @click="closeFolderModal" variant="secondary" size="sm">Cancel</AppButton>
-        <AppButton @click="saveFolderName" size="sm">Save</AppButton>
-      </template>
-    </AppModal>
 
     <!-- Share File Modal -->
     <AppModal :show="!!sharingFile" width="520px" @close="closeShareModal">
@@ -556,8 +536,6 @@ const limit = ref(50);
 const total = ref(0);
 const currentPageCount = computed(() => items.value.length);
 const totalItemsCount = computed(() => total.value);
-const show = ref<boolean>(false);
-const inputRef = ref<HTMLInputElement | null>(null);
 const currentFolderId = ref<string>('');
 const usersStore = useUsersStore();
 
@@ -584,11 +562,61 @@ watch(
   }
 );
 
-const editingFile = ref<FolderItem | null>(null);
-const newFileName = ref('');
+// ----- Name Modal State (shared by Create Folder, Rename File, Rename Folder) -----
+type NameModalMode = 'create-folder' | 'rename-file' | 'rename-folder'
+const nameModalMode = ref<NameModalMode | null>(null)
+const nameModalValue = ref('')
+const nameInputRef = ref<HTMLInputElement | null>(null)
+const renamingFile = ref<FolderItem | null>(null)
+const renamingFolder = ref<FolderItem | null>(null)
 
-const editingFolder = ref<FolderItem | null>(null);
-const newFolderName = ref('');
+const nameModalTitle = computed(() => {
+  switch (nameModalMode.value) {
+    case 'create-folder': return 'Create Folder'
+    case 'rename-file': return 'Rename File'
+    case 'rename-folder': return 'Rename Folder'
+    default: return ''
+  }
+})
+const nameModalLabel = computed(() => nameModalMode.value === 'create-folder' ? 'Folder Name' : 'New Name')
+const nameModalConfirmLabel = computed(() => nameModalMode.value === 'create-folder' ? 'Create' : 'Save')
+
+function openCreateFolderModal() {
+  nameModalMode.value = 'create-folder'
+  nameModalValue.value = ''
+}
+
+function openFileEditModal(file: FolderItem) {
+  nameModalMode.value = 'rename-file'
+  renamingFile.value = file
+  nameModalValue.value = file.name
+}
+
+function openFolderEditModal(folder: FolderItem) {
+  nameModalMode.value = 'rename-folder'
+  renamingFolder.value = folder
+  nameModalValue.value = folder.name
+}
+
+function closeNameModal() {
+  nameModalMode.value = null
+  nameModalValue.value = ''
+  renamingFile.value = null
+  renamingFolder.value = null
+}
+
+function confirmNameModal() {
+  if (nameModalMode.value === 'create-folder') createFolder()
+  else if (nameModalMode.value === 'rename-file') saveFileName()
+  else if (nameModalMode.value === 'rename-folder') saveFolderName()
+}
+
+watch(nameModalMode, async (mode) => {
+  if (mode) {
+    await nextTick()
+    nameInputRef.value?.focus()
+  }
+})
 
 // ----- Move Items State -----
 const movingFileIds = ref<string[]>([]);
@@ -698,8 +726,6 @@ const folderShareTokenCopied = ref<Record<string, boolean>>({});
 
 // folder uuid -> count of active folder share links (loaded once on mount)
 const sharedFolderCounts = ref<Record<string, number>>({});
-
-const folderName = ref('');
 
 // ----- Search / Sort -----
 const searchQuery = ref('')
@@ -904,13 +930,6 @@ async function bulkDelete() {
 }
 
 
-watch(show, async (open) => {
-  if (open) {
-    await nextTick()
-    inputRef.value?.focus()
-  }
-})
-
 async function createFolder() {
   const folderId = currentFolderId.value
 
@@ -918,15 +937,13 @@ async function createFolder() {
     url: "v1/folder",
     method: "POST",
     json: {
-      name: folderName.value,
+      name: nameModalValue.value,
       parent: folderId,
     }
   });
 
   refreshCurrentList();
-
-  folderName.value = '';
-  show.value = false;
+  closeNameModal();
 }
 
 function changeFolder(folderId: string) {
@@ -976,26 +993,6 @@ async function deleteFolder(folderId: string) {
   }
 
   refreshCurrentList();
-}
-
-function openFileEditModal(file: FolderItem) {
-  editingFile.value = file
-  newFileName.value = file.name
-}
-
-function openFolderEditModal(folder: FolderItem) {
-  editingFolder.value = folder
-  newFolderName.value = folder.name
-}
-
-function closeFileModal() {
-  editingFile.value = null
-  newFileName.value = ""
-}
-
-function closeFolderModal() {
-  editingFolder.value = null
-  newFolderName.value = ""
 }
 
 function shareLinkURL(token: string): string {
@@ -1215,34 +1212,32 @@ async function copyShareToken(token: string) {
 }
 
 async function saveFileName() {
-  if (!editingFile.value) return
-  // Call API to update the file name on the server
+  if (!renamingFile.value) return
   const response = await api({
-    url: `v1/file/${editingFile.value.uuid}/${newFileName.value}`,
+    url: `v1/file/${renamingFile.value.uuid}/${nameModalValue.value}`,
     method: 'PATCH',
-    json: { name: newFileName.value }
+    json: { name: nameModalValue.value }
   })
 
   if (response.ok) {
-    editingFile.value.name = newFileName.value
-    closeFileModal()
+    renamingFile.value.name = nameModalValue.value
+    closeNameModal()
   } else {
     console.error("Failed to rename file", response)
   }
 }
 
 async function saveFolderName() {
-  if (!editingFolder.value) return
-  // Call API to update the file name on the server
+  if (!renamingFolder.value) return
   const response = await api({
-    url: `v1/folder/${editingFolder.value.uuid}/${newFolderName.value}`,
+    url: `v1/folder/${renamingFolder.value.uuid}/${nameModalValue.value}`,
     method: 'PATCH',
-    json: { name: newFolderName.value }
+    json: { name: nameModalValue.value }
   })
 
   if (response.ok) {
-    editingFolder.value.name = newFolderName.value
-    closeFolderModal()
+    renamingFolder.value.name = nameModalValue.value
+    closeNameModal()
   } else {
     console.error("Failed to rename folder", response)
   }
@@ -1617,6 +1612,15 @@ onUnmounted(() => {
 
 .share-modal-subtext {
   color: var(--text-secondary);
+}
+
+.name-input {
+  border: 1px solid var(--gray-5) !important;
+}
+
+.name-input:focus {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 3px rgba(107, 111, 230, 0.25);
 }
 
 .share-modal-muted {

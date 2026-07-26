@@ -8,7 +8,11 @@ import (
 )
 
 func respond(c *gin.Context, status int, err error) {
-	r := sdk.MessageResponse{Error: err.Error()}
+	r := sdk.MessageResponse{}
+
+	if err != nil {
+		r.Error = err.Error()
+	}
 
 	if status >= 500 {
 		logger.Errorf("HTTP %d: %s", status, r.Error)

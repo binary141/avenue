@@ -51,7 +51,7 @@ func (s *Server) Login(c *gin.Context) {
 
 	u, err := s.authorize(req.Email, req.Password)
 	if err != nil {
-		respond(c, http.StatusUnauthorized, err)
+		c.Status(http.StatusUnauthorized)
 		return
 	}
 

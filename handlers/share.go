@@ -184,7 +184,7 @@ func (s *Server) DownloadSharedFile(c *gin.Context) {
 	}()
 
 	c.Header("Content-Type", file.MimeType)
-	c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, file.Name))
+	c.Header("Content-Disposition", contentDispositionAttachment(file.Name))
 	c.Header("Cache-Control", "no-cache")
 	c.Header("Content-Length", fmt.Sprintf("%d", file.FileSize))
 

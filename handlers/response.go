@@ -3,6 +3,7 @@ package handlers
 import (
 	"database/sql"
 	"errors"
+	"mime"
 	"net/http"
 
 	"avenue/backend/db"
@@ -11,6 +12,15 @@ import (
 
 	"github.com/gin-gonic/gin"
 )
+
+// contentDispositionAttachment builds a "Content-Disposition: attachment"
+// header value for filename, safely encoding/escaping it via
+// mime.FormatMediaType. This prevents a filename containing a quote or
+// CR/LF from breaking out of the filename parameter (header injection) or
+// spoofing a different filename/extension to the downloading client.
+func contentDispositionAttachment(filename string) string {
+	return mime.FormatMediaType("attachment", map[string]string{"filename": filename})
+}
 
 func respond(c *gin.Context, status int, message string, err error) {
 	r := sdk.MessageResponse{Message: message}

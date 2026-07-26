@@ -425,7 +425,7 @@ func (s *Server) GetFile(c *gin.Context) {
 
 	// ----- Streaming Download Headers -----
 	c.Header("Content-Type", "application/octet-stream")
-	c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, file.Name))
+	c.Header("Content-Disposition", contentDispositionAttachment(file.Name))
 
 	c.Header("Cache-Control", "no-cache")
 	c.Header("Access-Control-Expose-Headers", "Content-Disposition")
@@ -551,7 +551,7 @@ func (s *Server) downloadFolderZip(c *gin.Context, userID, folderID string) {
 	}
 
 	c.Header("Content-Type", "application/zip")
-	c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s.zip"`, folder.Name))
+	c.Header("Content-Disposition", contentDispositionAttachment(folder.Name+".zip"))
 	c.Header("Cache-Control", "no-cache")
 	c.Header("Access-Control-Expose-Headers", "Content-Disposition")
 	c.Status(http.StatusOK)

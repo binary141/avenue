@@ -956,14 +956,17 @@ function clearSelection() {
 }
 
 async function bulkDelete() {
-  // Delete files
-  for (const fileId of selectedFiles.value) {
-    await deleteFile(fileId)
-  }
+  const response = await api({
+    url: 'v1/files/bulk-delete',
+    method: 'DELETE',
+    json: {
+      fileIds: Array.from(selectedFiles.value),
+      folderIds: Array.from(selectedFolders.value),
+    },
+  })
 
-  // Delete folders
-  for (const folderId of selectedFolders.value) {
-    await deleteFolder(folderId)
+  if (!response.ok) {
+    error.value = response.body?.error || 'Failed to delete selected items'
   }
 
   clearSelection()

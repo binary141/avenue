@@ -160,6 +160,79 @@ func TrashFolder(folderID, ownerID string) error {
 	return tx.Commit()
 }
 
+// BulkTrash soft-deletes the given files and folders (recursively for each
+// folder, same as TrashFolder) for userID in a single transaction. IDs that
+// don't exist or aren't owned by userID are silently skipped, matching the
+// ownership semantics of TrashFileForUser/TrashFolder.
+func BulkTrash(fileIDs, folderIDs []string, userID string) error {
+	tx, err := DB.Beginx()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var subtreeIDs []int64
+	if len(folderIDs) > 0 {
+		rows, err := tx.Query(`
+			WITH RECURSIVE subtree AS (
+				SELECT id FROM folders
+				WHERE uuid = ANY($1::text[]) AND owner_id = $2::BIGINT AND deleted_at IS NULL
+				UNION ALL
+				SELECT f.id FROM folders f
+				INNER JOIN subtree s ON f.parent_id = s.id
+				WHERE f.deleted_at IS NULL
+			)
+			SELECT id FROM subtree
+		`, pq.Array(folderIDs), userID)
+		if err != nil {
+			return err
+		}
+		for rows.Next() {
+			var id int64
+			if err := rows.Scan(&id); err != nil {
+				rows.Close()
+				return err
+			}
+			subtreeIDs = append(subtreeIDs, id)
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return err
+		}
+		rows.Close()
+	}
+
+	if len(subtreeIDs) > 0 {
+		if _, err := tx.Exec(`UPDATE folders SET deleted_at = now() WHERE id = ANY($1) AND deleted_at IS NULL`, pq.Array(subtreeIDs)); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`UPDATE files SET deleted_at = now() WHERE parent_id = ANY($1) AND deleted_at IS NULL`, pq.Array(subtreeIDs)); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`DELETE FROM share_folder_links WHERE folder_id = ANY($1)`, pq.Array(subtreeIDs)); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`DELETE FROM share_links WHERE file_id IN (SELECT id FROM files WHERE parent_id = ANY($1))`, pq.Array(subtreeIDs)); err != nil {
+			return err
+		}
+	}
+
+	if len(fileIDs) > 0 {
+		if _, err := tx.Exec(`
+			UPDATE files SET deleted_at = now() WHERE uuid = ANY($1::text[]) AND deleted_at IS NULL
+			  AND (created_by = $2::BIGINT
+			       OR parent_id IN (SELECT id FROM folders WHERE owner_id = $2::BIGINT))
+		`, pq.Array(fileIDs), userID); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`DELETE FROM share_links WHERE file_id IN (SELECT id FROM files WHERE uuid = ANY($1::text[]))`, pq.Array(fileIDs)); err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
+}
+
 // RestoreFolder un-trashes folderID and its entire trashed subtree.
 //
 // Note: if a file or subfolder inside folderID was independently trashed

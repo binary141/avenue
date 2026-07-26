@@ -57,6 +57,11 @@ type MoveFileRequest struct {
 	Parent string `json:"parent"`
 }
 
+type BulkDeleteRequest struct {
+	FileIDs   []string `json:"fileIds"`
+	FolderIDs []string `json:"folderIds"`
+}
+
 type CreateShareLinkRequest struct {
 	ExpiresAt    *time.Time `json:"expires_at,omitempty"`
 	RequireLogin bool       `json:"require_login"`

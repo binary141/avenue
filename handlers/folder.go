@@ -105,6 +105,47 @@ func (s *Server) DeleteFolder(c *gin.Context) {
 	})
 }
 
+// BulkDelete moves a batch of files and folders to the trash in a single
+// request, instead of requiring one DELETE call per item.
+func (s *Server) BulkDelete(c *gin.Context) {
+	userID, err := shared.GetUserIDFromContext(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
+			Message: "could not get user id",
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	var req sdk.BulkDeleteRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, sdk.MessageResponse{
+			Message: "could not marshal all data to json",
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	if len(req.FileIDs) == 0 && len(req.FolderIDs) == 0 {
+		c.JSON(http.StatusBadRequest, sdk.MessageResponse{
+			Message: "no file or folder ids provided",
+		})
+		return
+	}
+
+	if err := db.BulkTrash(req.FileIDs, req.FolderIDs, userID); err != nil {
+		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
+			Message: "could not delete items",
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, sdk.MessageResponse{
+		Message: "Items moved to trash",
+	})
+}
+
 // RestoreFolder restores a trashed folder and everything nested inside it.
 func (s *Server) RestoreFolder(c *gin.Context) {
 	userID, err := shared.GetUserIDFromContext(c.Request.Context())

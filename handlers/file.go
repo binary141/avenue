@@ -286,7 +286,7 @@ func (s *Server) Upload(c *gin.Context) {
 		Name:      filename,
 		MimeType:  contentType,
 		Parent:    parent,
-	})
+	}, userID)
 	if err != nil {
 		// what do we want to do if we cannot update the filesize?
 		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
@@ -417,7 +417,7 @@ func (s *Server) MoveFile(c *gin.Context) {
 
 	file.Parent = req.Parent
 
-	if err := db.UpdateFile(*file); err != nil {
+	if err := db.UpdateFile(*file, userID); err != nil {
 		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
 			Message: "could not move file",
 			Error:   err.Error(),
@@ -465,7 +465,7 @@ func (s *Server) UpdateFileName(c *gin.Context) {
 
 	file.Name = newName
 
-	err = db.UpdateFile(*file)
+	err = db.UpdateFile(*file, userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
 			Message: "could not update file",

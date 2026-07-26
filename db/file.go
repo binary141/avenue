@@ -375,15 +375,27 @@ func SearchChildFiles(parentID, ownerID, namePrefix string) ([]sdk.File, error) 
 	return files, rows.Err()
 }
 
-func UpdateFile(f sdk.File) error {
-	_, err := DB.Exec(`
+// UpdateFile updates a file's metadata if userID is its creator or owns its
+// parent folder.
+func UpdateFile(f sdk.File, userID string) error {
+	res, err := DB.Exec(`
 		UPDATE files SET name=$2, extension=$3, mime_type=$4, file_size=$5, checksum=$7,
 			parent_id = CASE WHEN $6 = '' THEN NULL
 			                 ELSE (SELECT id FROM folders WHERE uuid = $6)
 			            END
 		WHERE uuid=$1
-	`, f.UUID, f.Name, f.Extension, f.MimeType, f.FileSize, f.Parent, sql.NullString{String: f.Checksum, Valid: f.Checksum != ""})
-	return err
+		  AND (created_by=$8::BIGINT
+		       OR parent_id IN (SELECT id FROM folders WHERE owner_id=$8::BIGINT))
+	`, f.UUID, f.Name, f.Extension, f.MimeType, f.FileSize, f.Parent, sql.NullString{String: f.Checksum, Valid: f.Checksum != ""}, userID)
+	if err != nil {
+		return err
+	}
+	if n, err := res.RowsAffected(); err != nil {
+		return err
+	} else if n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
 }
 
 // FileBlobRef is the minimal info needed to locate and reshard a file's blob

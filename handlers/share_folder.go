@@ -386,7 +386,7 @@ func (s *Server) UploadToSharedFolder(c *gin.Context) {
 		Name:      filename,
 		MimeType:  contentType,
 		Parent:    targetFolderUUID,
-	}); err != nil {
+	}, creatorIDStr); err != nil {
 		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{Error: err.Error()})
 		return
 	}

@@ -110,3 +110,13 @@ func DeleteSessionsForUser(userID int64) error {
 	_, err := DB.Exec(`DELETE FROM sessions WHERE user_id=$1`, userID)
 	return err
 }
+
+// DeleteExpiredSessions removes every session that is expired or has been
+// marked invalid, and returns how many rows were removed.
+func DeleteExpiredSessions() (int64, error) {
+	res, err := DB.Exec(`DELETE FROM sessions WHERE expires_at < $1 OR is_valid = false`, time.Now().Unix())
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}

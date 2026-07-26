@@ -38,6 +38,7 @@ func main() {
 	server := handlers.SetupServer()
 
 	sweeper.Start(server.FS())
+	sweeper.StartSessionSweeper()
 
 	server.SetupRoutes()
 

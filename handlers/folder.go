@@ -323,10 +323,6 @@ func (s *Server) ListFolderContents(c *gin.Context) {
 		sortColumn = "file_size"
 	case "date":
 		sortColumn = "created_at"
-	case "type":
-		// Groups folders before files regardless of sort direction, then
-		// orders by name within each group using the requested direction.
-		sortColumn = "(CASE WHEN item_type = 'folder' THEN 0 ELSE 1 END), name"
 	}
 
 	page, limit, offset := shared.ParsePagination(c.Query("page"), c.Query("limit"))

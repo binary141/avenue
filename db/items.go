@@ -39,17 +39,19 @@ func scanFolderItems(rows *sql.Rows) ([]sdk.FolderItem, error) {
 // as a single deterministically-ordered, paginated list — combining what
 // were previously two separately-paginated queries (ListChildFolder,
 // ListChildFile) so a page boundary can't split inconsistently between the
-// two types. sortBy must already be validated by the caller to be one of
-// "name", "file_size", "created_at", or the folders-first grouping
-// expression used for the "type" sort; sortBy/sortDir are interpolated
-// directly since placeholders can't parameterize ORDER BY, and sortDir is a
-// typed sdk.SortDirection so callers can't pass arbitrary strings. A
-// trailing "uuid ASC" tiebreak keeps LIMIT/OFFSET pagination stable when the
-// sort column has duplicate values. itemType filters the result to just
-// sdk.FolderItemTypeFolder or sdk.FolderItemTypeFile; an empty string
-// returns both, unioned as before.
+// two types. Folders are always grouped ahead of files — a fixed
+// "CASE WHEN item_type = 'folder' THEN 0 ELSE 1 END" leads the ORDER BY
+// regardless of sortDir — so the requested sortBy/sortDir only decide
+// ordering within each group. sortBy must already be validated by the
+// caller to be one of "name", "file_size", or "created_at"; sortBy/sortDir
+// are interpolated directly since placeholders can't parameterize ORDER BY,
+// and sortDir is a typed sdk.SortDirection so callers can't pass arbitrary
+// strings. A trailing "uuid ASC" tiebreak keeps LIMIT/OFFSET pagination
+// stable when the sort column has duplicate values. itemType filters the
+// result to just sdk.FolderItemTypeFolder or sdk.FolderItemTypeFile; an
+// empty string returns both, unioned as before.
 func ListFolderItems(parentID, ownerID, sortBy string, sortDir sdk.SortDirection, limit, offset int, itemType string) ([]sdk.FolderItem, error) {
-	orderBy := " ORDER BY " + sortBy + " " + string(sortDir) + ", uuid ASC"
+	orderBy := " ORDER BY (CASE WHEN item_type = 'folder' THEN 0 ELSE 1 END), " + sortBy + " " + string(sortDir) + ", uuid ASC"
 	includeFolders := itemType == "" || itemType == sdk.FolderItemTypeFolder
 	includeFiles := itemType == "" || itemType == sdk.FolderItemTypeFile
 

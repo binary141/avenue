@@ -130,7 +130,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watchEffect } from 'vue'
-import { GLOBAL_HEADERS } from '@/utils/api'
+import { GLOBAL_HEADERS, type JsonValue } from '@/utils/api'
 import type { FolderItem } from '@/types/folder'
 
 interface Props {
@@ -256,7 +256,7 @@ const removeFile = (index: number) => {
   selectedFiles.value.splice(index, 1)
 }
 
-function uploadFileXHR(file: File, formData: FormData, key: string, onProgress: (pct: number, speedStr: string) => void): Promise<{ ok: boolean; status: number; body: any; aborted: boolean }> {
+function uploadFileXHR(file: File, formData: FormData, key: string, onProgress: (pct: number, speedStr: string) => void): Promise<{ ok: boolean; status: number; body: JsonValue; aborted: boolean }> {
   return new Promise((resolve) => {
     const xhr = new XMLHttpRequest()
     activeXHRs.set(key, xhr)
@@ -274,7 +274,7 @@ function uploadFileXHR(file: File, formData: FormData, key: string, onProgress: 
 
     xhr.onload = () => {
       activeXHRs.delete(key)
-      let body: any = null
+      let body: JsonValue = null
       try { body = JSON.parse(xhr.responseText) } catch { /* ignore */ }
       resolve({ ok: xhr.status >= 200 && xhr.status < 300, status: xhr.status, body, aborted: false })
     }

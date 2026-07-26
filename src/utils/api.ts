@@ -1,6 +1,13 @@
+// The server's JSON responses aren't typed on the wire; callers narrow
+// per-endpoint. This is the one sanctioned `any` boundary for that.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type JsonValue = any;
+
 export const GLOBAL_HEADERS: { [key: string]: string | undefined } = {};
-const RESPONSE_HANDLERS: { [key: string]: Function[] } = { all: [] };
-const REQUEST_HANDLERS = [] as Array<Function>;
+type RequestHandler = (params: RequestHandlerParams) => void;
+type ResponseHandler = (params: ResponseHandlerParams) => void;
+const RESPONSE_HANDLERS: { [key: string]: ResponseHandler[] } = { all: [] };
+const REQUEST_HANDLERS: RequestHandler[] = [];
 
 type Method = "DELETE" | "GET" | "HEAD" | "OPTIONS" | "PATCH" | "POST" | "PUT";
 type UrlParams = {
@@ -18,7 +25,7 @@ interface HandlerParamsBase {
   json: JSON;
   params: UrlParams;
   headers: { [key: string]: string | undefined };
-  options: { [key: string]: any };
+  options: { [key: string]: JsonValue };
 }
 
 export interface RequestHandlerParams extends HandlerParamsBase {
@@ -27,7 +34,7 @@ export interface RequestHandlerParams extends HandlerParamsBase {
 
 export interface ResponseHandlerParams extends HandlerParamsBase {
   response: Response;
-  body: any;
+  body: JsonValue;
 }
 
 let apiRoot = "";
@@ -62,7 +69,7 @@ export function setGlobalRequestHeader(
 
 export function addResponseHandler(
   status: number | "all",
-  handler: Function,
+  handler: ResponseHandler,
 ): void {
   if (!RESPONSE_HANDLERS[status]) {
     RESPONSE_HANDLERS[status] = [];
@@ -72,7 +79,7 @@ export function addResponseHandler(
 
 export function removeResponseHandler(
   status: number | "all",
-  handler: Function,
+  handler: ResponseHandler,
 ): void {
   if (RESPONSE_HANDLERS[status]) {
     const idx = RESPONSE_HANDLERS[status].indexOf(handler);
@@ -82,11 +89,11 @@ export function removeResponseHandler(
   }
 }
 
-export function addRequestHandler(handler: Function): void {
+export function addRequestHandler(handler: RequestHandler): void {
   REQUEST_HANDLERS.push(handler);
 }
 
-export function removeRequestHandler(handler: Function): void {
+export function removeRequestHandler(handler: RequestHandler): void {
   const idx = REQUEST_HANDLERS.indexOf(handler);
   REQUEST_HANDLERS.splice(idx, 1);
 }
@@ -102,9 +109,9 @@ export function resetModifications(): void {
 export interface ApiResponse {
   ok: boolean;
   status: number;
-  body?: any;
-  error?: any;
-  headers?: any;
+  body?: JsonValue;
+  error?: JsonValue;
+  headers?: { [key: string]: string };
 }
 
 function getFilenameFromContentDispositionHeader(header: string): string {
@@ -148,10 +155,10 @@ export default async function api(
     url: string;
     method?: Method;
     body?: BodyInit | null;
-    json?: any;
+    json?: JsonValue;
     params?: UrlParams;
     headers?: { [key: string]: string | undefined };
-    options?: { [key: string]: any };
+    options?: { [key: string]: JsonValue };
   } = { url: "." },
 ): Promise<ApiResponse> {
   REQUEST_HANDLERS.forEach((handler) => {
@@ -165,7 +172,7 @@ export default async function api(
       options,
     } as RequestHandlerParams);
   });
-  const init: { [key: string]: any } = {
+  const init: { [key: string]: JsonValue } = {
     method,
     headers,
   };
@@ -226,7 +233,7 @@ export default async function api(
     };
   }
 
-  let responseBody: any;
+  let responseBody: JsonValue;
   responseBody = null;
 
   const contentType = response.headers.get("content-type");

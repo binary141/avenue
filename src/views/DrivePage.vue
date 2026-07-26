@@ -581,7 +581,7 @@
 <script setup lang="ts">
 import AppButton from './components/AppButton.vue'
 import BreadCrumbs from './components/BreadCrumbs.vue'
-import { ref, onMounted, onUnmounted, watchEffect, watch, nextTick, computed } from 'vue';
+import { ref, onMounted, onUnmounted, watch, nextTick, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import api from '@/utils/api';
 import type { Breadcrumb, FolderItem, FolderContents } from '@/types/folder';

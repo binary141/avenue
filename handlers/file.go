@@ -770,9 +770,8 @@ func trashRestoreResponse(userID, message string) (sdk.V1RestoreResponse, error)
 		return sdk.V1RestoreResponse{}, err
 	}
 	return sdk.V1RestoreResponse{
-		Message:      message,
-		TotalFiles:   totalFiles,
-		TotalFolders: totalFolders,
+		Message: message,
+		Total:   totalFiles + totalFolders,
 	}, nil
 }
 
@@ -885,10 +884,10 @@ func (s *Server) ListTrash(c *gin.Context) {
 
 	page, limit, offset := shared.ParsePagination(c.Query("page"), c.Query("limit"))
 
-	files, err := db.ListTrashedFilesPage(userID, sortColumn, sortDir, limit, offset)
+	items, err := db.ListTrashedItems(userID, sortColumn, sortDir, limit, offset)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-			Message: "could not list trashed files",
+			Message: "could not list trashed items",
 			Error:   err.Error(),
 		})
 		return
@@ -897,20 +896,6 @@ func (s *Server) ListTrash(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
 			Message: "could not count trashed files",
-			Error:   err.Error(),
-		})
-		return
-	}
-
-	folderSortColumn := sortColumn
-	if folderSortColumn == "file_size" {
-		folderSortColumn = "deleted_at"
-	}
-
-	folders, err := db.ListTrashedFoldersPage(userID, folderSortColumn, sortDir, limit, offset)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-			Message: "could not list trashed folders",
 			Error:   err.Error(),
 		})
 		return
@@ -925,13 +910,11 @@ func (s *Server) ListTrash(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, sdk.V1TrashResponse{
-		Files:         files,
-		Folders:       folders,
+		Items:         items,
 		RetentionDays: int(sweeper.Retention().Hours() / 24),
 		Page:          page,
 		Limit:         limit,
-		TotalFiles:    totalFiles,
-		TotalFolders:  totalFolders,
+		Total:         totalFiles + totalFolders,
 	})
 }
 

@@ -54,12 +54,12 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue';
-import type { File } from '@/types/folder';
+import type { FolderItem } from '@/types/folder';
 import SpinnerView from '@/views/components/SpinnerView.vue';
 import AppButton from '@/views/components/AppButton.vue';
 
 const props = defineProps<{
-  file: File;
+  file: FolderItem;
   downloadUrl: string;
 }>();
 

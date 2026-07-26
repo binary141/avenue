@@ -118,17 +118,6 @@ func DeleteFile(id, creatorID string) error {
 	return err
 }
 
-// DeleteFileForUser hard-deletes a file if the user is its creator or owns
-// its parent folder. Only meant for upload rollback, see DeleteFile.
-func DeleteFileForUser(id, userID string) error {
-	_, err := DB.Exec(`
-		DELETE FROM files WHERE uuid=$1
-		  AND (created_by=$2::BIGINT
-		       OR parent_id IN (SELECT id FROM folders WHERE owner_id=$2::BIGINT))
-	`, id, userID)
-	return err
-}
-
 // TrashFileForUser soft-deletes a file if the user is its creator or owns
 // its parent folder, and revokes any share links pointing at it.
 func TrashFileForUser(id, userID string) error {
@@ -226,42 +215,8 @@ func ListTrashedFiles(userID string) ([]sdk.File, error) {
 	return files, rows.Err()
 }
 
-// ListTrashedFilesPage is the paginated counterpart to ListTrashedFiles, used
-// by the trash-listing endpoint. ListTrashedFiles itself stays unpaginated
-// since EmptyTrash needs every trashed file to purge them all.
-// sortBy is constrained by the caller (handlers.ListTrash) to a fixed
-// whitelist of column names before reaching here, so it's safe to
-// concatenate directly into the query string.
-func ListTrashedFilesPage(userID, sortBy string, sortDir sdk.SortDirection, limit, offset int) ([]sdk.File, error) {
-	rows, err := DB.Query(`
-		SELECT f.id, f.uuid, f.name, f.extension, f.mime_type, f.file_size, f.checksum, f.created_by, f.created_at, f.deleted_at
-		FROM files f
-		LEFT JOIN folders p ON p.id = f.parent_id
-		WHERE f.created_by = $1::BIGINT AND f.deleted_at IS NOT NULL
-		  AND (p.id IS NULL OR p.deleted_at IS NULL)
-		ORDER BY f.`+sortBy+` `+string(sortDir)+`
-		LIMIT $2 OFFSET $3
-	`, userID, limit, offset)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var files []sdk.File
-	for rows.Next() {
-		var f sdk.File
-		var checksum sql.NullString
-		if err := rows.Scan(&f.ID, &f.UUID, &f.Name, &f.Extension, &f.MimeType, &f.FileSize, &checksum, &f.CreatedBy, &f.CreatedAt, &f.DeletedAt); err != nil {
-			return nil, err
-		}
-		f.Checksum = checksum.String
-		files = append(files, f)
-	}
-	return files, rows.Err()
-}
-
 // CountTrashedFiles returns the total number of trashed files for userID,
-// for computing pagination totals alongside ListTrashedFilesPage.
+// for computing pagination totals alongside db.ListTrashedItems.
 func CountTrashedFiles(userID string) (int, error) {
 	var count int
 	err := DB.QueryRow(`
@@ -329,54 +284,8 @@ func ListChildFilePublic(parentID string) ([]sdk.File, error) {
 	return files, rows.Err()
 }
 
-// ListChildFile lists the files in parentID. sortBy must already be validated
-// by the caller to be one of "name", "file_size", or "created_at". Both
-// sortBy and sortDir are interpolated directly into the query since
-// placeholders can't parameterize ORDER BY; sortDir is a typed
-// sdk.SortDirection so callers can't pass arbitrary strings.
-func ListChildFile(parentID, ownerID, sortBy string, sortDir sdk.SortDirection, limit, offset int) ([]sdk.File, error) {
-	var (
-		rows *sql.Rows
-		err  error
-	)
-
-	orderBy := " ORDER BY " + sortBy + " " + string(sortDir) + " LIMIT $2 OFFSET $3"
-
-	if parentID == "" {
-		// Root: only files the user themselves created with no parent
-		rows, err = DB.Query(`
-			SELECT id, uuid, name, extension, mime_type, file_size, checksum, created_by, created_at
-			FROM files WHERE parent_id IS NULL AND created_by=$1::BIGINT AND deleted_at IS NULL
-		`+orderBy, ownerID, limit, offset)
-	} else {
-		// Folder: all files inside a folder owned by this user, regardless of uploader
-		orderBy = " ORDER BY " + sortBy + " " + string(sortDir) + " LIMIT $3 OFFSET $4"
-		rows, err = DB.Query(`
-			SELECT id, uuid, name, extension, mime_type, file_size, checksum, created_by, created_at
-			FROM files
-			WHERE parent_id = (SELECT id FROM folders WHERE uuid = $1 AND owner_id = $2::BIGINT) AND deleted_at IS NULL
-		`+orderBy, parentID, ownerID, limit, offset)
-	}
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var files []sdk.File
-	for rows.Next() {
-		var f sdk.File
-		var checksum sql.NullString
-		if err := rows.Scan(&f.ID, &f.UUID, &f.Name, &f.Extension, &f.MimeType, &f.FileSize, &checksum, &f.CreatedBy, &f.CreatedAt); err != nil {
-			return nil, err
-		}
-		f.Checksum = checksum.String
-		files = append(files, f)
-	}
-	return files, rows.Err()
-}
-
 // CountChildFiles returns the total number of (non-deleted) files in
-// parentID, for computing pagination totals alongside ListChildFile.
+// parentID, for computing pagination totals alongside db.ListFolderItems.
 func CountChildFiles(parentID, ownerID string) (int, error) {
 	var count int
 	var err error

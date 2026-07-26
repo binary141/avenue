@@ -131,7 +131,7 @@
 <script setup lang="ts">
 import { ref, computed, watchEffect } from 'vue'
 import { GLOBAL_HEADERS } from '@/utils/api'
-import type { File as ApiFile } from '@/types/folder'
+import type { FolderItem } from '@/types/folder'
 
 interface Props {
   accept?: string
@@ -149,9 +149,12 @@ const props = withDefaults(defineProps<Props>(), {
   parent: ''
 })
 
+// The upload endpoint responds with the folder's uuid as `parent` (not the
+// numeric parent_id used by the listing endpoint's FolderItem shape), so the
+// caller can tell whether the new file belongs in the currently-open folder.
 const emit = defineEmits<{
   upload: [files: File[]]
-  'file-uploaded': [file: ApiFile]
+  'file-uploaded': [file: FolderItem & { parent?: string }]
   error: [message: string]
 }>()
 
@@ -366,7 +369,7 @@ const uploadFiles = async () => {
       // Let the parent add this file to the UI right away instead of
       // waiting for every file in the batch to finish uploading.
       if (response.body) {
-        emit('file-uploaded', response.body as ApiFile)
+        emit('file-uploaded', { ...(response.body as FolderItem & { parent?: string }), type: 'file' })
       }
     }
   }

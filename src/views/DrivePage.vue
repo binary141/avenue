@@ -112,7 +112,7 @@
       <BreadCrumbs :breadcrumbs=breadcrumbs />
 
       <label
-        v-if="!loading && (filteredFolders.length > 0 || filteredFiles.length > 0)"
+        v-if="!loading && filteredItems.length > 0"
         class="flex items-center gap-2 text-sm select-none cursor-pointer"
         style="color: var(--text-secondary);"
       >
@@ -163,112 +163,95 @@
     </div>
 
     <div v-if="!loading" class="folder-contents flex flex-col gap-4">
-      <!-- Folders Section -->
-      <div v-if="filteredFolders.length > 0" class="folders-section">
-        <h2>Folders</h2>
+      <!-- Items -->
+      <div v-if="filteredItems.length > 0" class="items-section">
         <div class="items-list flex flex-col gap-2">
           <div
-            v-for="(folder, index) in filteredFolders"
-            :key="folder.uuid"
-            class="folder-item card flex flex-row items-center gap-3 p-3"
-            :class="{ 'item--selected': selectedFolders.has(folder.uuid) }"
+            v-for="(item, index) in filteredItems"
+            :key="item.type + '-' + item.uuid"
+            class="card flex flex-row items-center gap-3 p-3"
+            :class="[item.type === 'folder' ? 'folder-item' : 'file-item', { 'item--selected': isItemSelected(item) }]"
           >
             <!-- Checkbox -->
             <input
               type="checkbox"
               class="row-checkbox"
-              :checked="selectedFolders.has(folder.uuid)"
-              @click.stop="onFolderCheckboxClick(folder.uuid, index, $event)"
+              :checked="isItemSelected(item)"
+              @click.stop="onItemCheckboxClick(item, index, $event)"
             />
 
-            <!-- Folder clickable name -->
-            <span
-              class="folder-info flex-1 flex items-center gap-2 cursor-pointer min-w-0"
-              @click="changeFolder(folder.uuid)"
-            >
-              <span class="folder-icon">📁</span>
-              <span class="folder-name">{{ folder.name }}</span>
-              <span v-if="sharedFolderCounts[folder.uuid]" class="shared-badge" title="Shared">
-                🔗 {{ sharedFolderCounts[folder.uuid] }}
-              </span>
-            </span>
-
-            <!-- Actions -->
-            <span class="row-actions flex items-center gap-1">
-              <span class="row-menu-wrap">
-                <span class="icon-btn" title="More" @click.stop="toggleRowMenu('folder-' + folder.uuid)">⋮</span>
-                <div v-if="openMenuId === 'folder-' + folder.uuid" class="row-menu" @click.stop>
-                  <button class="row-menu-item" @click="openFolderEditModal(folder); openMenuId = null">Rename</button>
-                  <button v-if="folderSharingEnabled" class="row-menu-item" @click="openFolderShareModal(folder); openMenuId = null">Share</button>
-                  <button class="row-menu-item row-menu-item--danger" @click="deleteFolder(folder.uuid); openMenuId = null">Delete</button>
-                </div>
-              </span>
-            </span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Files Section -->
-      <div v-if="filteredFiles.length > 0" class="files-section">
-        <h2>Files</h2>
-        <div class="items-list flex flex-col gap-2">
-          <div
-            v-for="(file, index) in filteredFiles"
-            :key="file.uuid"
-            class="file-item card flex flex-row items-center gap-3 p-3"
-            :class="{ 'item--selected': selectedFiles.has(file.uuid) }"
-          >
-            <!-- Checkbox -->
-            <input
-              type="checkbox"
-              class="row-checkbox"
-              :checked="selectedFiles.has(file.uuid)"
-              @click.stop="onFileCheckboxClick(file.uuid, index, $event)"
-            />
-
-            <img
-              v-if="isImageFile(file)"
-              :src="getDownloadURL(file.uuid)"
-              class="file-thumb cursor-pointer"
-              alt=""
-              @click.stop="openFileViewer(file)"
-            />
-            <span v-else class="file-icon-badge cursor-pointer" @click.stop="openFileViewer(file)">
-              <svg viewBox="0 0 24 24" class="file-icon-svg">
-                <path d="M5 3a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V8l-6-6H5z" fill="var(--gray-4)" stroke="var(--gray-5)" stroke-width="1"/>
-                <path d="M14 2v5a1 1 0 0 0 1 1h5" fill="none" stroke="var(--gray-5)" stroke-width="1"/>
-                <rect x="1.5" y="15" width="19" height="7" rx="1.5" :fill="fileBadgeColor(file)"/>
-                <text x="11" y="20.3" font-size="6.2" font-weight="700" fill="#fff" text-anchor="middle" font-family="Inter, sans-serif">{{ fileBadgeLabel(file) }}</text>
-              </svg>
-            </span>
-
-            <span class="file-name cursor-pointer flex-1 min-w-0" @click.stop="openFileViewer(file)">
-              {{ formatFileName(file.name) }}
-              <span v-if="sharedFileCounts[file.uuid]" class="shared-badge" title="Shared">🔗 {{ sharedFileCounts[file.uuid] }}</span>
-            </span>
-            <span class="file-size">{{ formatFileSize(file.file_size) }}</span>
-
-            <span class="row-actions flex items-center gap-1">
-              <span class="icon-btn" title="Download">
-                <a @click.stop :href="getDownloadURL(file.uuid)" :download="file.name">⬇️</a>
+            <!-- Folder row -->
+            <template v-if="item.type === 'folder'">
+              <span
+                class="folder-info flex-1 flex items-center gap-2 cursor-pointer min-w-0"
+                @click="changeFolder(item.uuid)"
+              >
+                <span class="folder-icon">📁</span>
+                <span class="folder-name">{{ item.name }}</span>
+                <span v-if="sharedFolderCounts[item.uuid]" class="shared-badge" title="Shared">
+                  🔗 {{ sharedFolderCounts[item.uuid] }}
+                </span>
               </span>
 
-              <span class="row-menu-wrap">
-                <span class="icon-btn" title="More" @click.stop="toggleRowMenu('file-' + file.uuid)">⋮</span>
-                <div v-if="openMenuId === 'file-' + file.uuid" class="row-menu" @click.stop>
-                  <button class="row-menu-item" @click="openFileEditModal(file); openMenuId = null">Rename</button>
-                  <button class="row-menu-item" @click="openMoveModal(file); openMenuId = null">Move to…</button>
-                  <button v-if="fileSharingEnabled" class="row-menu-item" @click="openShareModal(file); openMenuId = null">Share</button>
-                  <button class="row-menu-item row-menu-item--danger" @click="deleteFile(file.uuid); openMenuId = null">Delete</button>
-                </div>
+              <!-- Actions -->
+              <span class="row-actions flex items-center gap-1">
+                <span class="row-menu-wrap">
+                  <span class="icon-btn" title="More" @click.stop="toggleRowMenu('folder-' + item.uuid)">⋮</span>
+                  <div v-if="openMenuId === 'folder-' + item.uuid" class="row-menu" @click.stop>
+                    <button class="row-menu-item" @click="openFolderEditModal(item); openMenuId = null">Rename</button>
+                    <button v-if="folderSharingEnabled" class="row-menu-item" @click="openFolderShareModal(item); openMenuId = null">Share</button>
+                    <button class="row-menu-item row-menu-item--danger" @click="deleteFolder(item.uuid); openMenuId = null">Delete</button>
+                  </div>
+                </span>
               </span>
-            </span>
+            </template>
+
+            <!-- File row -->
+            <template v-else>
+              <img
+                v-if="isImageFile(item)"
+                :src="getDownloadURL(item.uuid)"
+                class="file-thumb cursor-pointer"
+                alt=""
+                @click.stop="openFileViewer(item)"
+              />
+              <span v-else class="file-icon-badge cursor-pointer" @click.stop="openFileViewer(item)">
+                <svg viewBox="0 0 24 24" class="file-icon-svg">
+                  <path d="M5 3a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V8l-6-6H5z" fill="var(--gray-4)" stroke="var(--gray-5)" stroke-width="1"/>
+                  <path d="M14 2v5a1 1 0 0 0 1 1h5" fill="none" stroke="var(--gray-5)" stroke-width="1"/>
+                  <rect x="1.5" y="15" width="19" height="7" rx="1.5" :fill="fileBadgeColor(item)"/>
+                  <text x="11" y="20.3" font-size="6.2" font-weight="700" fill="#fff" text-anchor="middle" font-family="Inter, sans-serif">{{ fileBadgeLabel(item) }}</text>
+                </svg>
+              </span>
+
+              <span class="file-name cursor-pointer flex-1 min-w-0" @click.stop="openFileViewer(item)">
+                {{ formatFileName(item.name) }}
+                <span v-if="sharedFileCounts[item.uuid]" class="shared-badge" title="Shared">🔗 {{ sharedFileCounts[item.uuid] }}</span>
+              </span>
+              <span class="file-size">{{ formatFileSize(item.file_size) }}</span>
+
+              <span class="row-actions flex items-center gap-1">
+                <span class="icon-btn" title="Download">
+                  <a @click.stop :href="getDownloadURL(item.uuid)" :download="item.name">⬇️</a>
+                </span>
+
+                <span class="row-menu-wrap">
+                  <span class="icon-btn" title="More" @click.stop="toggleRowMenu('file-' + item.uuid)">⋮</span>
+                  <div v-if="openMenuId === 'file-' + item.uuid" class="row-menu" @click.stop>
+                    <button class="row-menu-item" @click="openFileEditModal(item); openMenuId = null">Rename</button>
+                    <button class="row-menu-item" @click="openMoveModal(item); openMenuId = null">Move to…</button>
+                    <button v-if="fileSharingEnabled" class="row-menu-item" @click="openShareModal(item); openMenuId = null">Share</button>
+                    <button class="row-menu-item row-menu-item--danger" @click="deleteFile(item.uuid); openMenuId = null">Delete</button>
+                  </div>
+                </span>
+              </span>
+            </template>
           </div>
         </div>
       </div>
 
       <!-- Empty State -->
-      <div v-if="!loading && folders.length === 0 && files.length === 0" class="empty-state">
+      <div v-if="!loading && items.length === 0" class="empty-state">
         <span class="empty-state-icon">🗂️</span>
         <p class="empty-state-title">This folder is empty</p>
         <p class="empty-state-hint">Drag files in above, or click the upload area to get started.</p>
@@ -280,7 +263,7 @@
       </div>
 
       <!-- No Search Results -->
-      <div v-else-if="!loading && (folders.length > 0 || files.length > 0) && filteredFolders.length === 0 && filteredFiles.length === 0" class="empty-state">
+      <div v-else-if="!loading && items.length > 0 && filteredItems.length === 0" class="empty-state">
         <span class="empty-state-icon">🔍</span>
         <p class="empty-state-title">No matches for "{{ searchQuery }}"</p>
       </div>
@@ -293,7 +276,7 @@
         <PaginationControls
           :page="page"
           :limit="limit"
-          :total="Math.max(totalFiles, totalFolders)"
+          :total="total"
           @update:page="changePage"
         />
       </div>
@@ -603,7 +586,7 @@ import BreadCrumbs from './components/BreadCrumbs.vue'
 import { ref, onMounted, onUnmounted, watchEffect, watch, nextTick, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import api from '@/utils/api';
-import type { Breadcrumb, Folder, File, FolderContents } from '@/types/folder';
+import type { Breadcrumb, FolderItem, FolderContents } from '@/types/folder';
 import SpinnerView from './components/SpinnerView.vue';
 import ErrorMessage from './components/ErrorMessage.vue';
 import PaginationControls from './components/PaginationControls.vue';
@@ -627,24 +610,22 @@ const maxFileSize = computed(() => {
   return remaining < serverMax.value ? remaining : serverMax.value;
 });
 const error = ref<string | undefined>();
-const folders = ref<Folder[]>([]);
-const files = ref<File[]>([]);
+const items = ref<FolderItem[]>([]);
 const breadcrumbs = ref<Breadcrumb[]>([]);
 const page = ref(1);
 const limit = ref(50);
-const totalFiles = ref(0);
-const totalFolders = ref(0);
-const currentPageCount = computed(() => folders.value.length + files.value.length);
-const totalItemsCount = computed(() => totalFiles.value + totalFolders.value);
+const total = ref(0);
+const currentPageCount = computed(() => items.value.length);
+const totalItemsCount = computed(() => total.value);
 const show = ref<boolean>(false);
 const inputRef = ref<HTMLInputElement | null>(null);
 const currentFolderId = ref<string>('');
 const usersStore = useUsersStore();
 
 // ----- Modal State -----
-const viewingFile = ref<File | null>(null);
+const viewingFile = ref<FolderItem | null>(null);
 
-function openFileViewer(file: File) {
+function openFileViewer(file: FolderItem) {
   viewingFile.value = file;
   router.push({ query: { ...route.query, preview: file.uuid } });
 }
@@ -659,22 +640,22 @@ watch(
     if (!previewId) {
       viewingFile.value = null;
     } else if (previewId !== viewingFile.value?.uuid) {
-      viewingFile.value = files.value.find(f => f.uuid === previewId) ?? null;
+      viewingFile.value = items.value.find(i => i.type === 'file' && i.uuid === previewId) ?? null;
     }
   }
 );
 
-const editingFile = ref<File | null>(null);
+const editingFile = ref<FolderItem | null>(null);
 const newFileName = ref('');
 
-const editingFolder = ref<Folder | null>(null);
+const editingFolder = ref<FolderItem | null>(null);
 const newFolderName = ref('');
 
 // ----- Move File State -----
 const movingFileIds = ref<string[]>([]);
 const movingSingleFileName = ref<string | null>(null);
 const moveFolderId = ref('');
-const moveFolders = ref<Folder[]>([]);
+const moveFolders = ref<FolderItem[]>([]);
 const moveBreadcrumbs = ref<Breadcrumb[]>([]);
 const moveLoading = ref(false);
 const moving = ref(false);
@@ -686,14 +667,15 @@ async function loadMoveFolder(folderId: string) {
 
   if (response.ok && response.body) {
     moveFolderId.value = folderId;
-    moveFolders.value = response.body.folders || [];
+    const respItems = (response.body.items || []) as FolderItem[];
+    moveFolders.value = respItems.filter(i => i.type === 'folder');
     moveBreadcrumbs.value = response.body.breadcrumbs || [];
   } else {
     error.value = response.body?.error || 'Failed to load folders';
   }
 }
 
-function openMoveModal(file: File) {
+function openMoveModal(file: FolderItem) {
   movingFileIds.value = [file.uuid];
   movingSingleFileName.value = file.name;
   loadMoveFolder(currentFolderId.value);
@@ -745,7 +727,7 @@ interface ShareLinkItem {
   created_at: string;
 }
 
-const sharingFile = ref<File | null>(null);
+const sharingFile = ref<FolderItem | null>(null);
 const shareExpiresAt = ref('');
 const shareRequireLogin = ref(false);
 const shareLinks = ref<ShareLinkItem[]>([]);
@@ -757,7 +739,7 @@ const shareTokenCopied = ref<Record<string, boolean>>({});
 const sharedFileCounts = ref<Record<string, number>>({});
 
 // ----- Folder Share State -----
-const sharingFolder = ref<Folder | null>(null);
+const sharingFolder = ref<FolderItem | null>(null);
 const folderShareExpiresAt = ref('');
 const folderShareRequireLogin = ref(false);
 const folderShareAllowUpload = ref(false);
@@ -779,7 +761,7 @@ const sortDir = ref<'asc' | 'desc'>('asc')
 
 // Folder search stays client-side (folders aren't covered by the search API).
 // File search hits the backend, which does a `name LIKE 'query%'` prefix match.
-const fileSearchResults = ref<File[] | null>(null)
+const fileSearchResults = ref<FolderItem[] | null>(null)
 const searching = ref(false)
 let searchDebounceHandle: ReturnType<typeof setTimeout> | null = null
 
@@ -791,7 +773,9 @@ async function runFileSearch(query: string, folderId: string) {
 
   const response = await api({ url, method: 'GET' })
   searching.value = false
-  fileSearchResults.value = response.ok && Array.isArray(response.body) ? response.body : []
+  fileSearchResults.value = response.ok && Array.isArray(response.body)
+    ? response.body.map((f: Record<string, unknown>) => ({ ...f, type: 'file' as const }))
+    : []
 }
 
 watch([searchQuery, currentFolderId], ([query, folderId]) => {
@@ -806,28 +790,27 @@ watch([searchQuery, currentFolderId], ([query, folderId]) => {
   searchDebounceHandle = setTimeout(() => runFileSearch(trimmed, folderId), 250)
 })
 
-// Folders are always fetched from the server pre-sorted (by name), so
-// filtering for a search query preserves that order without re-sorting.
-const filteredFolders = computed(() => {
-  const q = searchQuery.value.trim().toLowerCase()
-  return q ? folders.value.filter(f => f.name.toLowerCase().includes(q)) : folders.value
-})
+function compareItems(a: FolderItem, b: FolderItem): number {
+  let cmp = 0
+  if (sortKey.value === 'name') cmp = a.name.localeCompare(b.name)
+  else if (sortKey.value === 'size') cmp = a.file_size - b.file_size
+  else cmp = new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+  return cmp * (sortDir.value === 'asc' ? 1 : -1)
+}
 
-// Non-search file listings come pre-sorted from the server (loadFolderContents
-// sends sort/sortBy). The search endpoint doesn't support sorting, so its
-// results still get sorted client-side.
-const filteredFiles = computed(() => {
+// Non-search listings come pre-sorted and paginated from the server as a
+// single combined list (loadFolderContents sends sort/sortBy). The search
+// endpoint only covers files and doesn't support sorting, so search results
+// combine client-filtered folders with the server's file matches and get
+// sorted client-side.
+const filteredItems = computed(() => {
   const isSearching = searchQuery.value.trim().length > 0
-  if (!isSearching) return files.value
+  if (!isSearching) return items.value
 
-  const list = (fileSearchResults.value ?? []).slice()
-  return list.sort((a, b) => {
-    let cmp = 0
-    if (sortKey.value === 'name') cmp = a.name.localeCompare(b.name)
-    else if (sortKey.value === 'size') cmp = a.file_size - b.file_size
-    else cmp = new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-    return cmp * (sortDir.value === 'asc' ? 1 : -1)
-  })
+  const q = searchQuery.value.trim().toLowerCase()
+  const matchedFolders = items.value.filter(i => i.type === 'folder' && i.name.toLowerCase().includes(q))
+  const searchFiles = fileSearchResults.value ?? []
+  return [...matchedFolders, ...searchFiles].sort(compareItems)
 })
 
 watch([sortKey, sortDir], () => {
@@ -858,11 +841,11 @@ const FILE_BADGE_COLORS: Record<string, string> = {
   js: '#5a6fd6', ts: '#5a6fd6', py: '#5a6fd6', go: '#5a6fd6', java: '#5a6fd6', c: '#5a6fd6', cpp: '#5a6fd6', json: '#5a6fd6', html: '#5a6fd6', css: '#5a6fd6', vue: '#5a6fd6',
 }
 
-function fileBadgeColor(file: File): string {
+function fileBadgeColor(file: FolderItem): string {
   return FILE_BADGE_COLORS[normalizedExtension(file)] || '#767676'
 }
 
-function fileBadgeLabel(file: File): string {
+function fileBadgeLabel(file: FolderItem): string {
   const ext = normalizedExtension(file)
   return (ext || 'file').slice(0, 4).toUpperCase()
 }
@@ -870,69 +853,41 @@ function fileBadgeLabel(file: File): string {
 const selectedFolders = ref<Set<string>>(new Set())
 const selectedFiles = ref<Set<string>>(new Set())
 
-const lastFolderIndex = ref<number | null>(null)
-const lastFileIndex = ref<number | null>(null)
+const lastItemIndex = ref<number | null>(null)
 
-function selectFolderRange(start: number, end: number) {
+function isItemSelected(item: FolderItem): boolean {
+  return item.type === 'folder' ? selectedFolders.value.has(item.uuid) : selectedFiles.value.has(item.uuid)
+}
+
+function selectItemRange(start: number, end: number) {
   // Range must be resolved against the same order the checkboxes are
-  // rendered in (filteredFolders), not the raw fetch order — otherwise the
-  // indices from the click handler point at different folders than what's
-  // on screen whenever a sort is active.
-  const list = filteredFolders.value
+  // rendered in (filteredItems), not the raw fetch order — otherwise the
+  // indices from the click handler point at different items than what's on
+  // screen whenever a sort is active.
+  const list = filteredItems.value
   const [from, to] = start < end ? [start, end] : [end, start]
 
   for (let i = from; i <= to; i++) {
-    const folder = list[i]
-    if (!folder) continue
-    selectedFolders.value.add(folder.uuid)
+    const item = list[i]
+    if (!item) continue
+    if (item.type === 'folder') selectedFolders.value.add(item.uuid)
+    else selectedFiles.value.add(item.uuid)
   }
 }
 
-function selectFileRange(start: number, end: number) {
-  const list = filteredFiles.value
-  const [from, to] = start < end ? [start, end] : [end, start]
-
-  for (let i = from; i <= to; i++) {
-    const file = list[i]
-    if (!file) continue
-    selectedFiles.value.add(file.uuid)
-  }
-}
-
-function onFolderCheckboxClick(
-  folderId: string,
-  index: number,
-  event: MouseEvent
-) {
-  if (event.shiftKey && lastFolderIndex.value !== null) {
-    selectFolderRange(lastFolderIndex.value, index)
+function onItemCheckboxClick(item: FolderItem, index: number, event: MouseEvent) {
+  if (event.shiftKey && lastItemIndex.value !== null) {
+    selectItemRange(lastItemIndex.value, index)
   } else {
-    if (selectedFolders.value.has(folderId)) {
-      selectedFolders.value.delete(folderId)
+    const set = item.type === 'folder' ? selectedFolders.value : selectedFiles.value
+    if (set.has(item.uuid)) {
+      set.delete(item.uuid)
     } else {
-      selectedFolders.value.add(folderId)
+      set.add(item.uuid)
     }
   }
 
-  lastFolderIndex.value = index
-}
-
-function onFileCheckboxClick(
-  fileId: string,
-  index: number,
-  event: MouseEvent
-) {
-  if (event.shiftKey && lastFileIndex.value !== null) {
-    selectFileRange(lastFileIndex.value, index)
-  } else {
-    if (selectedFiles.value.has(fileId)) {
-      selectedFiles.value.delete(fileId)
-    } else {
-      selectedFiles.value.add(fileId)
-    }
-  }
-
-  lastFileIndex.value = index
+  lastItemIndex.value = index
 }
 
 const hasSelection = computed(
@@ -940,18 +895,16 @@ const hasSelection = computed(
 )
 
 const allSelected = computed(() => {
-  const totalItems = filteredFolders.value.length + filteredFiles.value.length
-  if (totalItems === 0) return false
-  return selectedFolders.value.size === filteredFolders.value.length
-    && selectedFiles.value.size === filteredFiles.value.length
+  if (filteredItems.value.length === 0) return false
+  return filteredItems.value.every(isItemSelected)
 })
 
 function toggleSelectAll() {
   if (allSelected.value) {
     clearSelection()
   } else {
-    selectedFolders.value = new Set(filteredFolders.value.map(f => f.uuid))
-    selectedFiles.value = new Set(filteredFiles.value.map(f => f.uuid))
+    selectedFolders.value = new Set(filteredItems.value.filter(i => i.type === 'folder').map(i => i.uuid))
+    selectedFiles.value = new Set(filteredItems.value.filter(i => i.type === 'file').map(i => i.uuid))
   }
 }
 
@@ -978,8 +931,7 @@ const downloadDisabledReason = computed(() => {
 function clearSelection() {
   selectedFolders.value.clear()
   selectedFiles.value.clear()
-  lastFolderIndex.value = null
-  lastFileIndex.value = null
+  lastItemIndex.value = null
 }
 
 async function bulkDelete() {
@@ -1075,12 +1027,12 @@ async function deleteFolder(folderId: string) {
   refreshCurrentList();
 }
 
-function openFileEditModal(file: File) {
+function openFileEditModal(file: FolderItem) {
   editingFile.value = file
   newFileName.value = file.name
 }
 
-function openFolderEditModal(folder: Folder) {
+function openFolderEditModal(folder: FolderItem) {
   editingFolder.value = folder
   newFolderName.value = folder.name
 }
@@ -1134,7 +1086,7 @@ async function loadFolderShares(folderUUID: string) {
   }
 }
 
-function openFolderShareModal(folder: Folder) {
+function openFolderShareModal(folder: FolderItem) {
   sharingFolder.value = folder
   folderShareExpiresAt.value = ''
   folderShareRequireLogin.value = false
@@ -1234,7 +1186,7 @@ async function loadFileShares(fileId: string) {
   }
 }
 
-function openShareModal(file: File) {
+function openShareModal(file: FolderItem) {
   sharingFile.value = file
   shareExpiresAt.value = ''
   shareRequireLogin.value = false
@@ -1352,11 +1304,11 @@ function formatFileName(fileName: string): string {
 
 const IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp'])
 
-function normalizedExtension(file: File): string {
+function normalizedExtension(file: FolderItem): string {
   return (file.extension || '').replace(/^\./, '').toLowerCase()
 }
 
-function isImageFile(file: File): boolean {
+function isImageFile(file: FolderItem): boolean {
   return IMAGE_EXTENSIONS.has(normalizedExtension(file))
 }
 
@@ -1386,13 +1338,11 @@ async function loadFolderContents(folderId: string = '') {
 
     if (response.ok && response.body) {
       const contents = response.body as FolderContents
-      folders.value = contents.folders || []
-      files.value = contents.files || []
+      items.value = contents.items || []
       breadcrumbs.value = contents.breadcrumbs || []
       page.value = contents.page || 1
       limit.value = contents.limit || limit.value
-      totalFiles.value = contents.totalFiles || 0
-      totalFolders.value = contents.totalFolders || 0
+      total.value = contents.total || 0
     } else {
       error.value = response.body?.error || response.body?.message || 'Failed to load folder contents'
     }
@@ -1413,11 +1363,11 @@ function handleUploadError(message: string) {
   error.value = message
 }
 
-function handleFileUploaded(file: File) {
+function handleFileUploaded(file: FolderItem & { parent?: string }) {
   // Show the file immediately; the final `upload` event still triggers a
   // full refresh once the whole batch is done, which reconciles this.
   if ((file.parent || '') === currentFolderId.value) {
-    files.value.push(file)
+    items.value.push(file)
   }
 }
 
@@ -1494,19 +1444,8 @@ onUnmounted(() => {
   max-width: 800px;
 }
 
-.folders-section,
-.files-section {
+.items-section {
   width: 100%;
-}
-
-.folders-section h2,
-.files-section h2 {
-  font-size: 0.8rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-tertiary);
-  margin: 0 0 0.5rem 0.25rem;
 }
 
 .items-list {
@@ -1825,4 +1764,3 @@ onUnmounted(() => {
   white-space: nowrap;
 }
 </style>
-

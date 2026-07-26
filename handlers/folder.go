@@ -350,7 +350,7 @@ func (s *Server) ListFolderContents(c *gin.Context) {
 	page, limit, offset := shared.ParsePagination(c.Query("page"), c.Query("limit"))
 
 	folderID := c.Param("folderID")
-	folds, err := db.ListChildFolder(folderID, userID, sortDir, limit, offset)
+	items, err := db.ListFolderItems(folderID, userID, sortColumn, sortDir, limit, offset)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
 			Message: "Internal server error",
@@ -359,14 +359,6 @@ func (s *Server) ListFolderContents(c *gin.Context) {
 		return
 	}
 	totalFolders, err := db.CountChildFolders(folderID, userID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
-			Message: "Internal server error",
-			Error:   err.Error(),
-		})
-		return
-	}
-	files, err := db.ListChildFile(folderID, userID, sortColumn, sortDir, limit, offset)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
 			Message: "Internal server error",
@@ -394,12 +386,10 @@ func (s *Server) ListFolderContents(c *gin.Context) {
 		return
 	}
 
-	x.Folders = folds
-	x.Files = files
+	x.Items = items
 	x.Page = page
 	x.Limit = limit
-	x.TotalFolders = totalFolders
-	x.TotalFiles = totalFiles
+	x.Total = totalFolders + totalFiles
 
 	for _, f := range folderParents {
 		if folderID == "" && f.UUID == shared.ROOTFOLDERID {

@@ -29,6 +29,33 @@ type Folder struct {
 	DeletedAt *time.Time `json:"deleted_at,omitempty"`
 }
 
+// FolderItem is a single row from a unified folder+file listing query —
+// used wherever folders and files must be paginated together as one
+// deterministically-ordered set (drive listings, trash listings) instead of
+// as two separately-paginated result sets. Type is either "folder" or
+// "file"; fields that don't apply to a folder row (Extension, MimeType,
+// Checksum, CreatedBy) are simply left zero-valued.
+type FolderItem struct {
+	Type      string     `json:"type"`
+	ID        int64      `json:"id"`
+	UUID      string     `json:"uuid"`
+	Name      string     `json:"name"`
+	Extension string     `json:"extension,omitempty"`
+	MimeType  string     `json:"mimeType,omitempty"`
+	FileSize  int64      `json:"file_size"`
+	Checksum  string     `json:"checksum,omitempty"`
+	ParentID  int64      `json:"parent_id,omitempty"`
+	OwnerID   int64      `json:"owner_id,omitempty"`
+	CreatedBy int64      `json:"created_by,omitempty"`
+	CreatedAt time.Time  `json:"created_at"`
+	DeletedAt *time.Time `json:"deleted_at,omitempty"`
+}
+
+const (
+	FolderItemTypeFolder = "folder"
+	FolderItemTypeFile   = "file"
+)
+
 type User struct {
 	ID        int64     `json:"id"`
 	Email     string    `json:"email"`
@@ -113,39 +140,39 @@ type V1DashboardResponse struct {
 	FolderSharingEnabled bool  `json:"folderSharingEnabled"`
 }
 
+// V1FolderContentsResponse lists the contents of a folder as a single,
+// unified, already-paginated Items list (folders and files interleaved by
+// the requested sort), so the caller doesn't need to reconcile two
+// separately-paginated result sets to know what page it's on.
 type V1FolderContentsResponse struct {
-	Files        []File       `json:"files"`
-	Folders      []Folder     `json:"folders"`
-	BreadCrumbs  []Breadcrumb `json:"breadcrumbs"`
-	Page         int          `json:"page"`
-	Limit        int          `json:"limit"`
-	TotalFiles   int          `json:"totalFiles"`
-	TotalFolders int          `json:"totalFolders"`
+	Items       []FolderItem `json:"items"`
+	BreadCrumbs []Breadcrumb `json:"breadcrumbs"`
+	Page        int          `json:"page"`
+	Limit       int          `json:"limit"`
+	Total       int          `json:"total"`
 }
 
 // V1TrashResponse lists the top-level trashed items for a user, i.e. the
-// files and folders the user explicitly trashed. Items that are only in the
-// trash because an ancestor folder was trashed are not listed separately —
-// they come back along with their parent on restore.
+// files and folders the user explicitly trashed, as a single unified,
+// already-paginated Items list. Items that are only in the trash because an
+// ancestor folder was trashed are not listed separately — they come back
+// along with their parent on restore.
 type V1TrashResponse struct {
-	Files   []File   `json:"files"`
-	Folders []Folder `json:"folders"`
+	Items []FolderItem `json:"items"`
 	// RetentionDays is how many days an item sits in the trash before the
 	// sweeper permanently deletes it.
 	RetentionDays int `json:"retentionDays"`
 	Page          int `json:"page"`
 	Limit         int `json:"limit"`
-	TotalFiles    int `json:"totalFiles"`
-	TotalFolders  int `json:"totalFolders"`
+	Total         int `json:"total"`
 }
 
 // V1RestoreResponse is returned by the file/folder restore endpoints
 // (single and bulk) so the UI can refresh its trash pagination totals
 // without re-fetching the whole list.
 type V1RestoreResponse struct {
-	Message      string `json:"message"`
-	TotalFiles   int    `json:"totalFiles"`
-	TotalFolders int    `json:"totalFolders"`
+	Message string `json:"message"`
+	Total   int    `json:"total"`
 }
 
 type V1ShareLinkResponse struct {

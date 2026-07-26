@@ -4,11 +4,11 @@ import (
 	"context"
 	"fmt"
 
+	"avenue/backend/shared"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sesv2"
 	"github.com/aws/aws-sdk-go-v2/service/sesv2/types"
-	"avenue/backend/shared"
 )
 
 // SESSender sends emails via AWS Simple Email Service (SES v2).

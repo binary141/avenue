@@ -448,40 +448,8 @@ func ListTrashedFolders(ownerID string) ([]sdk.Folder, error) {
 	return folders, rows.Err()
 }
 
-// ListTrashedFoldersPage is the paginated counterpart to ListTrashedFolders,
-// used by the trash-listing endpoint. ListTrashedFolders itself stays
-// unpaginated since EmptyTrash needs every trashed folder to purge them all.
-// sortBy is constrained by the caller (handlers.ListTrash) to a fixed
-// whitelist of column names before reaching here, so it's safe to
-// concatenate directly into the query string.
-func ListTrashedFoldersPage(ownerID, sortBy string, sortDir sdk.SortDirection, limit, offset int) ([]sdk.Folder, error) {
-	rows, err := DB.Query(`
-		SELECT f.id, f.uuid, f.name, COALESCE(f.parent_id, 0), f.owner_id, f.deleted_at
-		FROM folders f
-		LEFT JOIN folders p ON p.id = f.parent_id
-		WHERE f.owner_id = $1::BIGINT AND f.deleted_at IS NOT NULL
-		  AND (p.id IS NULL OR p.deleted_at IS NULL)
-		ORDER BY f.`+sortBy+` `+string(sortDir)+`
-		LIMIT $2 OFFSET $3
-	`, ownerID, limit, offset)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var folders []sdk.Folder
-	for rows.Next() {
-		var f sdk.Folder
-		if err := rows.Scan(&f.ID, &f.UUID, &f.Name, &f.ParentID, &f.OwnerID, &f.DeletedAt); err != nil {
-			return nil, err
-		}
-		folders = append(folders, f)
-	}
-	return folders, rows.Err()
-}
-
 // CountTrashedFolders returns the total number of trashed folders for
-// ownerID, for computing pagination totals alongside ListTrashedFoldersPage.
+// ownerID, for computing pagination totals alongside db.ListTrashedItems.
 func CountTrashedFolders(ownerID string) (int, error) {
 	var count int
 	err := DB.QueryRow(`

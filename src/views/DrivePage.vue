@@ -777,7 +777,7 @@ function closeRowMenu() {
 const FILE_BADGE_COLORS: Record<string, string> = {
   pdf: '#d64545',
   doc: '#3b6fd6', docx: '#3b6fd6', txt: '#3b6fd6', md: '#3b6fd6', rtf: '#3b6fd6',
-  xls: '#2f9e5c', xlsx: '#2f9e5c', csv: '#2f9e5c',
+  xls: 'var(--success)', xlsx: 'var(--success)', csv: 'var(--success)',
   ppt: '#d6822f', pptx: '#d6822f',
   zip: '#a67c2e', tar: '#a67c2e', gz: '#a67c2e', rar: '#a67c2e', '7z': '#a67c2e',
   mp4: '#8a4fd6', mov: '#8a4fd6', avi: '#8a4fd6', mkv: '#8a4fd6', webm: '#8a4fd6',
@@ -1504,17 +1504,17 @@ onUnmounted(() => {
   background-color: var(--gray-2);
   border: 1px solid var(--gray-4);
   border-radius: 8px;
-  padding: 4px;
+  padding: var(--space-1);
   display: flex;
   flex-direction: column;
   min-width: 120px;
   z-index: 20;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+  box-shadow: var(--shadow-md);
 }
 
 .row-menu-item {
   text-align: left;
-  padding: 0.4rem 0.6rem;
+  padding: var(--space-2) var(--space-3);
   border-radius: 6px;
   color: var(--text);
   font-size: 0.85rem;
@@ -1526,11 +1526,11 @@ onUnmounted(() => {
 }
 
 .row-menu-item--danger {
-  color: #e57373;
+  color: var(--danger);
 }
 
 .toolbar {
-  margin-bottom: -0.5rem;
+  margin-bottom: calc(-1 * var(--space-2));
 }
 
 .search-input-wrap {
@@ -1636,7 +1636,7 @@ onUnmounted(() => {
 }
 
 .move-picker-crumb {
-  color: var(--primary-active);
+  color: var(--accent);
   cursor: pointer;
   padding: 0.1rem 0.25rem;
   border-radius: 4px;
@@ -1671,6 +1671,7 @@ onUnmounted(() => {
 .bulk-actions-bar {
   background-color: var(--gray-2);
   border: 1px solid var(--gray-4);
+  box-shadow: var(--shadow-sm);
 }
 
 .shared-badge {
@@ -1678,7 +1679,7 @@ onUnmounted(() => {
   align-items: center;
   font-size: 0.7rem;
   font-weight: 600;
-  color: var(--primary-active);
+  color: var(--accent);
   background-color: var(--gray-4);
   border-radius: 999px;
   padding: 0.1rem 0.45rem;

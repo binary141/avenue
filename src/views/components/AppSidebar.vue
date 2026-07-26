@@ -91,10 +91,11 @@ const icons = {
   flex-shrink: 0;
   background-color: var(--gray-2);
   border-radius: 10px;
-  padding: 14px;
+  padding: var(--space-4);
   align-self: flex-start;
   position: sticky;
-  top: 16px;
+  top: var(--space-4);
+  box-shadow: var(--shadow-sm);
 }
 
 .sidebar-nav {
@@ -109,15 +110,15 @@ const icons = {
 .sidebar-divider {
   height: 1px;
   background-color: var(--gray-4);
-  margin: 4px 0 8px;
+  margin: var(--space-1) 0 var(--space-2);
 }
 
 .sidebar-link {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-2);
   width: 100%;
-  padding: 0.55rem 0.65rem;
+  padding: var(--space-2) var(--space-3);
   border-radius: 8px;
   color: var(--text-secondary);
   font-size: 0.9rem;
@@ -137,12 +138,12 @@ const icons = {
 }
 
 .sidebar-link--danger {
-  color: #e57373;
+  color: var(--danger);
 }
 
 .sidebar-link--danger:hover {
-  background-color: rgba(229, 115, 115, 0.15);
-  color: #e57373;
+  background-color: var(--danger-bg);
+  color: var(--danger);
 }
 
 .sidebar-icon {

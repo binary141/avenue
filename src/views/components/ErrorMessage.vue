@@ -41,11 +41,12 @@ watch(
 
 <style scoped>
 .error-message {
-  padding: 8px 12px;
-  background-color: rgb(240, 87, 87);
+  padding: var(--space-2) var(--space-3);
+  background-color: var(--danger);
   border-radius: 8px;
   width: 100%;
-  gap: 8px;
+  gap: var(--space-2);
+  box-shadow: var(--shadow-sm);
 }
 
 .close-btn {

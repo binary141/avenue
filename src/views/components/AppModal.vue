@@ -10,7 +10,7 @@
           <Transition name="modal-panel" appear>
             <div
               v-if="show"
-              class="modal-panel rounded-lg shadow-lg relative flex flex-col"
+              class="modal-panel rounded-lg relative flex flex-col"
               :style="{ width }"
             >
               <div v-if="title || $slots.header" class="modal-header flex items-center justify-between">
@@ -81,24 +81,26 @@ onUnmounted(() => document.removeEventListener('keydown', onKeyDown))
 .modal-panel {
   background-color: var(--gray-2);
   color: var(--text);
-  padding: 1.5rem;
+  padding: var(--space-6);
+  box-shadow: var(--shadow-lg);
 }
 
 .modal-header {
-  margin-bottom: 1rem;
+  margin-bottom: var(--space-4);
 }
 
 .modal-footer {
-  margin-top: 1.5rem;
+  margin-top: var(--space-6);
+  gap: var(--space-2);
 }
 
 .modal-close-btn {
-  top: 0.5rem;
-  right: 0.5rem;
+  top: var(--space-2);
+  right: var(--space-2);
   color: var(--text-tertiary);
   font-size: 0.9rem;
   line-height: 1;
-  padding: 0.25rem;
+  padding: var(--space-1);
 }
 
 .modal-close-btn:hover {

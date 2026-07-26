@@ -1,44 +1,48 @@
 <template>
-  <div class="page gap-5">
-    <h1>SIGN UP</h1>
+  <div class="page auth-page gap-5">
+    <form @submit.prevent="handleSignUp" class="signup-form auth-card card flex flex-col w-full gap-4">
+      <div class="auth-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c1-3.2 3.6-5 6-5s5 1.8 6 5"/><path d="M18 8h4M20 6v4"/></svg>
+      </div>
+      <h1 class="auth-heading">Create an account</h1>
+      <p class="auth-subtitle -mt-2">Get started with Avenue</p>
 
-    <form @submit.prevent="handleSignUp" class="signup-form card flex flex-col w-full gap-4">
       <div class="flex flex-col gap-3">
         <label>Email</label>
         <input v-model="email" type="email" required />
       </div>
 
-        <div>
-          <label class="text-gray-300 text-sm mb-1 block">Password</label>
-          <div class="relative">
-            <input
-              v-model="password"
-              :type="showPassword ? 'text' : 'password'"
-              required
-              class="border rounded p-2 w-full"
-            />
-            <button type="button" @click="showPassword = !showPassword" class="absolute right-2 top-2 text-gray-400">
-              <span v-if="showPassword" class="text-2xl">️🐵</span>
-              <span v-else class="text-2xl">🙈</span>
-            </button>
-          </div>
+      <div class="flex flex-col gap-3">
+        <label>Password</label>
+        <div class="password-field">
+          <input
+            v-model="password"
+            :type="showPassword ? 'text' : 'password'"
+            required
+            class="w-full"
+          />
+          <button type="button" @click="showPassword = !showPassword" class="password-toggle">
+            <span v-if="showPassword" class="text-lg">🐵</span>
+            <span v-else class="text-lg">🙈</span>
+          </button>
         </div>
+      </div>
 
-        <div>
-          <label class="text-gray-300 text-sm mb-1 block">Confirm Password</label>
-          <div class="relative">
-            <input
-              v-model="confirmPassword"
-              :type="showConfirmPassword ? 'text' : 'password'"
-              required
-              class="border rounded p-2 w-full"
-            />
-            <button type="button" @click="showConfirmPassword = !showConfirmPassword" class="absolute right-2 top-2 text-gray-400">
-              <span v-if="showConfirmPassword" class="text-2xl">🐵</span>
-              <span v-else class="text-2xl">🙈</span>
-            </button>
-          </div>
+      <div class="flex flex-col gap-3">
+        <label>Confirm Password</label>
+        <div class="password-field">
+          <input
+            v-model="confirmPassword"
+            :type="showConfirmPassword ? 'text' : 'password'"
+            required
+            class="w-full"
+          />
+          <button type="button" @click="showConfirmPassword = !showConfirmPassword" class="password-toggle">
+            <span v-if="showConfirmPassword" class="text-lg">🐵</span>
+            <span v-else class="text-lg">🙈</span>
+          </button>
         </div>
+      </div>
 
       <ErrorMessage v-if="error">{{ error }}</ErrorMessage>
 
@@ -98,19 +102,15 @@ const showConfirmPassword = ref(false)
 </script>
 
 <style scoped>
-.login-form {
-  max-width: 500px;
-}
-
-.password-container {
-  position: relative;
-  width: 100%;
+.signup-form {
+  max-width: 440px;
 }
 
 .text-link {
   font-weight: bold;
+  color: var(--accent);
 }
 .text-link:hover {
-  color: rgb(141, 141, 255);
+  color: var(--accent-hover);
 }
 </style>

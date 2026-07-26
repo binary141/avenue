@@ -190,7 +190,7 @@ onUnmounted(() => {
 }
 
 .viewer-error {
-  color: #e57373;
+  color: var(--danger);
   font-family: "Inter", sans-serif;
   font-size: 14px;
 }

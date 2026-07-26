@@ -1,51 +1,59 @@
 <template>
-  <div class="page gap-5">
-    <h1>Reset Password</h1>
-
-    <div v-if="!token" class="form card flex flex-col w-full gap-4">
-      <p class="hint">This reset link is invalid or has expired. Please request a new one.</p>
-      <RouterLink :to="{ name: 'forgot-password' }" class="text-link">Request a new reset link</RouterLink>
+  <div class="page auth-page gap-5">
+    <div v-if="!token" class="form auth-card card flex flex-col w-full gap-4">
+      <div class="auth-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+      </div>
+      <h1 class="auth-heading">Reset password</h1>
+      <p class="auth-subtitle -mt-2">This reset link is invalid or has expired. Please request a new one.</p>
+      <RouterLink :to="{ name: 'forgot-password' }" class="text-link" style="text-align: center;">Request a new reset link</RouterLink>
     </div>
 
-    <form v-else @submit.prevent="handleSubmit" class="form card flex flex-col w-full gap-4">
+    <form v-else @submit.prevent="handleSubmit" class="form auth-card card flex flex-col w-full gap-4">
+      <div class="auth-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+      </div>
+      <h1 class="auth-heading">Reset password</h1>
+      <p class="auth-subtitle -mt-2">Choose a new password for your account</p>
+
       <div class="flex flex-col gap-3">
         <label>New Password</label>
-        <div class="relative">
+        <div class="password-field">
           <input
             v-model="newPassword"
             :type="showPassword ? 'text' : 'password'"
             required
             minlength="8"
-            class="border rounded p-2 w-full pr-10"
+            class="w-full"
           />
           <button
             type="button"
             @click="showPassword = !showPassword"
-            class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400"
+            class="password-toggle"
           >
-            <span v-if="showPassword" class="text-2xl">🐵</span>
-            <span v-else class="text-2xl">🙈</span>
+            <span v-if="showPassword" class="text-lg">🐵</span>
+            <span v-else class="text-lg">🙈</span>
           </button>
         </div>
       </div>
 
       <div class="flex flex-col gap-3">
         <label>Confirm Password</label>
-        <div class="relative">
+        <div class="password-field">
           <input
             v-model="confirmPassword"
             :type="showConfirm ? 'text' : 'password'"
             required
             minlength="8"
-            class="border rounded p-2 w-full pr-10"
+            class="w-full"
           />
           <button
             type="button"
             @click="showConfirm = !showConfirm"
-            class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400"
+            class="password-toggle"
           >
-            <span v-if="showConfirm" class="text-2xl">🐵</span>
-            <span v-else class="text-2xl">🙈</span>
+            <span v-if="showConfirm" class="text-lg">🐵</span>
+            <span v-else class="text-lg">🙈</span>
           </button>
         </div>
       </div>
@@ -105,18 +113,14 @@ async function handleSubmit() {
 
 <style scoped>
 .form {
-  max-width: 500px;
-}
-
-.hint {
-  color: rgba(255, 255, 255, 0.6);
-  font-size: 14px;
+  max-width: 440px;
 }
 
 .text-link {
   font-weight: bold;
+  color: var(--accent);
 }
 .text-link:hover {
-  color: rgb(141, 141, 255);
+  color: var(--accent-hover);
 }
 </style>

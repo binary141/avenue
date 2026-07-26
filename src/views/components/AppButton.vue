@@ -47,12 +47,12 @@ defineProps({
 
 /* Sizes */
 .app-button--md {
-    padding: 12px 24px;
+    padding: var(--space-3) var(--space-6);
     font-size: 15px;
 }
 
 .app-button--sm {
-    padding: 6px 14px;
+    padding: var(--space-2) var(--space-3);
     font-size: 13px;
     border-radius: 6px;
 }
@@ -61,7 +61,7 @@ defineProps({
 .app-button--primary {
     background-color: var(--primary);
     color: var(--text);
-    box-shadow: 2px 2px 4px rgba(53, 53, 53, 0.13);
+    box-shadow: var(--shadow-sm);
 }
 .app-button--primary:hover {
     background-color: var(--primary-hover);
@@ -79,18 +79,19 @@ defineProps({
 }
 
 .app-button--danger {
-    background-color: #c62828;
+    background-color: var(--danger-active);
     color: var(--text);
 }
 .app-button--danger:hover {
-    background-color: #d64545;
+    background-color: var(--danger-hover);
 }
 
 .app-button--danger-subtle {
-    background-color: rgba(229, 115, 115, 0.15);
-    color: #e57373;
+    background-color: var(--danger-bg);
+    color: var(--danger);
 }
 .app-button--danger-subtle:hover {
-    background-color: rgba(229, 115, 115, 0.25);
+    background-color: var(--danger-bg);
+    filter: brightness(1.3);
 }
 </style>

@@ -197,7 +197,7 @@ async function updateProfile() {
 }
 
 .field-error {
-  color: rgb(240, 87, 87);
+  color: var(--danger);
   font-size: 0.85rem;
 }
 </style>

@@ -6,7 +6,7 @@ input[type="text"], input[type="number"], input[type="email"], input[type="passw
     color: var(--text);
     border: none !important;
     border-radius: 6px;
-    padding: 8px;
+    padding: var(--space-2);
     color-scheme: dark;
 
     font-family: "Inter";
@@ -28,8 +28,98 @@ button:hover {
 
 /* Custom */
 .card {
-  padding: 24px;
+  padding: var(--space-6);
   width: 100%;
   background-color: var(--gray-2);
   border-radius: 8px;
+  box-shadow: var(--shadow-sm);
+}
+
+/* Auth pages (login/signup/forgot-password/reset-password) share this look
+   so they read as one designed flow instead of four separate forms. */
+.auth-page {
+  position: relative;
+  padding-top: var(--space-7);
+}
+
+.auth-page::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(480px circle at 15% 10%, rgba(58, 63, 120, 0.35), transparent 60%),
+    radial-gradient(420px circle at 85% 85%, rgba(47, 166, 160, 0.16), transparent 60%);
+  pointer-events: none;
+}
+
+.auth-card {
+  position: relative;
+  padding: var(--space-8) var(--space-7);
+  border: 1px solid var(--gray-4);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+
+.auth-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, var(--primary), var(--accent));
+}
+
+.auth-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--primary), var(--primary-hover));
+  color: var(--text);
+  margin: 0 auto var(--space-2);
+  box-shadow: var(--shadow-md);
+  flex-shrink: 0;
+}
+
+.auth-icon svg {
+  width: 1.5rem;
+  height: 1.5rem;
+}
+
+.auth-heading {
+  text-align: center;
+}
+
+.auth-subtitle {
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.password-field {
+  position: relative;
+  width: 100%;
+}
+
+.password-toggle {
+  position: absolute;
+  right: var(--space-2);
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 6px;
+  color: var(--text-tertiary);
+}
+
+.password-toggle:hover {
+  color: var(--text);
+  background-color: var(--gray-4);
 }

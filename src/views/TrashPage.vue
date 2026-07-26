@@ -166,7 +166,7 @@ import type { FolderItem } from '@/types/folder';
 const FILE_BADGE_COLORS: Record<string, string> = {
   pdf: '#d64545',
   doc: '#3b6fd6', docx: '#3b6fd6', txt: '#3b6fd6', md: '#3b6fd6', rtf: '#3b6fd6',
-  xls: '#2f9e5c', xlsx: '#2f9e5c', csv: '#2f9e5c',
+  xls: 'var(--success)', xlsx: 'var(--success)', csv: 'var(--success)',
   ppt: '#d6822f', pptx: '#d6822f',
   zip: '#a67c2e', tar: '#a67c2e', gz: '#a67c2e', rar: '#a67c2e', '7z': '#a67c2e',
   mp4: '#8a4fd6', mov: '#8a4fd6', avi: '#8a4fd6', mkv: '#8a4fd6', webm: '#8a4fd6',

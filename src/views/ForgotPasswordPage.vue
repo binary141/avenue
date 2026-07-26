@@ -1,9 +1,11 @@
 <template>
-  <div class="page gap-5">
-    <h1>Forgot Password</h1>
-
-    <form @submit.prevent="handleSubmit" class="form card flex flex-col w-full gap-4">
-      <p class="hint">Enter your email address and we'll send you a link to reset your password.</p>
+  <div class="page auth-page gap-5">
+    <form @submit.prevent="handleSubmit" class="form auth-card card flex flex-col w-full gap-4">
+      <div class="auth-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m4 7 8 6 8-6"/></svg>
+      </div>
+      <h1 class="auth-heading">Forgot password</h1>
+      <p class="auth-subtitle -mt-2">Enter your email address and we'll send you a link to reset your password.</p>
 
       <div class="flex flex-col gap-3">
         <label>Email</label>
@@ -56,18 +58,14 @@ async function handleSubmit() {
 
 <style scoped>
 .form {
-  max-width: 500px;
-}
-
-.hint {
-  color: rgba(255, 255, 255, 0.6);
-  font-size: 14px;
+  max-width: 440px;
 }
 
 .text-link {
   font-weight: bold;
+  color: var(--accent);
 }
 .text-link:hover {
-  color: rgb(141, 141, 255);
+  color: var(--accent-hover);
 }
 </style>

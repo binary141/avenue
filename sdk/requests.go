@@ -4,11 +4,11 @@ import "time"
 
 type LoginRequest struct {
 	Email    string `json:"email" binding:"required,min=4,max=64"`
-	Password string `json:"password" binding:"required,min=4,max=64"`
+	Password string `json:"password" binding:"required,min=8,max=128"`
 }
 
 type RegisterRequest struct {
-	Password  string `json:"password" binding:"required,min=4,max=64"`
+	Password  string `json:"password" binding:"required,min=8,max=128"`
 	FirstName string `json:"firstName" binding:"max=64"`
 	LastName  string `json:"lastName" binding:"max=64"`
 	Email     string `json:"email" binding:"required,min=4,max=512"`
@@ -16,7 +16,7 @@ type RegisterRequest struct {
 
 type CreateUserRequest struct {
 	Email     string  `json:"email" binding:"required,min=4,max=512"`
-	Password  *string `json:"password,omitempty" binding:"omitempty,min=4,max=64"`
+	Password  *string `json:"password,omitempty" binding:"omitempty,min=8,max=128"`
 	FirstName string  `json:"firstName" binding:"min=1,max=64"`
 	LastName  string  `json:"lastName" binding:"min=1,max=64"`
 	IsAdmin   bool    `json:"isAdmin"`
@@ -24,17 +24,19 @@ type CreateUserRequest struct {
 }
 
 type UpdateProfileRequest struct {
-	ID        int64   `json:"id" binding:"required,min=1"`
-	Email     *string `json:"email,omitempty" binding:"omitempty,email,min=4,max=512"`
-	IsAdmin   *bool   `json:"isAdmin,omitempty"`
-	Password  *string `json:"password,omitempty" binding:"omitempty,min=4,max=64"`
-	FirstName *string `json:"firstName,omitempty" binding:"min=0,max=64"`
-	LastName  *string `json:"lastName,omitempty" binding:"min=0,max=64"`
-	Quota     *int64  `json:"quota,omitempty" binding:"omitempty,min=0"`
+	ID              int64   `json:"id" binding:"required,min=1"`
+	Email           *string `json:"email,omitempty" binding:"omitempty,email,min=4,max=512"`
+	IsAdmin         *bool   `json:"isAdmin,omitempty"`
+	Password        *string `json:"password,omitempty" binding:"omitempty,min=8,max=128"`
+	CurrentPassword *string `json:"currentPassword,omitempty"`
+	FirstName       *string `json:"firstName,omitempty" binding:"min=0,max=64"`
+	LastName        *string `json:"lastName,omitempty" binding:"min=0,max=64"`
+	Quota           *int64  `json:"quota,omitempty" binding:"omitempty,min=0"`
 }
 
 type UpdatePasswordRequest struct {
-	Password string `json:"password" binding:"required,min=8,max=128"`
+	Password        string `json:"password" binding:"required,min=8,max=128"`
+	CurrentPassword string `json:"currentPassword" binding:"required"`
 }
 
 type ForgotPasswordRequest struct {
@@ -43,7 +45,7 @@ type ForgotPasswordRequest struct {
 
 type ResetPasswordRequest struct {
 	Token       string `json:"token" binding:"required"`
-	NewPassword string `json:"newPassword" binding:"required,min=8"`
+	NewPassword string `json:"newPassword" binding:"required,min=8,max=128"`
 }
 
 type CreateFolderRequest struct {

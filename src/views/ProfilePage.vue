@@ -24,12 +24,52 @@
 
       <div class="flex flex-col gap-3">
         <label>Password</label>
-        <input v-model="password" type="password" autocomplete="new-password" />
+
+        <div class="relative">
+          <input
+            v-model="password"
+            :type="showPassword ? 'text' : 'password'"
+            autocomplete="new-password"
+            class="border rounded p-2 w-full pr-10"
+          />
+
+          <button
+            type="button"
+            @click="showPassword = !showPassword"
+            class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400"
+          >
+            <span v-if="showPassword" class="text-2xl">🐵</span>
+            <span v-else class="text-2xl">🙈</span>
+          </button>
+        </div>
       </div>
 
       <div class="flex flex-col gap-3">
         <label>Password Confirmation</label>
-        <input v-model="passwordConfirmation" type="password" autocomplete="new-password" />
+        <input v-model="passwordConfirmation" :type="showPassword ? 'text' : 'password'" autocomplete="new-password" />
+        <span v-if="passwordMismatch" class="field-error">Passwords need to match</span>
+      </div>
+
+      <div v-if="password" class="flex flex-col gap-3">
+        <label>Current Password</label>
+
+        <div class="relative">
+          <input
+            v-model="currentPassword"
+            :type="showCurrentPassword ? 'text' : 'password'"
+            autocomplete="current-password"
+            class="border rounded p-2 w-full pr-10"
+          />
+
+          <button
+            type="button"
+            @click="showCurrentPassword = !showCurrentPassword"
+            class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400"
+          >
+            <span v-if="showCurrentPassword" class="text-2xl">🐵</span>
+            <span v-else class="text-2xl">🙈</span>
+          </button>
+        </div>
       </div>
 
       <ErrorMessage :msg=error @clear="error = ''"/>
@@ -61,6 +101,10 @@ const successMsg = ref('')
 
 const password = ref('')
 const passwordConfirmation = ref('')
+const currentPassword = ref('')
+
+const showPassword = ref(false)
+const showCurrentPassword = ref(false)
 
 const error = ref<string | undefined>()
 const submitting = ref(false)
@@ -69,13 +113,17 @@ const isEmailDirty = computed(() => email.value !== originalEmail.value)
 const isFNameDirty = computed(() => fName.value !== originalFName.value)
 const isLNameDirty = computed(() => lName.value !== originalLName.value)
 
+const passwordMismatch = computed(() =>
+  password.value !== '' && passwordConfirmation.value !== '' && password.value !== passwordConfirmation.value
+)
+
 async function updateProfile() {
   submitting.value = true
   error.value = undefined
 
   const payload: Record<string, string | null> = {}
 
-  payload.id = usersStore.userData.data.id
+  payload.id = `${usersStore.userData.data.id}`
 
   if (isFNameDirty.value) {
     payload.firstName = fName.value
@@ -103,7 +151,14 @@ async function updateProfile() {
       return
     }
 
+    if (!currentPassword.value) {
+      error.value = "Current password is required"
+      submitting.value = false
+      return
+    }
+
     payload.password = password.value
+    payload.currentPassword = currentPassword.value
   }
 
   if (Object.keys(payload).length === 0) {
@@ -126,6 +181,12 @@ async function updateProfile() {
 
   successMsg.value = "Successfully updated profile!"
 
+  password.value = ''
+  passwordConfirmation.value = ''
+  currentPassword.value = ''
+  showPassword.value = false
+  showCurrentPassword.value = false
+
   submitting.value = false
 }
 </script>
@@ -133,6 +194,11 @@ async function updateProfile() {
 <style scoped>
 .login-form {
   max-width: 500px;
+}
+
+.field-error {
+  color: rgb(240, 87, 87);
+  font-size: 0.85rem;
 }
 </style>
 

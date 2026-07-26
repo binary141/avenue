@@ -351,6 +351,20 @@ func (s *Server) UpdateProfile(c *gin.Context) {
 	}
 
 	if req.Password != nil {
+		// Only require the current password when users change their own password;
+		// admins resetting another user's password don't know it and shouldn't need to.
+		if fmt.Sprintf("%d", req.ID) == userID {
+			if req.CurrentPassword == nil || *req.CurrentPassword == "" {
+				respond(c, http.StatusBadRequest, errors.New("current password is required"))
+				return
+			}
+
+			if err := bcrypt.CompareHashAndPassword([]byte(updatingUser.Password), []byte(*req.CurrentPassword)); err != nil {
+				respond(c, http.StatusUnauthorized, errors.New("current password is incorrect"))
+				return
+			}
+		}
+
 		hashed, err := bcrypt.GenerateFromPassword([]byte(*req.Password), bcrypt.DefaultCost)
 		if err != nil {
 			respond(c, http.StatusInternalServerError, fmt.Errorf("hash password: %w", err))
@@ -400,6 +414,11 @@ func (s *Server) UpdatePassword(c *gin.Context) {
 	u, err := db.GetUserByIDStr(userID)
 	if err != nil {
 		respond(c, http.StatusInternalServerError, fmt.Errorf("get user: %w", err))
+		return
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(u.Password), []byte(req.CurrentPassword)); err != nil {
+		respond(c, http.StatusUnauthorized, errors.New("current password is incorrect"))
 		return
 	}
 

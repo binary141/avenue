@@ -80,6 +80,15 @@ type ShareFolderLink struct {
 	LastAccessed *time.Time `json:"last_accessed"`
 }
 
+type SessionInfo struct {
+	ID        int64     `json:"id"`
+	CreatedAt time.Time `json:"createdAt"`
+	ExpiresAt time.Time `json:"expiresAt"`
+	UserAgent string    `json:"userAgent"`
+	IPAddress string    `json:"ipAddress"`
+	IsCurrent bool      `json:"isCurrent"`
+}
+
 type Breadcrumb struct {
 	Label    string `json:"label"`
 	FolderID string `json:"folder_id"`

@@ -55,7 +55,7 @@ func (s *Server) Login(c *gin.Context) {
 		return
 	}
 
-	session, err := db.CreateSession(u.ID)
+	session, err := db.CreateSession(u.ID, c.Request.UserAgent(), c.ClientIP())
 	if err != nil {
 		respond(c, http.StatusInternalServerError, fmt.Errorf("create session: %w", err))
 		return

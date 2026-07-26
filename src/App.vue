@@ -40,6 +40,10 @@
                     @click="goToProfile">
               Profile Settings
             </button>
+            <button class="text-left px-3 py-2 hover:bg-gray-100 rounded-lg text-black"
+                    @click="goToSessions">
+              Sessions
+            </button>
             <button class="text-left px-3 py-2 hover:bg-gray-100 rounded-lg text-red-600"
                     @click="logout">
               Logout
@@ -137,6 +141,11 @@ function goToTrash() {
 
 function goToProfile() {
   router.push("/profile")
+  showMenu.value = false
+}
+
+function goToSessions() {
+  router.push("/sessions")
   showMenu.value = false
 }
 

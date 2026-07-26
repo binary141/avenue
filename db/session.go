@@ -7,36 +7,73 @@ import (
 )
 
 type Session struct {
-	ID        int64  `json:"id"`
-	SessionID string `json:"-"`
-	ExpiresAt int64  `json:"expiresAt"`
-	IsValid   bool   `json:"isValid"`
-	UserId    int64  `json:"userID"`
+	ID        int64     `json:"id"`
+	SessionID string    `json:"-"`
+	ExpiresAt int64     `json:"expiresAt"`
+	IsValid   bool      `json:"isValid"`
+	UserId    int64     `json:"userID"`
+	CreatedAt time.Time `json:"createdAt"`
+	UserAgent string    `json:"userAgent"`
+	IPAddress string    `json:"ipAddress"`
 }
 
-func CreateSession(userId int64) (Session, error) {
+func CreateSession(userId int64, userAgent, ipAddress string) (Session, error) {
 	s := Session{
 		SessionID: uuid.NewString(),
 		ExpiresAt: time.Now().Add(15 * time.Minute).Unix(),
 		IsValid:   true,
 		UserId:    userId,
+		UserAgent: userAgent,
+		IPAddress: ipAddress,
 	}
 
 	err := DB.QueryRow(`
-		INSERT INTO sessions (uuid, expires_at, is_valid, user_id)
-		VALUES ($1, $2, $3, $4)
-		RETURNING id
-	`, s.SessionID, s.ExpiresAt, s.IsValid, s.UserId).Scan(&s.ID)
+		INSERT INTO sessions (uuid, expires_at, is_valid, user_id, user_agent, ip_address)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		RETURNING id, created_at
+	`, s.SessionID, s.ExpiresAt, s.IsValid, s.UserId, s.UserAgent, s.IPAddress).Scan(&s.ID, &s.CreatedAt)
 	return s, err
 }
 
 func getSessionByToken(token string) (Session, error) {
 	var s Session
 	err := DB.QueryRow(
-		`SELECT id, uuid, expires_at, is_valid, user_id FROM sessions WHERE uuid = $1`,
+		`SELECT id, uuid, expires_at, is_valid, user_id, created_at, COALESCE(user_agent,''), COALESCE(ip_address,'') FROM sessions WHERE uuid = $1`,
 		token,
-	).Scan(&s.ID, &s.SessionID, &s.ExpiresAt, &s.IsValid, &s.UserId)
+	).Scan(&s.ID, &s.SessionID, &s.ExpiresAt, &s.IsValid, &s.UserId, &s.CreatedAt, &s.UserAgent, &s.IPAddress)
 	return s, err
+}
+
+// ListSessionsForUser returns the user's active (valid, unexpired) sessions,
+// most recently created first.
+func ListSessionsForUser(userID int64) ([]Session, error) {
+	rows, err := DB.Query(`
+		SELECT id, uuid, expires_at, is_valid, user_id, created_at, COALESCE(user_agent,''), COALESCE(ip_address,'')
+		FROM sessions
+		WHERE user_id = $1 AND is_valid = true AND expires_at >= $2
+		ORDER BY created_at DESC
+	`, userID, time.Now().Unix())
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var sessions []Session
+	for rows.Next() {
+		var s Session
+		if err := rows.Scan(&s.ID, &s.SessionID, &s.ExpiresAt, &s.IsValid, &s.UserId, &s.CreatedAt, &s.UserAgent, &s.IPAddress); err != nil {
+			return nil, err
+		}
+		sessions = append(sessions, s)
+	}
+	return sessions, rows.Err()
+}
+
+// DeleteSessionByIDForUser removes a single session by its row ID, scoped to
+// userID so a caller can only revoke their own sessions.
+func DeleteSessionByIDForUser(id, userID int64) error {
+	_, err := DB.Exec(`DELETE FROM sessions WHERE id=$1 AND user_id=$2`, id, userID)
+	return err
 }
 
 func IsValidSession(token string) (Session, bool) {

@@ -300,6 +300,9 @@ func (s *Server) SetupRoutes() {
 	securedRouterV1.PATCH("/user/:userID", s.UpdateProfile)
 	securedRouterV1.PATCH("/user/password", s.UpdatePassword)
 	securedRouterV1.POST("/user/:userID/send-reset-email", s.AdminSendPasswordReset)
+	securedRouterV1.GET("/user/sessions", s.ListSessions)
+	securedRouterV1.DELETE("/user/sessions/:sessionID", s.RevokeSession)
+	securedRouterV1.DELETE("/user/sessions", s.RevokeOtherSessions)
 
 }
 

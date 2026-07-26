@@ -1,7 +1,7 @@
 <template>
   <div class="file-usage">
-    <div class="flex justify-between mb-1 text-sm">
-      <span>Storage Usage</span>
+    <div class="file-usage__row">
+      <span>{{ humanUsed }} used</span>
       <span>{{ isUnlimited ? 'Unlimited' : `${percentage}%` }}</span>
     </div>
 
@@ -11,10 +11,6 @@
         class="bar-fill"
         :style="{ width: percentage + '%' }"
       />
-    </div>
-
-    <div class="mt-2 text-xs text-gray-600">
-      {{ isUnlimited ? `${humanUsed} used` : `${humanUsed} used of ${humanQuota}` }}
     </div>
   </div>
 </template>
@@ -50,7 +46,6 @@ function bytesToHuman(bytes: number): string {
 }
 
 const humanUsed = computed(() => bytesToHuman(props.used));
-const humanQuota = computed(() => bytesToHuman(props.quota));
 </script>
 
 <style scoped>
@@ -58,24 +53,34 @@ const humanQuota = computed(() => bytesToHuman(props.quota));
   width: 100%;
 }
 
+.file-usage__row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
 .bar {
-  height: 10px;
+  height: 6px;
+  border-radius: 4px;
   background-color: var(--gray-4);
-  border-radius: 9999px;
   overflow: hidden;
 }
 
 .bar-fill {
   height: 100%;
-  background-color: var(--primary-active);
+  border-radius: 4px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-hover));
   transition: width 0.3s ease;
 }
 
 .bar--unlimited {
+  height: 100%;
   background-image: repeating-linear-gradient(
     135deg,
-    var(--primary-active),
-    var(--primary-active) 6px,
+    var(--accent),
+    var(--accent) 6px,
     var(--gray-4) 6px,
     var(--gray-4) 12px
   );

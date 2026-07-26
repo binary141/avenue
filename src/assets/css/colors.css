@@ -1,14 +1,14 @@
 :root {
-    --primary: #3A3F78;
-    --primary-active: #4b5198;
-    --primary-hover: #3d4382;
-    --primary-disabled: #51536d;
+    --primary: #3b3f8f;
+    --primary-active: #4b4fb0;
+    --primary-hover: #454aa3;
+    --primary-disabled: #565a8a;
 
     /* Secondary accent hue — used for links, "shared" badges, and other
        highlights that shouldn't compete with primary action buttons. */
-    --accent: #2FA6A0;
-    --accent-hover: #3FBFB8;
-    --accent-active: #268C86;
+    --accent: #6b6fe6;
+    --accent-hover: #8b8ef0;
+    --accent-active: #5457c9;
 
     --success: #3DA35D;
     --success-hover: #4CB86E;
@@ -19,15 +19,15 @@
     --danger-active: #C93A3F;
     --danger-bg: rgba(229, 72, 77, 0.15);
 
-    --text: #FFFFFF;
-    --text-secondary: #A8A8A8;
-    --text-tertiary: #8C8C8C;
+    --text: #e8e8ec;
+    --text-secondary: #9497a6;
+    --text-tertiary: #7d7f8c;
 
-    --gray: #2C2B2B;
-    --gray-2: #3C3C3C;
-    --gray-3: #333333;
-    --gray-4: #565656;
-    --gray-5: #848484;
+    --gray: #17181c;
+    --gray-2: #22242b;
+    --gray-3: #282a33;
+    --gray-4: #35374a;
+    --gray-5: #44465c;
 
     /* Elevation — depth increases with each step, layered on top of the
        flat --gray-* background steps so raised surfaces (cards, modals,

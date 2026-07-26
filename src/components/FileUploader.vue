@@ -22,28 +22,38 @@
         @change="handleFileInputChange"
       />
 
-      <div v-if="!hasFiles" class="drop-zone__content">
-        <svg
-          class="drop-zone__icon"
-          xmlns="http://www.w3.org/2000/svg"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-        >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
-          />
-        </svg>
-        <p class="drop-zone__text">
-          <span class="drop-zone__text--primary">Click to upload</span>
-          or drag and drop
-        </p>
-        <p class="drop-zone__hint">
-          {{ accept === '*' ? 'Any file type' : accept }} (Max {{ formattedSize }})
-        </p>
+      <div v-if="!hasFiles" class="drop-zone__row">
+        <div class="drop-zone__content">
+          <div class="drop-zone__icon-badge">
+            <svg
+              class="drop-zone__icon"
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="#fff"
+              stroke-width="2.4"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M12 3v12" />
+              <path d="M7 8l5-5 5 5" />
+              <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+            </svg>
+          </div>
+          <div class="drop-zone__copy">
+            <p class="drop-zone__title">Upload files</p>
+            <p class="drop-zone__hint">
+              Drag and drop, or click to browse · Max {{ formattedSize }}{{ accept === '*' ? '' : ` (${accept})` }}
+            </p>
+          </div>
+        </div>
+
+        <template v-if="$slots.aside">
+          <div class="drop-zone__divider"></div>
+          <div class="drop-zone__aside" @click.stop>
+            <slot name="aside" />
+          </div>
+        </template>
       </div>
 
       <div v-else class="file-list">
@@ -397,22 +407,20 @@ const hasFiles = computed(() => selectedFiles.value.length > 0)
 }
 
 .drop-zone {
-  border: 2px dashed var(--gray-4);
-  border-radius: 0.5rem;
-  padding: 2rem;
-  text-align: center;
+  border: 1px solid var(--gray-4);
+  border-radius: 12px;
+  padding: 16px 20px;
   cursor: pointer;
   transition: all 0.2s ease;
-  background-color: var(--gray);
+  background-color: var(--gray-2);
 }
 
 .drop-zone:hover:not(.drop-zone--disabled) {
-  border-color: var(--primary-hover);
-  background-color: var(--gray-3);
+  border-color: var(--accent);
 }
 
 .drop-zone--dragging {
-  border-color: var(--primary-active);
+  border-color: var(--accent);
   background-color: var(--gray-3);
 }
 
@@ -429,33 +437,71 @@ const hasFiles = computed(() => selectedFiles.value.length > 0)
   display: none;
 }
 
+.drop-zone__row {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
 .drop-zone__content {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 0.5rem;
+  gap: 14px;
+  flex: 1;
+  min-width: 0;
+  padding: 8px 12px;
+  border-radius: 9px;
+  background: rgba(107, 111, 230, 0.12);
+  border: 1px solid rgba(107, 111, 230, 0.4);
+  transition: background-color 0.2s ease;
+}
+
+.drop-zone:hover:not(.drop-zone--disabled) .drop-zone__content {
+  background: rgba(107, 111, 230, 0.2);
+}
+
+.drop-zone__divider {
+  width: 1px;
+  height: 40px;
+  background: var(--gray-4);
+  flex-shrink: 0;
+}
+
+.drop-zone__aside {
+  min-width: 220px;
+  cursor: default;
+}
+
+.drop-zone__icon-badge {
+  width: 38px;
+  height: 38px;
+  border-radius: 9px;
+  background: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
 .drop-zone__icon {
-  width: 3rem;
-  height: 3rem;
-  color: var(--text-secondary);
+  width: 20px;
+  height: 20px;
 }
 
-.drop-zone__text {
-  font-size: 0.875rem;
-  color: var(--text-secondary);
+.drop-zone__copy {
+  text-align: left;
+}
+
+.drop-zone__title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
   margin: 0;
 }
 
-.drop-zone__text--primary {
-  color: var(--primary-active);
-  font-weight: 600;
-}
-
 .drop-zone__hint {
-  font-size: 0.75rem;
-  color: var(--text-tertiary);
+  font-size: 12px;
+  color: var(--text-secondary);
   margin: 0;
 }
 

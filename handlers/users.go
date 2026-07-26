@@ -369,7 +369,7 @@ func (s *Server) UpdateProfile(c *gin.Context) {
 		updatingUser.IsAdmin = *req.IsAdmin
 	}
 
-	if req.Quota != nil {
+	if req.Quota != nil && u.IsAdmin {
 		updatingUser.Quota = *req.Quota
 	}
 

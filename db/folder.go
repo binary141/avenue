@@ -309,11 +309,54 @@ func ListTrashedFolders(ownerID string) ([]sdk.Folder, error) {
 	return folders, rows.Err()
 }
 
+// ListTrashedFoldersPage is the paginated counterpart to ListTrashedFolders,
+// used by the trash-listing endpoint. ListTrashedFolders itself stays
+// unpaginated since EmptyTrash needs every trashed folder to purge them all.
+func ListTrashedFoldersPage(ownerID string, limit, offset int) ([]sdk.Folder, error) {
+	rows, err := DB.Query(`
+		SELECT f.id, f.uuid, f.name, COALESCE(f.parent_id, 0), f.owner_id, f.deleted_at
+		FROM folders f
+		LEFT JOIN folders p ON p.id = f.parent_id
+		WHERE f.owner_id = $1::BIGINT AND f.deleted_at IS NOT NULL
+		  AND (p.id IS NULL OR p.deleted_at IS NULL)
+		ORDER BY f.deleted_at DESC
+		LIMIT $2 OFFSET $3
+	`, ownerID, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var folders []sdk.Folder
+	for rows.Next() {
+		var f sdk.Folder
+		if err := rows.Scan(&f.ID, &f.UUID, &f.Name, &f.ParentID, &f.OwnerID, &f.DeletedAt); err != nil {
+			return nil, err
+		}
+		folders = append(folders, f)
+	}
+	return folders, rows.Err()
+}
+
+// CountTrashedFolders returns the total number of trashed folders for
+// ownerID, for computing pagination totals alongside ListTrashedFoldersPage.
+func CountTrashedFolders(ownerID string) (int, error) {
+	var count int
+	err := DB.QueryRow(`
+		SELECT COUNT(*)
+		FROM folders f
+		LEFT JOIN folders p ON p.id = f.parent_id
+		WHERE f.owner_id = $1::BIGINT AND f.deleted_at IS NOT NULL
+		  AND (p.id IS NULL OR p.deleted_at IS NULL)
+	`, ownerID).Scan(&count)
+	return count, err
+}
+
 // ListChildFolder lists the child folders of parentID, ordered by name.
 // sortDir is interpolated directly into the query since placeholders can't
 // parameterize ORDER BY; it's a typed sdk.SortDirection so callers can't pass
 // arbitrary strings.
-func ListChildFolder(parentID, ownerID string, sortDir sdk.SortDirection) ([]sdk.Folder, error) {
+func ListChildFolder(parentID, ownerID string, sortDir sdk.SortDirection, limit, offset int) ([]sdk.Folder, error) {
 	var (
 		rows *sql.Rows
 		err  error
@@ -321,15 +364,15 @@ func ListChildFolder(parentID, ownerID string, sortDir sdk.SortDirection) ([]sdk
 
 	if parentID == "" || parentID == rootFolderID {
 		rows, err = DB.Query(
-			`SELECT id, uuid, name, COALESCE(parent_id, 0), owner_id FROM folders WHERE parent_id IS NULL AND owner_id=$1::BIGINT AND deleted_at IS NULL ORDER BY name `+string(sortDir),
-			ownerID,
+			`SELECT id, uuid, name, COALESCE(parent_id, 0), owner_id FROM folders WHERE parent_id IS NULL AND owner_id=$1::BIGINT AND deleted_at IS NULL ORDER BY name `+string(sortDir)+` LIMIT $2 OFFSET $3`,
+			ownerID, limit, offset,
 		)
 	} else {
 		rows, err = DB.Query(`
 			SELECT id, uuid, name, COALESCE(parent_id, 0), owner_id FROM folders
 			WHERE parent_id = (SELECT id FROM folders WHERE uuid = $1 AND owner_id = $2::BIGINT)
-			  AND owner_id = $2::BIGINT AND deleted_at IS NULL ORDER BY name `+string(sortDir),
-			parentID, ownerID,
+			  AND owner_id = $2::BIGINT AND deleted_at IS NULL ORDER BY name `+string(sortDir)+` LIMIT $3 OFFSET $4`,
+			parentID, ownerID, limit, offset,
 		)
 	}
 	if err != nil {
@@ -346,6 +389,28 @@ func ListChildFolder(parentID, ownerID string, sortDir sdk.SortDirection) ([]sdk
 		folders = append(folders, f)
 	}
 	return folders, rows.Err()
+}
+
+// CountChildFolders returns the total number of (non-deleted) child folders
+// of parentID, for computing pagination totals alongside ListChildFolder.
+func CountChildFolders(parentID, ownerID string) (int, error) {
+	var count int
+	var err error
+
+	if parentID == "" || parentID == rootFolderID {
+		err = DB.QueryRow(
+			`SELECT COUNT(*) FROM folders WHERE parent_id IS NULL AND owner_id=$1::BIGINT AND deleted_at IS NULL`,
+			ownerID,
+		).Scan(&count)
+	} else {
+		err = DB.QueryRow(`
+			SELECT COUNT(*) FROM folders
+			WHERE parent_id = (SELECT id FROM folders WHERE uuid = $1 AND owner_id = $2::BIGINT)
+			  AND owner_id = $2::BIGINT AND deleted_at IS NULL`,
+			parentID, ownerID,
+		).Scan(&count)
+	}
+	return count, err
 }
 
 func ListFolderParents(folderID, ownerID string) ([]sdk.Folder, error) {

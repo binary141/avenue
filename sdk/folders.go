@@ -36,9 +36,12 @@ func (c *Client) UpdateFolderName(h http.Header, folderID, newName string) error
 }
 
 // ListFolderContents lists the files and subfolders of a folder, along with
-// its breadcrumb trail. Pass "" for folderID to list the root folder.
-func (c *Client) ListFolderContents(h http.Header, folderID string) (V1FolderContentsResponse, error) {
+// its breadcrumb trail. Pass "" for folderID to list the root folder. page
+// and limit control pagination of both lists; pass 0 for either to use the
+// server-side defaults.
+func (c *Client) ListFolderContents(h http.Header, folderID string, page, limit int) (V1FolderContentsResponse, error) {
 	var out V1FolderContentsResponse
-	err := c.request(h, http.MethodGet, fmt.Sprintf("/v1/folder/list/%s", folderID), nil, &out)
+	path := fmt.Sprintf("/v1/folder/list/%s?%s", folderID, paginationQuery(page, limit))
+	err := c.request(h, http.MethodGet, path, nil, &out)
 	return out, err
 }

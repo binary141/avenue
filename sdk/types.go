@@ -114,9 +114,13 @@ type V1DashboardResponse struct {
 }
 
 type V1FolderContentsResponse struct {
-	Files       []File       `json:"files"`
-	Folders     []Folder     `json:"folders"`
-	BreadCrumbs []Breadcrumb `json:"breadcrumbs"`
+	Files        []File       `json:"files"`
+	Folders      []Folder     `json:"folders"`
+	BreadCrumbs  []Breadcrumb `json:"breadcrumbs"`
+	Page         int          `json:"page"`
+	Limit        int          `json:"limit"`
+	TotalFiles   int          `json:"totalFiles"`
+	TotalFolders int          `json:"totalFolders"`
 }
 
 // V1TrashResponse lists the top-level trashed items for a user, i.e. the
@@ -129,6 +133,10 @@ type V1TrashResponse struct {
 	// RetentionDays is how many days an item sits in the trash before the
 	// sweeper permanently deletes it.
 	RetentionDays int `json:"retentionDays"`
+	Page          int `json:"page"`
+	Limit         int `json:"limit"`
+	TotalFiles    int `json:"totalFiles"`
+	TotalFolders  int `json:"totalFolders"`
 }
 
 type V1ShareLinkResponse struct {

@@ -842,7 +842,9 @@ func (s *Server) ListTrash(c *gin.Context) {
 		return
 	}
 
-	files, err := db.ListTrashedFiles(userID)
+	page, limit, offset := shared.ParsePagination(c.Query("page"), c.Query("limit"))
+
+	files, err := db.ListTrashedFilesPage(userID, limit, offset)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
 			Message: "could not list trashed files",
@@ -850,11 +852,27 @@ func (s *Server) ListTrash(c *gin.Context) {
 		})
 		return
 	}
+	totalFiles, err := db.CountTrashedFiles(userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
+			Message: "could not count trashed files",
+			Error:   err.Error(),
+		})
+		return
+	}
 
-	folders, err := db.ListTrashedFolders(userID)
+	folders, err := db.ListTrashedFoldersPage(userID, limit, offset)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
 			Message: "could not list trashed folders",
+			Error:   err.Error(),
+		})
+		return
+	}
+	totalFolders, err := db.CountTrashedFolders(userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
+			Message: "could not count trashed folders",
 			Error:   err.Error(),
 		})
 		return
@@ -864,6 +882,10 @@ func (s *Server) ListTrash(c *gin.Context) {
 		Files:         files,
 		Folders:       folders,
 		RetentionDays: int(sweeper.Retention().Hours() / 24),
+		Page:          page,
+		Limit:         limit,
+		TotalFiles:    totalFiles,
+		TotalFolders:  totalFolders,
 	})
 }
 

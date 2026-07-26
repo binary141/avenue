@@ -27,4 +27,8 @@ export interface FolderContents {
   folders: Folder[];
   files: File[];
   breadcrumbs: Breadcrumb[];
+  page: number;
+  limit: number;
+  totalFiles: number;
+  totalFolders: number;
 }

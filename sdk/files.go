@@ -92,10 +92,13 @@ func (c *Client) PurgeFile(h http.Header, fileID string) error {
 	return c.request(h, http.MethodDelete, fmt.Sprintf("/v1/file/%s/purge", fileID), nil, nil)
 }
 
-// ListTrash lists the files and folders the user has trashed.
-func (c *Client) ListTrash(h http.Header) (V1TrashResponse, error) {
+// ListTrash lists the files and folders the user has trashed. page and
+// limit control pagination of both lists; pass 0 for either to use the
+// server-side defaults.
+func (c *Client) ListTrash(h http.Header, page, limit int) (V1TrashResponse, error) {
 	var out V1TrashResponse
-	err := c.request(h, http.MethodGet, "/v1/trash", nil, &out)
+	path := "/v1/trash?" + paginationQuery(page, limit)
+	err := c.request(h, http.MethodGet, path, nil, &out)
 	return out, err
 }
 

@@ -110,6 +110,13 @@
           </AppButton>
         </div>
       </div>
+
+      <PaginationControls
+        :page="page"
+        :limit="limit"
+        :total="Math.max(totalFiles, totalFolders)"
+        @update:page="changePage"
+      />
     </div>
   </div>
 </template>
@@ -120,6 +127,7 @@ import api from '@/utils/api';
 import AppButton from './components/AppButton.vue';
 import SpinnerView from './components/SpinnerView.vue';
 import ErrorMessage from './components/ErrorMessage.vue';
+import PaginationControls from './components/PaginationControls.vue';
 
 interface TrashedFolder {
   id: number;
@@ -167,6 +175,10 @@ const folders = ref<TrashedFolder[]>([]);
 const files = ref<TrashedFile[]>([]);
 const emptying = ref(false);
 const retentionDays = ref(0);
+const page = ref(1);
+const limit = ref(50);
+const totalFiles = ref(0);
+const totalFolders = ref(0);
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' });
@@ -182,16 +194,26 @@ function formatFileSize(bytes: number): string {
 
 async function loadTrash() {
   loading.value = true;
-  const response = await api({ url: 'v1/trash', method: 'GET' });
+  const params = new URLSearchParams({ page: String(page.value), limit: String(limit.value) });
+  const response = await api({ url: `v1/trash?${params.toString()}`, method: 'GET' });
   loading.value = false;
 
   if (response.ok && response.body) {
     folders.value = response.body.folders || [];
     files.value = response.body.files || [];
     retentionDays.value = response.body.retentionDays || 0;
+    page.value = response.body.page || 1;
+    limit.value = response.body.limit || limit.value;
+    totalFiles.value = response.body.totalFiles || 0;
+    totalFolders.value = response.body.totalFolders || 0;
   } else {
     error.value = response.body?.error || 'Failed to load trash';
   }
+}
+
+function changePage(newPage: number) {
+  page.value = newPage;
+  loadTrash();
 }
 
 async function restoreFolder(folderId: string) {

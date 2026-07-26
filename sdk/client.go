@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"strconv"
 )
 
 // Client is an Avenue API client. The zero value is not usable; construct
@@ -25,6 +27,19 @@ type Client struct {
 // NewClient returns a Client targeting baseURL.
 func NewClient(baseURL string) *Client {
 	return &Client{BaseURL: baseURL}
+}
+
+// paginationQuery builds a "page=&limit=" query string, omitting either
+// value that's <= 0 so the server falls back to its own default.
+func paginationQuery(page, limit int) string {
+	q := url.Values{}
+	if page > 0 {
+		q.Set("page", strconv.Itoa(page))
+	}
+	if limit > 0 {
+		q.Set("limit", strconv.Itoa(limit))
+	}
+	return q.Encode()
 }
 
 func (c *Client) httpClient() *http.Client {

@@ -111,6 +111,14 @@
     <div class="toolbar flex items-center justify-between gap-3 w-full flex-wrap">
       <BreadCrumbs :breadcrumbs=breadcrumbs />
 
+      <p
+        v-if="!loading && !searching && !searchQuery.trim() && totalItemsCount > 0"
+        class="item-count-label text-sm"
+        style="color: var(--text-secondary);"
+      >
+        Showing {{ currentPageCount }} of {{ totalItemsCount }} items
+      </p>
+
       <div class="toolbar-controls flex items-center gap-2">
         <div class="search-input-wrap">
           <input
@@ -264,6 +272,19 @@
       <div v-else-if="!loading && (folders.length > 0 || files.length > 0) && filteredFolders.length === 0 && filteredFiles.length === 0" class="empty-state">
         <span class="empty-state-icon">🔍</span>
         <p class="empty-state-title">No matches for "{{ searchQuery }}"</p>
+      </div>
+
+      <!-- Pagination -->
+      <div v-if="!searching && !searchQuery.trim() && totalItemsCount > 0" class="flex flex-col items-center gap-2">
+        <p class="item-count-label text-sm" style="color: var(--text-secondary);">
+          Showing {{ currentPageCount }} of {{ totalItemsCount }} items
+        </p>
+        <PaginationControls
+          :page="page"
+          :limit="limit"
+          :total="Math.max(totalFiles, totalFolders)"
+          @update:page="changePage"
+        />
       </div>
     </div>
 
@@ -574,6 +595,7 @@ import api from '@/utils/api';
 import type { Breadcrumb, Folder, File, FolderContents } from '@/types/folder';
 import SpinnerView from './components/SpinnerView.vue';
 import ErrorMessage from './components/ErrorMessage.vue';
+import PaginationControls from './components/PaginationControls.vue';
 import FileUploader from '@/components/FileUploader.vue';
 import FileUsageBar from '@/components/FileUsageBar.vue';
 import FileViewer from '@/components/FileViewer.vue';
@@ -597,6 +619,12 @@ const error = ref<string | undefined>();
 const folders = ref<Folder[]>([]);
 const files = ref<File[]>([]);
 const breadcrumbs = ref<Breadcrumb[]>([]);
+const page = ref(1);
+const limit = ref(50);
+const totalFiles = ref(0);
+const totalFolders = ref(0);
+const currentPageCount = computed(() => folders.value.length + files.value.length);
+const totalItemsCount = computed(() => totalFiles.value + totalFolders.value);
 const show = ref<boolean>(false);
 const inputRef = ref<HTMLInputElement | null>(null);
 const currentFolderId = ref<string>('');
@@ -792,6 +820,7 @@ const filteredFiles = computed(() => {
 })
 
 watch([sortKey, sortDir], () => {
+  page.value = 1
   loadFolderContents(currentFolderId.value)
 })
 
@@ -1314,7 +1343,12 @@ async function loadFolderContents(folderId: string = '') {
   loading.value = true
 
   try {
-    const params = new URLSearchParams({ sort: sortDir.value, sortBy: sortKey.value })
+    const params = new URLSearchParams({
+      sort: sortDir.value,
+      sortBy: sortKey.value,
+      page: String(page.value),
+      limit: String(limit.value),
+    })
     const response = await api({
       url: `v1/folder/list/${folderId}?${params.toString()}`,
       method: 'GET'
@@ -1325,6 +1359,10 @@ async function loadFolderContents(folderId: string = '') {
       folders.value = contents.folders || []
       files.value = contents.files || []
       breadcrumbs.value = contents.breadcrumbs || []
+      page.value = contents.page || 1
+      limit.value = contents.limit || limit.value
+      totalFiles.value = contents.totalFiles || 0
+      totalFolders.value = contents.totalFolders || 0
     } else {
       error.value = response.body?.error || response.body?.message || 'Failed to load folder contents'
     }
@@ -1334,6 +1372,11 @@ async function loadFolderContents(folderId: string = '') {
   } finally {
     loading.value = false
   }
+}
+
+function changePage(newPage: number) {
+  page.value = newPage
+  loadFolderContents(currentFolderId.value)
 }
 
 function handleUploadError(message: string) {
@@ -1357,6 +1400,7 @@ function refreshCurrentList() {
 
   route.params.folderId = currentFolderId.value
 
+  page.value = 1
   loadFolderContents(currentFolderId.value)
 
   usersStore.pullMe()

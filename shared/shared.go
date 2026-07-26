@@ -17,6 +17,10 @@ const (
 	USERCOOKIEVALUE    cookieStr = "test"
 	ROOTFOLDERID                 = "c32af1cc-aba9-4878-a305-5006dc7a5b76"
 	DEFAULTMAXFILESIZE int64     = 209715200
+
+	DEFAULTPAGE      = 1
+	DEFAULTPAGELIMIT = 50
+	MAXPAGELIMIT     = 200
 )
 
 func GetEnvBool(key string, defaultVal bool) bool {
@@ -86,6 +90,27 @@ func GetUserIDFromContext(ctx context.Context) (string, error) {
 	}
 
 	return fmt.Sprint(val), nil
+}
+
+// ParsePagination validates page/limit query params, defaulting and
+// clamping them to sane values, and returns the corresponding SQL
+// LIMIT/OFFSET pair.
+func ParsePagination(pageStr, limitStr string) (page, limit, offset int) {
+	page, err := strconv.Atoi(pageStr)
+	if err != nil || page < 1 {
+		page = DEFAULTPAGE
+	}
+
+	limit, err = strconv.Atoi(limitStr)
+	if err != nil || limit < 1 {
+		limit = DEFAULTPAGELIMIT
+	} else if limit > MAXPAGELIMIT {
+		limit = MAXPAGELIMIT
+	}
+
+	offset = (page - 1) * limit
+
+	return page, limit, offset
 }
 
 func GetSessionIDFromContext(ctx context.Context) (string, error) {

@@ -337,16 +337,16 @@ async function bulkRestore() {
   });
 
   if (response.ok) {
-    items.value = items.value.filter(i => {
-      if (i.type === 'folder') return !folderIds.includes(i.uuid);
-      return !fileIds.includes(i.uuid);
-    });
-    applyRestoreTotal(response.body || {});
+    clearSelection();
+    await loadTrash();
+    if (items.value.length === 0 && page.value > 1) {
+      page.value -= 1;
+      await loadTrash();
+    }
   } else {
     error.value = response.body?.error || 'Failed to restore selected items';
+    clearSelection();
   }
-
-  clearSelection();
 }
 
 async function confirmPurgeFolder(folder: FolderItem) {

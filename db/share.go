@@ -3,6 +3,7 @@ package db
 import (
 	"crypto/rand"
 	"database/sql"
+	"math/big"
 	"time"
 
 	"avenue/backend/sdk"
@@ -12,11 +13,15 @@ const charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
 
 func generateToken() (string, error) {
 	b := make([]byte, 32)
-	if _, err := rand.Read(b); err != nil {
-		return "", err
-	}
-	for i, v := range b {
-		b[i] = charset[int(v)%len(charset)]
+	charsetLen := big.NewInt(int64(len(charset)))
+	for i := range b {
+		// rand.Int does rejection sampling internally, so each character is
+		// drawn uniformly from charset with no modulo bias.
+		n, err := rand.Int(rand.Reader, charsetLen)
+		if err != nil {
+			return "", err
+		}
+		b[i] = charset[n.Int64()]
 	}
 	return string(b), nil
 }

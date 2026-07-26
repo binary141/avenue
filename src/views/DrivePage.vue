@@ -288,21 +288,20 @@
       class="fixed inset-0 flex items-center justify-center bg-black/50 z-50"
     >
       <!-- Modal content -->
-      <div class="bg-white rounded shadow-lg w-96 p-6 relative">
-        <h3 class="text-lg font-bold mb-4 text-black">Rename File</h3>
+      <div class="share-modal rounded-lg shadow-lg w-96 p-6 relative">
+        <h3 class="text-lg font-bold mb-4">Rename File</h3>
         <input
           v-model="newFileName"
-          class="border p-2 w-full mb-4 text-black"
+          class="w-full mb-4"
           placeholder="Enter new name"
         />
         <div class="flex justify-end gap-2">
-          <AppButton @click="closeFileModal">Cancel</AppButton>
-          <AppButton @click="saveFileName">Save</AppButton>
+          <AppButton @click="closeFileModal" class="px-3 py-2 modal-secondary-button rounded text-sm">Cancel</AppButton>
+          <AppButton @click="saveFileName" class="px-3 py-2 bg-blue-600 text-white rounded text-sm">Save</AppButton>
         </div>
-        <!-- Optional: Close button in corner -->
         <button
           @click="closeFileModal"
-          class="absolute top-2 right-2 text-gray-500 hover:text-gray-700"
+          class="absolute top-2 right-2 share-modal-muted"
         >
           ✕
         </button>
@@ -315,21 +314,20 @@
       class="fixed inset-0 flex items-center justify-center bg-black/50 z-50"
     >
       <!-- Modal content -->
-      <div class="bg-white rounded shadow-lg w-96 p-6 relative">
-        <h3 class="text-lg font-bold mb-4 text-black">Rename Folder</h3>
+      <div class="share-modal rounded-lg shadow-lg w-96 p-6 relative">
+        <h3 class="text-lg font-bold mb-4">Rename Folder</h3>
         <input
           v-model="newFolderName"
-          class="border p-2 w-full mb-4 text-black"
+          class="w-full mb-4"
           placeholder="Enter new name"
         />
         <div class="flex justify-end gap-2">
-          <AppButton @click="closeFolderModal">Cancel</AppButton>
-          <AppButton @click="saveFolderName">Save</AppButton>
+          <AppButton @click="closeFolderModal" class="px-3 py-2 modal-secondary-button rounded text-sm">Cancel</AppButton>
+          <AppButton @click="saveFolderName" class="px-3 py-2 bg-blue-600 text-white rounded text-sm">Save</AppButton>
         </div>
-        <!-- Optional: Close button in corner -->
         <button
           @click="closeFolderModal"
-          class="absolute top-2 right-2 text-gray-500 hover:text-gray-700"
+          class="absolute top-2 right-2 share-modal-muted"
         >
           ✕
         </button>
@@ -662,13 +660,12 @@ const moving = ref(false);
 
 async function loadMoveFolder(folderId: string) {
   moveLoading.value = true;
-  const response = await api({ url: `v1/folder/list/${folderId}`, method: 'GET' });
+  const response = await api({ url: `v1/folder/list/${folderId}?type=folder`, method: 'GET' });
   moveLoading.value = false;
 
   if (response.ok && response.body) {
     moveFolderId.value = folderId;
-    const respItems = (response.body.items || []) as FolderItem[];
-    moveFolders.value = respItems.filter(i => i.type === 'folder');
+    moveFolders.value = (response.body.items || []) as FolderItem[];
     moveBreadcrumbs.value = response.body.breadcrumbs || [];
   } else {
     error.value = response.body?.error || 'Failed to load folders';

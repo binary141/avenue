@@ -292,21 +292,33 @@ func (s *Server) ListFolderContents(c *gin.Context) {
 
 	page, limit, offset := shared.ParsePagination(c.Query("page"), c.Query("limit"))
 
+	itemType := c.Query("type")
+	if itemType != "" && itemType != sdk.FolderItemTypeFolder && itemType != sdk.FolderItemTypeFile {
+		respond(c, http.StatusBadRequest, "type must be 'folder' or 'file'", nil)
+		return
+	}
+
 	folderID := c.Param("folderID")
-	items, err := db.ListFolderItems(folderID, userID, sortColumn, sortDir, limit, offset)
+	items, err := db.ListFolderItems(folderID, userID, sortColumn, sortDir, limit, offset, itemType)
 	if err != nil {
 		respond(c, http.StatusInternalServerError, "Internal server error", err)
 		return
 	}
-	totalFolders, err := db.CountChildFolders(folderID, userID)
-	if err != nil {
-		respond(c, http.StatusInternalServerError, "Internal server error", err)
-		return
+
+	var totalFolders, totalFiles int
+	if itemType != sdk.FolderItemTypeFile {
+		totalFolders, err = db.CountChildFolders(folderID, userID)
+		if err != nil {
+			respond(c, http.StatusInternalServerError, "Internal server error", err)
+			return
+		}
 	}
-	totalFiles, err := db.CountChildFiles(folderID, userID)
-	if err != nil {
-		respond(c, http.StatusInternalServerError, "Internal server error", err)
-		return
+	if itemType != sdk.FolderItemTypeFolder {
+		totalFiles, err = db.CountChildFiles(folderID, userID)
+		if err != nil {
+			respond(c, http.StatusInternalServerError, "Internal server error", err)
+			return
+		}
 	}
 
 	var x sdk.V1FolderContentsResponse

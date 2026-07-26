@@ -13,20 +13,54 @@
       </AppButton>
     </div>
 
-    <div v-if="!loading && (folders.length > 0 || files.length > 0)" class="toolbar-controls flex items-center gap-2 mb-2 self-end" style="max-width: 800px; width: 100%; justify-content: flex-end;">
-      <select v-model="sortKey" class="sort-select">
-        <option value="date">Date Deleted</option>
-        <option value="name">Name</option>
-        <option value="size">Size</option>
-      </select>
-      <button
-        type="button"
-        class="sort-dir-button"
-        :title="sortDir === 'asc' ? 'Ascending' : 'Descending'"
-        @click="sortDir = sortDir === 'asc' ? 'desc' : 'asc'"
-      >
-        {{ sortDir === 'asc' ? '↑' : '↓' }}
-      </button>
+    <div v-if="!loading && (folders.length > 0 || files.length > 0)" class="toolbar-controls flex items-center gap-2 mb-2 flex-wrap" style="max-width: 800px; width: 100%; justify-content: space-between;">
+      <div class="flex items-center gap-3">
+        <label class="flex items-center gap-2 text-sm select-none cursor-pointer" style="color: var(--text-secondary);">
+          <input type="checkbox" :checked="allSelected" @change="toggleSelectAll" />
+          Select all
+        </label>
+
+        <p class="item-count-label text-sm" style="color: var(--text-secondary);">
+          Showing {{ currentPageCount }} of {{ totalItemsCount }} items
+        </p>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <select v-model="sortKey" class="sort-select">
+          <option value="date">Date Deleted</option>
+          <option value="name">Name</option>
+          <option value="size">Size</option>
+        </select>
+        <button
+          type="button"
+          class="sort-dir-button"
+          :title="sortDir === 'asc' ? 'Ascending' : 'Descending'"
+          @click="sortDir = sortDir === 'asc' ? 'desc' : 'asc'"
+        >
+          {{ sortDir === 'asc' ? '↑' : '↓' }}
+        </button>
+      </div>
+    </div>
+
+    <!-- Bulk Actions -->
+    <div
+      v-if="hasSelection"
+      class="bulk-actions-bar flex items-center gap-3 mb-2 p-3 rounded"
+      style="max-width: 800px; width: 100%;"
+    >
+      <span class="text-sm" style="color: var(--text-secondary);">
+        Selected:
+        {{ selectedFolders.size }} folders,
+        {{ selectedFiles.size }} files
+      </span>
+
+      <AppButton class="bg-blue-600 text-white px-3 py-1" @click="bulkRestore">
+        Restore Selected
+      </AppButton>
+
+      <AppButton class="modal-secondary-button px-3 py-1" @click="clearSelection">
+        Clear
+      </AppButton>
     </div>
 
     <div v-if="loading" class="flex flex-col items-center gap-3">
@@ -58,10 +92,16 @@
       <div v-if="folders.length > 0" class="flex flex-col gap-3">
         <h2 class="text-sm font-semibold uppercase tracking-wide" style="color: var(--text-secondary);">Folders</h2>
         <div
-          v-for="folder in folders"
+          v-for="(folder, index) in folders"
           :key="folder.uuid"
           class="card flex flex-row items-center gap-3 p-4"
         >
+          <input
+            type="checkbox"
+            :checked="selectedFolders.has(folder.uuid)"
+            @click.stop="onFolderCheckboxClick(folder.uuid, index, $event)"
+          />
+
           <span style="font-size: 1.4rem; flex-shrink: 0;">📁</span>
 
           <div class="flex-1 min-w-0">
@@ -91,10 +131,16 @@
       <div v-if="files.length > 0" class="flex flex-col gap-3">
         <h2 class="text-sm font-semibold uppercase tracking-wide" style="color: var(--text-secondary);">Files</h2>
         <div
-          v-for="file in files"
+          v-for="(file, index) in files"
           :key="file.uuid"
           class="card flex flex-row items-center gap-3 p-4"
         >
+          <input
+            type="checkbox"
+            :checked="selectedFiles.has(file.uuid)"
+            @click.stop="onFileCheckboxClick(file.uuid, index, $event)"
+          />
+
           <span class="file-icon-badge">
             <svg viewBox="0 0 24 24" class="file-icon-svg">
               <path d="M5 3a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V8l-6-6H5z" fill="var(--gray-4)" stroke="var(--gray-5)" stroke-width="1"/>
@@ -127,18 +173,23 @@
         </div>
       </div>
 
-      <PaginationControls
-        :page="page"
-        :limit="limit"
-        :total="Math.max(totalFiles, totalFolders)"
-        @update:page="changePage"
-      />
+      <div v-if="totalItemsCount > 0" class="flex flex-col items-center gap-2">
+        <p class="item-count-label text-sm" style="color: var(--text-secondary);">
+          Showing {{ currentPageCount }} of {{ totalItemsCount }} items
+        </p>
+        <PaginationControls
+          :page="page"
+          :limit="limit"
+          :total="Math.max(totalFiles, totalFolders)"
+          @update:page="changePage"
+        />
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import api from '@/utils/api';
 import AppButton from './components/AppButton.vue';
 import SpinnerView from './components/SpinnerView.vue';
@@ -195,8 +246,83 @@ const page = ref(1);
 const limit = ref(50);
 const totalFiles = ref(0);
 const totalFolders = ref(0);
+const currentPageCount = computed(() => folders.value.length + files.value.length);
+const totalItemsCount = computed(() => totalFiles.value + totalFolders.value);
 const sortKey = ref<'name' | 'size' | 'date'>('date');
 const sortDir = ref<'asc' | 'desc'>('desc');
+const selectedFolders = ref<Set<string>>(new Set());
+const selectedFiles = ref<Set<string>>(new Set());
+const lastFolderIndex = ref<number | null>(null);
+const lastFileIndex = ref<number | null>(null);
+
+const hasSelection = computed(
+  () => selectedFolders.value.size > 0 || selectedFiles.value.size > 0
+);
+
+const allSelected = computed(() => {
+  const totalItems = folders.value.length + files.value.length;
+  if (totalItems === 0) return false;
+  return selectedFolders.value.size === folders.value.length
+    && selectedFiles.value.size === files.value.length;
+});
+
+function selectFolderRange(start: number, end: number) {
+  const [from, to] = start < end ? [start, end] : [end, start];
+  for (let i = from; i <= to; i++) {
+    const folder = folders.value[i];
+    if (!folder) continue;
+    selectedFolders.value.add(folder.uuid);
+  }
+}
+
+function selectFileRange(start: number, end: number) {
+  const [from, to] = start < end ? [start, end] : [end, start];
+  for (let i = from; i <= to; i++) {
+    const file = files.value[i];
+    if (!file) continue;
+    selectedFiles.value.add(file.uuid);
+  }
+}
+
+function onFolderCheckboxClick(folderId: string, index: number, event: MouseEvent) {
+  if (event.shiftKey && lastFolderIndex.value !== null) {
+    selectFolderRange(lastFolderIndex.value, index);
+  } else if (selectedFolders.value.has(folderId)) {
+    selectedFolders.value.delete(folderId);
+  } else {
+    selectedFolders.value.add(folderId);
+  }
+
+  lastFolderIndex.value = index;
+}
+
+function onFileCheckboxClick(fileId: string, index: number, event: MouseEvent) {
+  if (event.shiftKey && lastFileIndex.value !== null) {
+    selectFileRange(lastFileIndex.value, index);
+  } else if (selectedFiles.value.has(fileId)) {
+    selectedFiles.value.delete(fileId);
+  } else {
+    selectedFiles.value.add(fileId);
+  }
+
+  lastFileIndex.value = index;
+}
+
+function toggleSelectAll() {
+  if (allSelected.value) {
+    clearSelection();
+  } else {
+    selectedFolders.value = new Set(folders.value.map(f => f.uuid));
+    selectedFiles.value = new Set(files.value.map(f => f.uuid));
+  }
+}
+
+function clearSelection() {
+  selectedFolders.value = new Set();
+  selectedFiles.value = new Set();
+  lastFolderIndex.value = null;
+  lastFileIndex.value = null;
+}
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' });
@@ -236,13 +362,29 @@ async function loadTrash() {
 
 function changePage(newPage: number) {
   page.value = newPage;
+  clearSelection();
   loadTrash();
+}
+
+// Applies the totals from a restore response, and if that emptied the
+// current page (and it isn't the first page), steps back a page and
+// reloads — otherwise the pagination controls would either show a stale
+// page count or strand the user on a now-empty page with no way back.
+function applyRestoreTotals(body: { totalFiles?: number; totalFolders?: number }) {
+  if (typeof body.totalFiles === 'number') totalFiles.value = body.totalFiles;
+  if (typeof body.totalFolders === 'number') totalFolders.value = body.totalFolders;
+
+  if (folders.value.length === 0 && files.value.length === 0 && page.value > 1) {
+    page.value -= 1;
+    loadTrash();
+  }
 }
 
 async function restoreFolder(folderId: string) {
   const response = await api({ url: `v1/folder/${folderId}/restore`, method: 'PATCH' });
   if (response.ok) {
     folders.value = folders.value.filter(f => f.uuid !== folderId);
+    applyRestoreTotals(response.body || {});
   } else {
     error.value = response.body?.error || 'Failed to restore folder';
   }
@@ -252,9 +394,31 @@ async function restoreFile(fileId: string) {
   const response = await api({ url: `v1/file/${fileId}/restore`, method: 'PATCH' });
   if (response.ok) {
     files.value = files.value.filter(f => f.uuid !== fileId);
+    applyRestoreTotals(response.body || {});
   } else {
     error.value = response.body?.error || 'Failed to restore file';
   }
+}
+
+async function bulkRestore() {
+  const fileIds = Array.from(selectedFiles.value);
+  const folderIds = Array.from(selectedFolders.value);
+
+  const response = await api({
+    url: 'v1/files/bulk-restore',
+    method: 'PATCH',
+    json: { fileIds, folderIds },
+  });
+
+  if (response.ok) {
+    folders.value = folders.value.filter(f => !folderIds.includes(f.uuid));
+    files.value = files.value.filter(f => !fileIds.includes(f.uuid));
+    applyRestoreTotals(response.body || {});
+  } else {
+    error.value = response.body?.error || 'Failed to restore selected items';
+  }
+
+  clearSelection();
 }
 
 async function confirmPurgeFolder(folder: TrashedFolder) {
@@ -296,6 +460,7 @@ async function confirmEmptyTrash() {
 
 watch([sortKey, sortDir], () => {
   page.value = 1;
+  clearSelection();
   loadTrash();
 });
 
@@ -335,5 +500,15 @@ onMounted(loadTrash);
 
 .sort-dir-button:hover {
   background-color: var(--gray-5);
+}
+
+.bulk-actions-bar {
+  background-color: var(--gray-2);
+  border: 1px solid var(--gray-4);
+}
+
+.modal-secondary-button {
+  background-color: var(--gray-4);
+  color: var(--text);
 }
 </style>

@@ -146,6 +146,54 @@ func (s *Server) BulkDelete(c *gin.Context) {
 	})
 }
 
+// BulkRestore restores a batch of trashed files and folders in a single
+// request, instead of requiring one restore call per item.
+func (s *Server) BulkRestore(c *gin.Context) {
+	userID, err := shared.GetUserIDFromContext(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
+			Message: "could not get user id",
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	var req sdk.BulkRestoreRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, sdk.MessageResponse{
+			Message: "could not marshal all data to json",
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	if len(req.FileIDs) == 0 && len(req.FolderIDs) == 0 {
+		c.JSON(http.StatusBadRequest, sdk.MessageResponse{
+			Message: "no file or folder ids provided",
+		})
+		return
+	}
+
+	if err := db.BulkRestore(req.FileIDs, req.FolderIDs, userID); err != nil {
+		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
+			Message: "could not restore items",
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	resp, err := trashRestoreResponse(userID, "Items restored")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
+			Message: "could not count trashed items",
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, resp)
+}
+
 // RestoreFolder restores a trashed folder and everything nested inside it.
 func (s *Server) RestoreFolder(c *gin.Context) {
 	userID, err := shared.GetUserIDFromContext(c.Request.Context())
@@ -174,7 +222,16 @@ func (s *Server) RestoreFolder(c *gin.Context) {
 		return
 	}
 
-	c.Status(http.StatusOK)
+	resp, err := trashRestoreResponse(userID, "Folder restored")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
+			Message: "could not count trashed items",
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, resp)
 }
 
 // PurgeFolder permanently deletes a trashed folder and everything nested

@@ -308,6 +308,7 @@ func (s *Server) SetupRoutes() {
 	securedRouterV1.PATCH("/file/:fileID/restore", s.RestoreFile)
 	securedRouterV1.DELETE("/file/:fileID/purge", s.PurgeFile)
 	securedRouterV1.DELETE("/files/bulk-delete", s.BulkDelete)
+	securedRouterV1.PATCH("/files/bulk-restore", s.BulkRestore)
 
 	// -- folder routes -- //
 	securedRouterV1.POST("/folder", s.CreateFolder)

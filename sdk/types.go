@@ -139,6 +139,15 @@ type V1TrashResponse struct {
 	TotalFolders  int `json:"totalFolders"`
 }
 
+// V1RestoreResponse is returned by the file/folder restore endpoints
+// (single and bulk) so the UI can refresh its trash pagination totals
+// without re-fetching the whole list.
+type V1RestoreResponse struct {
+	Message      string `json:"message"`
+	TotalFiles   int    `json:"totalFiles"`
+	TotalFolders int    `json:"totalFolders"`
+}
+
 type V1ShareLinkResponse struct {
 	Token     string     `json:"token"`
 	ExpiresAt *time.Time `json:"expires_at"`

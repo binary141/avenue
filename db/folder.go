@@ -233,6 +233,72 @@ func BulkTrash(fileIDs, folderIDs []string, userID string) error {
 	return tx.Commit()
 }
 
+// BulkRestore un-trashes the given files and folders (recursively for each
+// folder, same as RestoreFolder) for userID in a single transaction. IDs
+// that don't exist, aren't owned by userID, or aren't currently trashed are
+// silently skipped, matching the ownership semantics of
+// RestoreFileForUser/RestoreFolder.
+func BulkRestore(fileIDs, folderIDs []string, userID string) error {
+	tx, err := DB.Beginx()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var subtreeIDs []int64
+	if len(folderIDs) > 0 {
+		rows, err := tx.Query(`
+			WITH RECURSIVE roots AS (
+				SELECT id FROM folders
+				WHERE uuid = ANY($1::text[]) AND owner_id = $2::BIGINT AND deleted_at IS NOT NULL
+			), subtree AS (
+				SELECT id FROM roots
+				UNION ALL
+				SELECT f.id FROM folders f
+				INNER JOIN subtree s ON f.parent_id = s.id
+			)
+			SELECT id FROM subtree
+		`, pq.Array(folderIDs), userID)
+		if err != nil {
+			return err
+		}
+		for rows.Next() {
+			var id int64
+			if err := rows.Scan(&id); err != nil {
+				rows.Close()
+				return err
+			}
+			subtreeIDs = append(subtreeIDs, id)
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return err
+		}
+		rows.Close()
+	}
+
+	if len(subtreeIDs) > 0 {
+		if _, err := tx.Exec(`UPDATE folders SET deleted_at = NULL WHERE id = ANY($1)`, pq.Array(subtreeIDs)); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`UPDATE files SET deleted_at = NULL WHERE parent_id = ANY($1)`, pq.Array(subtreeIDs)); err != nil {
+			return err
+		}
+	}
+
+	if len(fileIDs) > 0 {
+		if _, err := tx.Exec(`
+			UPDATE files SET deleted_at = NULL WHERE uuid = ANY($1::text[]) AND deleted_at IS NOT NULL
+			  AND (created_by = $2::BIGINT
+			       OR parent_id IN (SELECT id FROM folders WHERE owner_id = $2::BIGINT))
+		`, pq.Array(fileIDs), userID); err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
+}
+
 // RestoreFolder un-trashes folderID and its entire trashed subtree.
 //
 // Note: if a file or subfolder inside folderID was independently trashed

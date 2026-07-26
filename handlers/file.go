@@ -757,6 +757,25 @@ func (s *Server) DeleteFile(c *gin.Context) {
 	c.Status(http.StatusOK)
 }
 
+// trashRestoreResponse builds the post-restore pagination totals shared by
+// RestoreFile, RestoreFolder, and BulkRestore, so the UI can refresh its
+// trash counts without re-fetching the whole list.
+func trashRestoreResponse(userID, message string) (sdk.V1RestoreResponse, error) {
+	totalFiles, err := db.CountTrashedFiles(userID)
+	if err != nil {
+		return sdk.V1RestoreResponse{}, err
+	}
+	totalFolders, err := db.CountTrashedFolders(userID)
+	if err != nil {
+		return sdk.V1RestoreResponse{}, err
+	}
+	return sdk.V1RestoreResponse{
+		Message:      message,
+		TotalFiles:   totalFiles,
+		TotalFolders: totalFolders,
+	}, nil
+}
+
 // RestoreFile restores a trashed file.
 func (s *Server) RestoreFile(c *gin.Context) {
 	userID, err := shared.GetUserIDFromContext(c.Request.Context())
@@ -784,7 +803,16 @@ func (s *Server) RestoreFile(c *gin.Context) {
 		return
 	}
 
-	c.Status(http.StatusOK)
+	resp, err := trashRestoreResponse(userID, "File restored")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, sdk.MessageResponse{
+			Message: "could not count trashed items",
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, resp)
 }
 
 // PurgeFile permanently deletes a trashed file: removes its blob from disk,

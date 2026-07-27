@@ -145,13 +145,19 @@ func (s *Server) Upload(c *gin.Context) {
 
 			// Create file record in database
 			createdAt = time.Now().UTC()
-			fileID, err = db.CreateFile(&sdk.File{
+			fileRecord := &sdk.File{
 				Name:      filename,
 				Extension: extension,
 				MimeType:  contentType,
 				Parent:    parent,
 				CreatedBy: userIDInt,
-			})
+			}
+			fileID, err = db.CreateFile(fileRecord)
+			if err == nil {
+				// CreateFile may have deduplicated the name against existing
+				// siblings; use the name it actually stored from here on.
+				filename = fileRecord.Name
+			}
 			if err != nil {
 				respond(c, http.StatusInternalServerError, "could not create file record", err)
 				return
@@ -209,6 +215,7 @@ func (s *Server) Upload(c *gin.Context) {
 				}
 
 				var maxErr *http.MaxBytesError
+
 				if errors.As(err, &maxErr) {
 					respond(c, http.StatusRequestEntityTooLarge, "", errors.New("file too large"))
 					return

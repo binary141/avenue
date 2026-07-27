@@ -2,6 +2,7 @@ package db
 
 import (
 	"database/sql"
+	"fmt"
 	"strings"
 	"time"
 
@@ -10,11 +11,73 @@ import (
 	"github.com/google/uuid"
 )
 
+// nextAvailableFileName returns name unchanged if no non-deleted sibling in
+// parentID has the same (name, extension), otherwise appends " (N)" using the
+// lowest N not already taken by a sibling — the same scheme desktop file
+// managers use for duplicate uploads.
+func nextAvailableFileName(parentID, name, extension string) (string, error) {
+	var rows *sql.Rows
+	var err error
+	if parentID == "" {
+		rows, err = DB.Query(`
+			SELECT name FROM files WHERE parent_id IS NULL AND extension=$1 AND deleted_at IS NULL
+		`, extension)
+	} else {
+		rows, err = DB.Query(`
+			SELECT name FROM files
+			WHERE parent_id = (SELECT id FROM folders WHERE uuid = $2) AND extension=$1 AND deleted_at IS NULL
+		`, extension, parentID)
+	}
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+
+	existing := make(map[string]struct{})
+	for rows.Next() {
+		var n string
+		if err := rows.Scan(&n); err != nil {
+			return "", err
+		}
+		existing[n] = struct{}{}
+	}
+	if err := rows.Err(); err != nil {
+		return "", err
+	}
+
+	if _, ok := existing[name]; !ok {
+		return name, nil
+	}
+
+	// name already includes ".extension" (e.g. "file.pdf"), so the " (N)"
+	// suffix needs to land before that, not after.
+	base := name
+	suffix := ""
+	if extension != "" {
+		base = strings.TrimSuffix(name, "."+extension)
+		suffix = "." + extension
+	}
+
+	for n := 1; ; n++ {
+		candidate := fmt.Sprintf("%s (%d)%s", base, n, suffix)
+		if _, ok := existing[candidate]; !ok {
+			return candidate, nil
+		}
+	}
+}
+
 func CreateFile(file *sdk.File) (string, error) {
 	if file.UUID == "" {
 		file.UUID = uuid.NewString()
 	}
-	err := DB.QueryRow(`
+
+	name, err := nextAvailableFileName(file.Parent, file.Name, file.Extension)
+	if err != nil {
+		return "", err
+	}
+	file.Name = name
+
+	err = DB.QueryRow(`
 		INSERT INTO files (uuid, name, extension, mime_type, file_size, parent_id, created_by, created_at)
 		VALUES ($1, $2, $3, $4, $5,
 			CASE WHEN $6 = '' THEN NULL

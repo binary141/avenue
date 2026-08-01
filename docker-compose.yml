@@ -30,7 +30,6 @@ services:
       KEYRING_URL: http://keyring:8080
       KEYRING_PUBLIC_URL: http://localhost:8081
       CLIENT_UUID: ${AVENUE_CLIENT_UUID:-}
-      CLIENT_REGISTRATION_AUTH_KEY: ${CLIENT_REGISTRATION_AUTH_KEY:-}
       AVENUE_PUBLIC_URL: http://localhost:5173
 
       ENABLE_FOLDER_SHARING: true

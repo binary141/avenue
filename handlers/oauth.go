@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -11,33 +10,29 @@ import (
 	"avenue/backend/sdk"
 	"avenue/backend/shared"
 
-	ksdk "github.com/binary141/keyring/sdk"
 	"github.com/gin-gonic/gin"
 )
 
-// avenueClientName is the name keyring records this app under when it
-// registers itself as an OAuth broker client.
+// avenueClientName is the name this app presents to keyring's OAuth broker,
+// matching the "name" field in keyring's client_apps/avenue.json.
 const avenueClientName = "avenue"
 
-// registerOAuthClient registers (or fetches the existing registration for)
-// this app with keyring as an OAuth broker client, so its /auth/:provider
-// endpoints can be called with a valid client_id/redirect_uri pair.
-//
-// CLIENT_UUID must be set to a stable value that's generated once and
-// reused on every call — registering again with the same uuid returns the
-// existing client instead of minting a duplicate. Without it there's no
-// safe way to identify ourselves to keyring, so this fails loudly rather
-// than silently skipping registration.
-func (s *Server) registerOAuthClient(ctx context.Context) (*ksdk.OAuthClient, error) {
+// avenueRedirectURI is the redirect_uri this app presents to keyring's OAuth
+// broker. It must exactly match an entry in keyring's client_apps/avenue.json
+// redirectUris allowlist — keyring no longer supports registering a client
+// over the network, so there's nothing to reconcile here at request time.
+func avenueRedirectURI() string {
+	return strings.TrimRight(shared.GetEnv("AVENUE_PUBLIC_URL", "http://localhost:5173"), "/") + "/oauth/callback"
+}
+
+// avenueClientUUID is this app's stable identity, generated once and baked
+// into keyring's client_apps/avenue.json alongside avenueClientName.
+func avenueClientUUID() (string, error) {
 	clientUUID := shared.GetEnv("CLIENT_UUID", "")
 	if clientUUID == "" {
-		return nil, fmt.Errorf("CLIENT_UUID is not set")
+		return "", fmt.Errorf("CLIENT_UUID is not set")
 	}
-
-	registrationKey := shared.GetEnv("CLIENT_REGISTRATION_AUTH_KEY", "")
-	redirectURI := strings.TrimRight(shared.GetEnv("AVENUE_PUBLIC_URL", "http://localhost:5173"), "/") + "/oauth/callback"
-
-	return s.keyringClient("").CreateOAuthClient(ctx, registrationKey, clientUUID, avenueClientName, []string{redirectURI})
+	return clientUUID, nil
 }
 
 // ListOAuthProviders reports the OAuth providers keyring is currently
@@ -56,24 +51,24 @@ func (s *Server) ListOAuthProviders(c *gin.Context) {
 // authorization flow. This has to be a top-level browser navigation (not a
 // fetch()) since it ends in a redirect to the provider's consent screen.
 //
-// keyring now requires every /auth/:provider/login request to carry a
-// client_id/redirect_uri pair that matches a registered OAuth broker client,
-// so this registers (or re-fetches) our client first.
+// keyring identifies clients by a client_name/client_uuid pair provisioned
+// out-of-band in its client_apps/ directory, so this app presents its own
+// stable identity rather than registering itself over the network.
 func (s *Server) OAuthLogin(c *gin.Context) {
 	provider := c.Param("provider")
 
-	client, err := s.registerOAuthClient(c.Request.Context())
+	clientUUID, err := avenueClientUUID()
 	if err != nil {
-		respond(c, http.StatusInternalServerError, "", fmt.Errorf("register oauth client: %w", err))
+		respond(c, http.StatusInternalServerError, "", err)
 		return
 	}
 
-	redirectURI := client.RedirectURIs[0]
-	loginURL := fmt.Sprintf("%s/auth/%s/login?client_id=%s&redirect_uri=%s",
+	loginURL := fmt.Sprintf("%s/auth/%s/login?client_name=%s&client_uuid=%s&redirect_uri=%s",
 		shared.GetEnv("KEYRING_PUBLIC_URL", s.keyringURL),
 		url.PathEscape(provider),
-		url.QueryEscape(client.ClientID),
-		url.QueryEscape(redirectURI),
+		url.QueryEscape(avenueClientName),
+		url.QueryEscape(clientUUID),
+		url.QueryEscape(avenueRedirectURI()),
 	)
 	c.Redirect(http.StatusFound, loginURL)
 }

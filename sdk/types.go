@@ -208,3 +208,28 @@ type MessageResponse struct {
 	Message string `json:"message"`
 	Error   string `json:"error"`
 }
+
+// RegistrationToken mirrors keyring's registration (invite) token
+// representation, letting someone self-register while keyring's own
+// self-serve registration is disabled.
+type RegistrationToken struct {
+	ID        int64     `json:"id"`
+	CreatedBy int64     `json:"createdBy"`
+	MaxUses   int       `json:"maxUses"`
+	UseCount  int       `json:"useCount"`
+	ExpiresAt time.Time `json:"expiresAt"`
+	CreatedAt time.Time `json:"createdAt"`
+}
+
+// V1CreateRegistrationTokenResponse is returned by CreateRegistrationToken.
+// Token is the raw invite value to hand out (e.g. baked into a signup
+// link) — it's only ever returned here, never again.
+type V1CreateRegistrationTokenResponse struct {
+	Token             string            `json:"token"`
+	RegistrationToken RegistrationToken `json:"registrationToken"`
+}
+
+// V1RegistrationTokensResponse lists outstanding registration tokens.
+type V1RegistrationTokensResponse struct {
+	RegistrationTokens []RegistrationToken `json:"registrationTokens"`
+}

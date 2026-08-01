@@ -76,6 +76,73 @@
       </table>
     </div>
 
+    <!-- Registration Invites -->
+    <div class="flex items-center justify-between mb-4 mt-6 w-full">
+      <h2 class="text-xl font-bold">Registration Invites</h2>
+
+      <AppButton @click="openInviteModal">
+        Create Invite
+      </AppButton>
+    </div>
+
+    <div class="admin-table-scroll">
+      <table class="admin-table min-w-full rounded-lg overflow-hidden">
+        <thead class="admin-table-head">
+          <tr>
+            <th class="px-4 py-2 text-left">ID</th>
+            <th class="px-4 py-2 text-left">Uses</th>
+            <th class="px-4 py-2 text-left">Expires</th>
+            <th class="px-4 py-2 text-left">Created</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          <tr v-for="invite in invitesList" :key="invite.id" class="admin-table-row">
+            <td class="px-4 py-2 admin-table-cell">{{ invite.id }}</td>
+            <td class="px-4 py-2 admin-table-cell">{{ invite.useCount }} / {{ invite.maxUses }}</td>
+            <td class="px-4 py-2 admin-table-cell">{{ formatDate(invite.expiresAt) }}</td>
+            <td class="px-4 py-2 admin-table-cell">{{ formatDate(invite.createdAt) }}</td>
+          </tr>
+          <tr v-if="!invitesList.length">
+            <td class="px-4 py-2 admin-table-cell" colspan="4">No outstanding invites.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Invite Modal -->
+    <AppModal :show="showInviteModal" title="Create Invite" width="24rem" @close="closeInviteModal">
+      <form v-if="!newInviteLink" @submit.prevent="submitInvite" class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium mb-1">Expires In (hours)</label>
+          <input v-model.number="inviteForm.expiresInHours" type="number" min="1" class="input" required />
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium mb-1">Max Uses</label>
+          <input v-model.number="inviteForm.maxUses" type="number" min="1" class="input" placeholder="1" />
+        </div>
+
+        <ErrorMessage :msg="inviteError" @clear="inviteError = ''" />
+
+        <div class="flex justify-end gap-3 pt-4">
+          <AppButton type="button" variant="secondary" size="sm" @click="closeInviteModal">Cancel</AppButton>
+          <AppButton type="submit" size="sm">Create</AppButton>
+        </div>
+      </form>
+
+      <div v-else class="space-y-4">
+        <p class="text-sm">Share this link with the person you're inviting. It won't be shown again.</p>
+        <div class="flex gap-2">
+          <input :value="newInviteLink" readonly class="input flex-1" @focus="($event.target as HTMLInputElement).select()" />
+          <AppButton type="button" size="sm" @click="copyInviteLink">Copy</AppButton>
+        </div>
+        <div class="flex justify-end pt-4">
+          <AppButton type="button" variant="secondary" size="sm" @click="closeInviteModal">Done</AppButton>
+        </div>
+      </div>
+    </AppModal>
+
     <!-- User Modal (Create + Edit) -->
     <AppModal
       :show="showModal"
@@ -246,6 +313,20 @@ const sendingResetEmail = ref(false)
 const resetEmailError = ref('')
 const resetEmailSuccess = ref('')
 
+interface RegistrationToken {
+  id: number
+  maxUses: number
+  useCount: number
+  expiresAt: string
+  createdAt: string
+}
+
+const invitesList = ref<RegistrationToken[]>([])
+const showInviteModal = ref(false)
+const inviteError = ref('')
+const newInviteLink = ref<string | null>(null)
+const inviteForm = reactive({ expiresInHours: 72, maxUses: 1 })
+
 type SortableUserColumn = 'id' | 'firstName' | 'lastName' | 'email' | 'spaceUsed' | 'quota'
 const sortColumn = ref<SortableUserColumn>('id')
 const sortDir = ref<'asc' | 'desc'>('asc')
@@ -302,6 +383,7 @@ const form = reactive<UserForm>({
 })
 
 onMounted(fetchUsers)
+onMounted(fetchInvites)
 
 /* ---------------- Helpers ---------------- */
 
@@ -435,6 +517,52 @@ async function fetchUsers() {
   const res = await usersStore.getUsers()
   if (!res.ok) return
   usersList.value = res.body
+}
+
+function formatDate(iso: string) {
+  return new Date(iso).toLocaleString()
+}
+
+function openInviteModal() {
+  inviteForm.expiresInHours = 72
+  inviteForm.maxUses = 1
+  inviteError.value = ''
+  newInviteLink.value = null
+  showInviteModal.value = true
+}
+
+function closeInviteModal() {
+  showInviteModal.value = false
+  inviteError.value = ''
+  newInviteLink.value = null
+}
+
+async function submitInvite() {
+  inviteError.value = ''
+
+  const res = await usersStore.createRegistrationToken({
+    expiresInHours: inviteForm.expiresInHours,
+    maxUses: inviteForm.maxUses || undefined,
+  })
+
+  if (!res.ok) {
+    inviteError.value = res.body?.error ?? 'Failed to create invite'
+    return
+  }
+
+  newInviteLink.value = `${window.location.origin}/signup?token=${res.body.token}`
+  await fetchInvites()
+}
+
+async function copyInviteLink() {
+  if (!newInviteLink.value) return
+  await navigator.clipboard.writeText(newInviteLink.value)
+}
+
+async function fetchInvites() {
+  const res = await usersStore.getRegistrationTokens()
+  if (!res.ok) return
+  invitesList.value = res.body.registrationTokens ?? []
 }
 
 function resetForm() {

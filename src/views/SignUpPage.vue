@@ -6,6 +6,7 @@
       </div>
       <h1 class="auth-heading">Create an account</h1>
       <p class="auth-subtitle -mt-2">Get started with Avenue</p>
+      <p v-if="inviteToken" class="auth-subtitle -mt-2">You're signing up with an invite link.</p>
 
       <div class="flex flex-col gap-3">
         <label>Email</label>
@@ -54,14 +55,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import AppButton from './components/AppButton.vue'
 import { useUsersStore } from '@/stores/users';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import ErrorMessage from './components/ErrorMessage.vue';
 
 const usersStore = useUsersStore();
 const router = useRouter();
+const route = useRoute();
+
+const inviteToken = computed(() => route.query.token as string | undefined);
 
 const email = ref('')
 const password = ref('')
@@ -82,6 +86,7 @@ async function handleSignUp() {
   const response = await usersStore.signUpAPI({
     email: email.value,
     password: password.value,
+    token: inviteToken.value,
   });
 
   submitting.value = false;

@@ -94,7 +94,7 @@ export const useUsersStore = defineStore('users', () => {
         return response;
     }
 
-    async function signUp(userData: {email: string; password:string }) {
+    async function signUp(userData: {email: string; password:string; token?: string }) {
         const response = await signUpAPI(userData);
 
         if (response.ok || response.status === 201) {
@@ -104,7 +104,7 @@ export const useUsersStore = defineStore('users', () => {
     return response;
     }
 
-    async function signUpAPI(userData: { email: string; password: string }) {
+    async function signUpAPI(userData: { email: string; password: string; token?: string }) {
         const response = await api({
             url: "register",
             method: "POST",
@@ -112,6 +112,25 @@ export const useUsersStore = defineStore('users', () => {
         });
 
     return response;
+    }
+
+    async function createRegistrationToken(data: { expiresInHours: number; maxUses?: number }) {
+        const response = await api({
+            url: "v1/registration-tokens",
+            method: "POST",
+            json: data,
+        });
+
+        return response;
+    }
+
+    async function getRegistrationTokens() {
+        const response = await api({
+            url: "v1/registration-tokens",
+            method: "GET",
+        });
+
+        return response;
     }
 
     async function getUsers() {
@@ -172,5 +191,7 @@ export const useUsersStore = defineStore('users', () => {
         pullMe,
         updateUser,
         updatePassword,
+        createRegistrationToken,
+        getRegistrationTokens,
     }
 })

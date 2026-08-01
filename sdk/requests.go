@@ -12,6 +12,16 @@ type RegisterRequest struct {
 	FirstName string `json:"firstName" binding:"max=64"`
 	LastName  string `json:"lastName" binding:"max=64"`
 	Email     string `json:"email" binding:"required,min=4,max=512"`
+	// Token is an admin-issued registration invite token. It's only required
+	// when keyring's own self-serve registration is disabled server-side.
+	Token string `json:"token"`
+}
+
+// CreateRegistrationTokenRequest issues an admin invite letting someone
+// register while keyring's self-serve registration is disabled.
+type CreateRegistrationTokenRequest struct {
+	ExpiresInHours int `json:"expiresInHours" binding:"required,min=1"`
+	MaxUses        int `json:"maxUses" binding:"omitempty,min=1"`
 }
 
 type CreateUserRequest struct {

@@ -120,7 +120,16 @@ func (s *Server) Register(c *gin.Context) {
 	// Keyring's Register creates an unverified account and emails a
 	// verification link; the account can't log in until VerifyEmail is
 	// called. The response never reveals whether the email already existed.
-	if err := s.keyringClient("").Register(c.Request.Context(), req.Email, req.Password, "", req.FirstName, req.LastName); err != nil {
+	if err := s.keyringClient("").Register(c.Request.Context(), req.Email, req.Password, "", req.FirstName, req.LastName, req.Token); err != nil {
+		// A missing/invalid/expired invite token (or self-serve registration
+		// being closed entirely) is a legitimate, non-enumerating error to
+		// surface — unlike the "did this email already exist" question,
+		// which stays hidden behind the generic success message above.
+		var apiErr *ksdk.APIError
+		if errors.As(err, &apiErr) && (apiErr.StatusCode == http.StatusBadRequest || apiErr.StatusCode == http.StatusForbidden) {
+			respond(c, apiErr.StatusCode, "", errors.New(apiErr.Message))
+			return
+		}
 		respond(c, http.StatusInternalServerError, "", fmt.Errorf("register: %w", err))
 		return
 	}
@@ -154,6 +163,78 @@ func requireAdmin(c *gin.Context) (ok bool) {
 		return false
 	}
 	return true
+}
+
+// mapRegistrationToken converts keyring's registration-token representation
+// to avenue's own SDK type, so the SDK stays decoupled from keyring's.
+func mapRegistrationToken(t ksdk.RegistrationToken) sdk.RegistrationToken {
+	return sdk.RegistrationToken{
+		ID:        t.ID,
+		CreatedBy: t.CreatedBy,
+		MaxUses:   t.MaxUses,
+		UseCount:  t.UseCount,
+		ExpiresAt: t.ExpiresAt,
+		CreatedAt: t.CreatedAt,
+	}
+}
+
+// CreateRegistrationToken issues an admin invite that lets someone
+// self-register while keyring's own self-serve registration is disabled.
+// The raw token is only ever returned here — only its hash is persisted.
+func (s *Server) CreateRegistrationToken(c *gin.Context) {
+	if !requireAdmin(c) {
+		return
+	}
+
+	token, err := shared.GetSessionIDFromContext(c.Request.Context())
+	if err != nil {
+		respond(c, http.StatusBadRequest, "", errors.New("session token not found"))
+		return
+	}
+
+	var req sdk.CreateRegistrationTokenRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		respond(c, http.StatusBadRequest, "", err)
+		return
+	}
+
+	out, err := s.keyringClient(token).CreateRegistrationToken(c.Request.Context(), req.ExpiresInHours, req.MaxUses)
+	if err != nil {
+		respond(c, http.StatusInternalServerError, "", fmt.Errorf("create registration token: %w", err))
+		return
+	}
+
+	c.JSON(http.StatusCreated, sdk.V1CreateRegistrationTokenResponse{
+		Token:             out.Token,
+		RegistrationToken: mapRegistrationToken(out.RegistrationToken),
+	})
+}
+
+// ListRegistrationTokens lists all outstanding registration tokens and how
+// many times each has been used.
+func (s *Server) ListRegistrationTokens(c *gin.Context) {
+	if !requireAdmin(c) {
+		return
+	}
+
+	token, err := shared.GetSessionIDFromContext(c.Request.Context())
+	if err != nil {
+		respond(c, http.StatusBadRequest, "", errors.New("session token not found"))
+		return
+	}
+
+	tokens, err := s.keyringClient(token).ListRegistrationTokens(c.Request.Context())
+	if err != nil {
+		respond(c, http.StatusInternalServerError, "", fmt.Errorf("list registration tokens: %w", err))
+		return
+	}
+
+	out := make([]sdk.RegistrationToken, 0, len(tokens))
+	for _, t := range tokens {
+		out = append(out, mapRegistrationToken(t))
+	}
+
+	c.JSON(http.StatusOK, sdk.V1RegistrationTokensResponse{RegistrationTokens: out})
 }
 
 func (s *Server) CreateUser(c *gin.Context) {

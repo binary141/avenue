@@ -1,9 +1,12 @@
 <template>
   <div class="page auth-page gap-5">
     <div class="auth-card card flex flex-col w-full gap-4">
-      <h1 class="auth-heading">Signing in&hellip;</h1>
+      <h1 v-if="!error" class="auth-heading">Signing in&hellip;</h1>
 
-      <ErrorMessage :msg="error" @clear="error = ''" />
+      <!-- No @clear handler: unlike a transient form toast, this page has no
+      retry action, so the error and the link back to login must stay put
+      rather than disappear on ErrorMessage's 3s auto-dismiss timer. -->
+      <ErrorMessage :msg="error" />
 
       <p v-if="error"><RouterLink :to="{ name: 'login' }" class="text-link">Back to Login</RouterLink></p>
     </div>

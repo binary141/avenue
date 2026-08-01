@@ -3,6 +3,7 @@ FROM golang:1.26.1-alpine AS builder
 WORKDIR /app
 
 COPY go.mod go.sum ./
+COPY --from=keyring . /keyring
 
 RUN go mod download
 

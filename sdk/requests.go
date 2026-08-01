@@ -21,6 +21,11 @@ type CreateUserRequest struct {
 	LastName  string  `json:"lastName" binding:"min=1,max=64"`
 	IsAdmin   bool    `json:"isAdmin"`
 	SendEmail bool    `json:"sendEmail"`
+	Quota     *int64  `json:"quota,omitempty" binding:"omitempty,min=0"`
+}
+
+type VerifyEmailRequest struct {
+	Token string `json:"token" binding:"required"`
 }
 
 type UpdateProfileRequest struct {
@@ -37,6 +42,10 @@ type UpdateProfileRequest struct {
 type UpdatePasswordRequest struct {
 	Password        string `json:"password" binding:"required,min=8,max=128"`
 	CurrentPassword string `json:"currentPassword" binding:"required"`
+}
+
+type OAuthExchangeRequest struct {
+	Code string `json:"code" binding:"required"`
 }
 
 type ForgotPasswordRequest struct {

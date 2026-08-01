@@ -44,6 +44,21 @@
       <AppButton type="submit">LOGIN</AppButton>
 
       <p class="forgot-link"><RouterLink :to="{ name: 'forgot-password' }" class="text-link">Forgot your password?</RouterLink></p>
+
+      <template v-if="oauthProviders.length">
+        <div class="oauth-divider"><span>or</span></div>
+        <div class="flex flex-col gap-3">
+          <AppButton
+            v-for="provider in oauthProviders"
+            :key="provider"
+            type="button"
+            variant="secondary"
+            @click="handleOAuthLogin(provider)"
+          >
+            {{ provider }}
+          </AppButton>
+        </div>
+      </template>
     </form>
 
     <p v-if="canRegister">Don't have an account? <RouterLink :to="{ name: 'signup' }" class="text-link">Sign Up</RouterLink> instead.</p>
@@ -57,7 +72,7 @@ import { useUsersStore } from '@/stores/users';
 import { useRouter, useRoute } from 'vue-router';
 import ErrorMessage from './components/ErrorMessage.vue';
 import SuccessMessage from './components/SuccessMessage.vue';
-import api from '@/utils/api'
+import api, { getURLRoot } from '@/utils/api'
 
 const usersStore = useUsersStore();
 const router = useRouter();
@@ -71,6 +86,21 @@ const success = ref('');
 const submitting = ref(false);
 const showPassword = ref(false);
 const canRegister = ref(false);
+const oauthProviders = ref<string[]>([]);
+
+async function loadOAuthProviders() {
+  const response = await usersStore.getOAuthProviders();
+
+  if (!response.ok) {
+    return;
+  }
+
+  oauthProviders.value = response.body.providers ?? [];
+}
+
+function handleOAuthLogin(provider: string) {
+  window.location.href = `${getURLRoot()}auth/${encodeURIComponent(provider)}/login`;
+}
 
 async function loginMeta() {
   const response = await api({
@@ -88,6 +118,7 @@ async function loginMeta() {
 
 onMounted(() => {
   loginMeta()
+  loadOAuthProviders()
   if (route.query.reset === '1') {
     success.value = 'Your password has been reset. You can now log in.'
   }
@@ -127,5 +158,21 @@ async function handleLogin() {
 .forgot-link {
   text-align: center;
   font-size: 13px;
+}
+
+.oauth-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.oauth-divider::before,
+.oauth-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--gray-4);
 }
 </style>

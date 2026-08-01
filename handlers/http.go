@@ -3,7 +3,6 @@ package handlers
 import (
 	"context"
 	"embed"
-	"errors"
 	"fmt"
 	"io/fs"
 	"net/http"
@@ -14,6 +13,7 @@ import (
 	"avenue/backend/logger"
 	"avenue/backend/shared"
 
+	ksdk "github.com/binary141/keyring/sdk"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/afero"
@@ -21,8 +21,19 @@ import (
 
 // Server holds dependencies for the HTTP server.
 type Server struct {
-	router *gin.Engine
-	fs     afero.Fs
+	router     *gin.Engine
+	fs         afero.Fs
+	keyringURL string
+}
+
+// keyringClient returns a keyring SDK client for a single request, carrying
+// token (which may be "" for anonymous calls like Login/Register). A fresh
+// client is used per call rather than a shared one because the keyring SDK
+// mutates its held token on Login/Logout/ExchangeOAuthCode, which would
+// race across concurrent requests on a shared instance; NewClient does no
+// network I/O, so this costs nothing.
+func (s *Server) keyringClient(token string) *ksdk.Client {
+	return ksdk.NewClient(s.keyringURL, ksdk.WithToken(token))
 }
 
 var (
@@ -57,8 +68,9 @@ func SetupServer() Server {
 	fs := afero.NewOsFs()
 	jailedFs := afero.NewBasePathFs(fs, shared.GetEnv("UPLOAD_DIR", "./avenuectl/temp/"))
 	return Server{
-		fs:     jailedFs,
-		router: r,
+		fs:         jailedFs,
+		router:     r,
+		keyringURL: shared.GetEnv("KEYRING_URL", "http://localhost:8081"),
 	}
 }
 
@@ -136,18 +148,23 @@ func requestSessionToken(c *gin.Context, allowQueryToken bool) (string, bool) {
 	return "", false
 }
 
-// getAuthenticatedUserID extracts the user ID from a token without requiring
-// the session middleware. Returns (userID, true) if valid, (0, false) if not.
+// getAuthenticatedUserID extracts the local user ID from a token without
+// requiring the session middleware. Returns (userID, true) if valid,
+// (0, false) if not.
 func (s *Server) getAuthenticatedUserID(c *gin.Context) (int64, bool) {
 	token, ok := requestSessionToken(c, true)
 	if !ok {
 		return 0, false
 	}
-	session, valid := db.IsValidSession(token)
-	if !valid {
+	me, err := s.keyringClient(token).MeWithToken(c.Request.Context(), token)
+	if err != nil {
 		return 0, false
 	}
-	return session.UserId, true
+	localUser, err := db.GetOrCreateLocalUser(me.User.ID, me.User.UUID)
+	if err != nil {
+		return 0, false
+	}
+	return localUser.ID, true
 }
 
 func (s *Server) isAuthenticated(c *gin.Context) bool {
@@ -155,12 +172,7 @@ func (s *Server) isAuthenticated(c *gin.Context) bool {
 	if !ok {
 		return false
 	}
-	_, valid := db.IsValidSession(token)
-	return valid
-}
-
-func (s *Server) userIDExists(userID string) bool {
-	_, err := db.GetUserByIDStr(userID)
+	_, err := s.keyringClient(token).MeWithToken(c.Request.Context(), token)
 	return err == nil
 }
 
@@ -188,39 +200,36 @@ func (s *Server) sessionCheckImpl(c *gin.Context, allowQueryToken bool) {
 		return
 	}
 
-	// see if the session is valid
-	session, valid := db.IsValidSession(token)
-	if !valid {
-		c.AbortWithStatus(http.StatusUnauthorized)
-		return
-	}
-
-	if !s.userIDExists(fmt.Sprint(session.UserId)) {
-		c.AbortWithStatus(http.StatusUnauthorized)
-		return
-	}
-
-	session.ExpiresAt = time.Now().Add(SessionRollingWindow).Unix()
-
-	// update the session to be a rolling timeout
-	_, err := db.UpdateSession(session)
+	// Validate the token against keyring and fetch identity + roles. Keyring
+	// is now the sole owner of session validity/expiry, so there's no local
+	// session row to check or extend here.
+	me, err := s.keyringClient(token).MeWithToken(c.Request.Context(), token)
 	if err != nil {
-		respond(c, http.StatusInternalServerError, "", errors.New("could not update session"))
+		c.AbortWithStatus(http.StatusUnauthorized)
 		return
 	}
+
+	localUser, err := db.GetOrCreateLocalUser(me.User.ID, me.User.UUID)
+	if err != nil {
+		respond(c, http.StatusInternalServerError, "", fmt.Errorf("resolve local user: %w", err))
+		return
+	}
+
+	isAdmin := me.User.IsAdmin
 
 	// keep the cookies' Max-Age in sync with the rolling session window,
-	// otherwise the browser drops them well before the session expires
+	// otherwise the browser drops them well before keyring's session expires
 	maxAge := int(SessionRollingWindow.Seconds())
-	c.SetCookie(string(shared.USERCOOKIENAME), fmt.Sprint(session.UserId), maxAge, "/", COOKIEDOMAIN, COOKIESECURE, true)
+	c.SetCookie(string(shared.USERCOOKIENAME), fmt.Sprint(localUser.ID), maxAge, "/", COOKIEDOMAIN, COOKIESECURE, true)
 	c.SetCookie(string(shared.SESSIONCOOKIENAME), token, maxAge, "/", COOKIEDOMAIN, COOKIESECURE, true)
 
 	rc := c.Request.Context()
 
 	// Add a new value to the context
-	newCtx := context.WithValue(rc, shared.USERCOOKIENAME, session.UserId)
-	// put the session data into the context
+	newCtx := context.WithValue(rc, shared.USERCOOKIENAME, localUser.ID)
+	// put the session token and admin flag into the context
 	newCtx = context.WithValue(newCtx, shared.SESSIONCOOKIENAME, token)
+	newCtx = context.WithValue(newCtx, shared.ISADMINCONTEXTKEY, isAdmin)
 
 	// Update the request with the new context
 	c.Request = c.Request.WithContext(newCtx)
@@ -278,8 +287,12 @@ func (s *Server) SetupRoutes() {
 	unsecuredRouter.POST("/login", s.Login)
 	unsecuredRouter.GET("/loginMeta", s.LoginMeta)
 	unsecuredRouter.POST("/register", s.Register)
+	unsecuredRouter.POST("/verify-email", s.VerifyEmail)
 	unsecuredRouter.POST("/forgot-password", s.ForgotPassword)
 	unsecuredRouter.POST("/reset-password", s.ResetPassword)
+	unsecuredRouter.GET("/auth/providers", s.ListOAuthProviders)
+	unsecuredRouter.GET("/auth/:provider/login", s.OAuthLogin)
+	unsecuredRouter.POST("/auth/exchange", s.OAuthExchange)
 	publicFileShare := unsecuredRouter.Group("/api/share")
 	publicFileShare.Use(s.fileSharingRequired)
 	publicFileShare.GET("/:token", s.GetShareLinkMeta)

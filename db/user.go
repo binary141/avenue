@@ -2,172 +2,97 @@ package db
 
 import (
 	"strconv"
-
-	"avenue/backend/sdk"
-
-	"golang.org/x/crypto/bcrypt"
+	"time"
 )
 
-func GetUserByIDStr(idStr string) (sdk.User, error) {
+// LocalUser is avenue's local mirror of a keyring user: just enough to be
+// the FK anchor for files/folders/shares (via its auto-inc ID, unchanged
+// from before) and to hold the quota/usage tracking that stays internal to
+// this service. Identity (email, name, password, admin role) lives in
+// keyring and is never duplicated here.
+type LocalUser struct {
+	ID            int64     `json:"id"`
+	KeyringUserID int64     `json:"keyringUserId"`
+	KeyringUUID   string    `json:"keyringUuid"`
+	Quota         int64     `json:"quota"`
+	SpaceUsed     int64     `json:"spaceUsed"`
+	CreatedAt     time.Time `json:"createdAt"`
+}
+
+// GetOrCreateLocalUser returns the local row mirroring the given keyring
+// user, creating it (with zero quota) on first sight. Called on every
+// authenticated request, so it stays a single round trip.
+func GetOrCreateLocalUser(keyringUserID int64, keyringUUID string) (LocalUser, error) {
+	var u LocalUser
+	err := DB.QueryRow(`
+		INSERT INTO users (keyring_user_id, keyring_uuid, created_at, updated_at)
+		VALUES ($1, $2, now(), now())
+		ON CONFLICT (keyring_user_id) WHERE deleted_at IS NULL DO UPDATE SET keyring_user_id = EXCLUDED.keyring_user_id
+		RETURNING id, keyring_user_id, keyring_uuid, quota, space_used, created_at
+	`, keyringUserID, keyringUUID).Scan(&u.ID, &u.KeyringUserID, &u.KeyringUUID, &u.Quota, &u.SpaceUsed, &u.CreatedAt)
+	return u, err
+}
+
+// GetLocalUserByIDStr is GetLocalUserByID taking the string form of the ID
+// found in the request context (shared.GetUserIDFromContext).
+func GetLocalUserByIDStr(idStr string) (LocalUser, error) {
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		return sdk.User{}, err
+		return LocalUser{}, err
 	}
-	return GetUserByID(id)
+	return GetLocalUserByID(id)
 }
 
-func GetUserByID(id int64) (sdk.User, error) {
-	var u sdk.User
+func GetLocalUserByID(id int64) (LocalUser, error) {
+	var u LocalUser
 	err := DB.QueryRow(`
-		SELECT id, email, COALESCE(first_name,''), COALESCE(last_name,''), password, can_login, is_admin, quota, space_used, created_at
+		SELECT id, keyring_user_id, keyring_uuid, quota, space_used, created_at
 		FROM users WHERE id = $1 AND deleted_at IS NULL
-	`, id).Scan(&u.ID, &u.Email, &u.FirstName, &u.LastName, &u.Password, &u.CanLogin, &u.IsAdmin, &u.Quota, &u.SpaceUsed, &u.CreatedAt)
+	`, id).Scan(&u.ID, &u.KeyringUserID, &u.KeyringUUID, &u.Quota, &u.SpaceUsed, &u.CreatedAt)
 	return u, err
 }
 
-func GetUserByEmail(email string) (sdk.User, error) {
-	var u sdk.User
-	err := DB.QueryRow(`
-		SELECT id, email, COALESCE(first_name,''), COALESCE(last_name,''), password, can_login, is_admin, quota, space_used, created_at
-		FROM users WHERE email = $1 AND deleted_at IS NULL
-	`, email).Scan(&u.ID, &u.Email, &u.FirstName, &u.LastName, &u.Password, &u.CanLogin, &u.IsAdmin, &u.Quota, &u.SpaceUsed, &u.CreatedAt)
-	return u, err
-}
-
-func GetUsers() ([]sdk.User, error) {
+// ListLocalUsersByKeyringID returns every local user row, keyed by keyring
+// user ID, so a caller holding a keyring-sourced user list can attach
+// quota/space_used to each entry in one query.
+func ListLocalUsersByKeyringID() (map[int64]LocalUser, error) {
 	rows, err := DB.Query(`
-		SELECT id, email, COALESCE(first_name,''), COALESCE(last_name,''), can_login, is_admin, quota, space_used, created_at
-		FROM users WHERE deleted_at IS NULL ORDER BY id ASC
+		SELECT id, keyring_user_id, keyring_uuid, quota, space_used, created_at
+		FROM users WHERE deleted_at IS NULL
 	`)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var users []sdk.User
+	out := make(map[int64]LocalUser)
 	for rows.Next() {
-		var u sdk.User
-		if err := rows.Scan(&u.ID, &u.Email, &u.FirstName, &u.LastName, &u.CanLogin, &u.IsAdmin, &u.Quota, &u.SpaceUsed, &u.CreatedAt); err != nil {
+		var u LocalUser
+		if err := rows.Scan(&u.ID, &u.KeyringUserID, &u.KeyringUUID, &u.Quota, &u.SpaceUsed, &u.CreatedAt); err != nil {
 			return nil, err
 		}
-		users = append(users, u)
+		out[u.KeyringUserID] = u
 	}
-	return users, rows.Err()
+	return out, rows.Err()
 }
 
-func CreateUser(email, password, firstName, lastName string, isAdmin bool) (sdk.User, error) {
-	var u sdk.User
-	err := DB.QueryRow(`
-		INSERT INTO users (email, password, first_name, last_name, can_login, is_admin, created_at, updated_at)
-		VALUES ($1, $2, NULLIF($3,''), NULLIF($4,''), true, $5, now(), now())
-		RETURNING id, email, COALESCE(first_name,''), COALESCE(last_name,''), password, can_login, is_admin, quota, space_used, created_at
-	`, email, password, firstName, lastName, isAdmin).Scan(
-		&u.ID, &u.Email, &u.FirstName, &u.LastName, &u.Password, &u.CanLogin, &u.IsAdmin, &u.Quota, &u.SpaceUsed, &u.CreatedAt,
-	)
-	return u, err
-}
-
-func UpdateUser(user sdk.User) (sdk.User, error) {
-	_, err := DB.Exec(`
-		UPDATE users
-		SET is_admin=$2, first_name=NULLIF($3,''), last_name=NULLIF($4,''),
-		    email=$5, password=$6, can_login=$7, quota=$8, updated_at=now()
-		WHERE id=$1 AND deleted_at IS NULL
-	`, user.ID, user.IsAdmin, user.FirstName, user.LastName, user.Email, user.Password, user.CanLogin, user.Quota)
-	return user, err
-}
-
-func HasOtherAdmins(user sdk.User) (bool, error) {
-	var exists bool
-	err := DB.QueryRow(
-		`SELECT EXISTS(SELECT 1 FROM users WHERE is_admin=true AND id <> $1 AND deleted_at IS NULL)`,
-		user.ID,
-	).Scan(&exists)
-	return exists, err
-}
-
-func IsUniqueEmail(email string) bool {
-	var count int
-	err := DB.QueryRow(`SELECT COUNT(*) FROM users WHERE email=$1 AND deleted_at IS NULL`, email).Scan(&count)
-	if err != nil {
-		return false
-	}
-	return count == 0
-}
-
-// UpdatePassword sets a new (already-hashed) password for the given user.
-func UpdatePassword(userID int64, hashedPassword string) error {
-	_, err := DB.Exec(
-		`UPDATE users SET password=$2, updated_at=now() WHERE id=$1 AND deleted_at IS NULL`,
-		userID, hashedPassword,
-	)
+// UpdateQuota sets the byte quota for the local user identified by its
+// avenue-local ID. A quota of 0 means unlimited (mirrors the previous
+// behavior in handlers/dashboard.go).
+func UpdateQuota(localID int64, quota int64) error {
+	_, err := DB.Exec(`UPDATE users SET quota=$2, updated_at=now() WHERE id=$1`, localID, quota)
 	return err
 }
 
-// CreatePasswordResetToken inserts a new password reset token for the user and returns the token UUID string.
-func CreatePasswordResetToken(userID int64) (string, error) {
-	var token string
-	err := DB.QueryRow(
-		`INSERT INTO password_reset_tokens (user_id) VALUES ($1) RETURNING token::text`,
-		userID,
-	).Scan(&token)
-	return token, err
-}
-
-// ConsumePasswordResetToken validates the token, deletes it, and returns the associated user ID.
-// Returns an error if the token is not found or has expired.
-func ConsumePasswordResetToken(token string) (int64, error) {
-	var userID int64
-	err := DB.QueryRow(
-		`DELETE FROM password_reset_tokens WHERE token = $1 AND expires_at > now() RETURNING user_id`,
-		token,
-	).Scan(&userID)
-	return userID, err
-}
-
-func GetUserUsage(id int64) (int64, error) {
+func GetUserUsage(localID int64) (int64, error) {
 	var spaceUsed int64
-	err := DB.QueryRow(`SELECT space_used FROM users WHERE id=$1 AND deleted_at IS NULL`, id).Scan(&spaceUsed)
+	err := DB.QueryRow(`SELECT space_used FROM users WHERE id=$1 AND deleted_at IS NULL`, localID).Scan(&spaceUsed)
 	return spaceUsed, err
 }
 
-func UpdateUsage(userID int64, delta int64) error {
+func UpdateUsage(localID int64, delta int64) error {
 	_, err := DB.Exec(`
 		UPDATE users SET space_used = GREATEST(0, space_used + $2), updated_at=now() WHERE id=$1
-	`, userID, delta)
+	`, localID, delta)
 	return err
-}
-
-// UpsertRootUser creates the admin account from env vars if it doesn't already exist.
-// If ROOT_USER_RESET=true is set, the root user's password is also updated on startup.
-func UpsertRootUser() error {
-	email := getenv("ROOT_USER_EMAIL", "root@gmail.com")
-	password := getenv("ROOT_USER_PASSWORD", "password")
-
-	hashed, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-	if err != nil {
-		return err
-	}
-
-	var count int
-	if err := DB.QueryRow(`SELECT COUNT(*) FROM users WHERE email=$1`, email).Scan(&count); err != nil {
-		return err
-	}
-
-	if count == 0 {
-		_, err = DB.Exec(`
-			INSERT INTO users (email, password, can_login, is_admin, created_at, updated_at)
-			VALUES ($1, $2, true, true, now(), now())
-		`, email, string(hashed))
-		return err
-	}
-
-	if getenv("ROOT_USER_RESET", "") == "true" {
-		_, err = DB.Exec(`
-			UPDATE users SET password=$2, updated_at=now() WHERE email=$1
-		`, email, string(hashed))
-		return err
-	}
-
-	return nil
 }

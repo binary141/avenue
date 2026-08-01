@@ -24,9 +24,7 @@ func main() {
 		return
 	}
 
-	if err := db.UpsertRootUser(); err != nil {
-		logger.Warnf("upsert root user: %v", err)
-	}
+	// Root admin account creation is now keyring's responsibility.
 
 	sender, err := email.NewSESSender()
 	if err != nil {
@@ -38,7 +36,6 @@ func main() {
 	server := handlers.SetupServer()
 
 	sweeper.Start(server.FS())
-	sweeper.StartSessionSweeper()
 
 	server.SetupRoutes()
 

@@ -1,37 +1,18 @@
 package handlers
 
 import (
-	"bytes"
-	"embed"
 	"errors"
 	"fmt"
-	"html/template"
 	"net/http"
 	"strconv"
 
 	"avenue/backend/db"
-	"avenue/backend/email"
 	"avenue/backend/logger"
 	"avenue/backend/sdk"
+	"avenue/backend/shared"
 
 	"github.com/gin-gonic/gin"
-	"golang.org/x/crypto/bcrypt"
 )
-
-//go:embed templates/forgot_password.html
-var forgotPasswordTmplFS embed.FS
-
-var forgotPasswordTmpl = template.Must(
-	template.New("forgot_password.html").ParseFS(forgotPasswordTmplFS, "templates/forgot_password.html"),
-)
-
-func forgotPasswordHTML(resetURL string) string {
-	var buf bytes.Buffer
-	if err := forgotPasswordTmpl.Execute(&buf, resetURL); err != nil {
-		return resetURL
-	}
-	return buf.String()
-}
 
 func (s *Server) ForgotPassword(c *gin.Context) {
 	var req sdk.ForgotPasswordRequest
@@ -40,7 +21,7 @@ func (s *Server) ForgotPassword(c *gin.Context) {
 		return
 	}
 
-	// Rate limit before touching the DB so the check can't be used to
+	// Rate limit before touching keyring so the check can't be used to
 	// distinguish registered from unregistered emails by timing/behavior.
 	// Still returns 204 on limit so the response looks identical either way.
 	if !forgotPasswordIPLimiter.allow(c.ClientIP()) || !forgotPasswordEmailLimiter.allow(normalizeEmailKey(req.Email)) {
@@ -48,39 +29,8 @@ func (s *Server) ForgotPassword(c *gin.Context) {
 		return
 	}
 
-	user, err := db.GetUserByEmail(req.Email)
-	if err != nil {
-		// Return success regardless so we don't leak which emails are registered.
-		c.Status(http.StatusNoContent)
-		return
-	}
-
-	if !user.CanLogin {
-		c.Status(http.StatusNoContent)
-		return
-	}
-
-	token, err := db.CreatePasswordResetToken(user.ID)
-	if err != nil {
-		respond(c, http.StatusInternalServerError, "", errors.New("could not create reset token"))
-		return
-	}
-
-	scheme := "https"
-	if c.Request.TLS == nil {
-		scheme = "http"
-	}
-	resetURL := scheme + "://" + c.Request.Host + "/reset-password?token=" + token
-
-	if err := email.Send(email.Message{
-		To:      user.Email,
-		Subject: "Reset your Avenue password",
-		HTML:    forgotPasswordHTML(resetURL),
-		Text:    "You requested a password reset for your Avenue account.\n\nClick the link below to set a new password:\n\n" + resetURL + "\n\nThis link expires in 1 hour. If you did not request this, you can safely ignore this email.",
-	}); err != nil {
-		if !errors.Is(err, email.ErrNotConfigured) {
-			logger.Errorf("email(forgot password): %v", err)
-		}
+	if err := s.keyringClient("").ForgotPassword(c.Request.Context(), req.Email); err != nil {
+		logger.Errorf("forgot password: %v", err)
 	}
 
 	c.Status(http.StatusNoContent)
@@ -93,88 +43,51 @@ func (s *Server) ResetPassword(c *gin.Context) {
 		return
 	}
 
-	userID, err := db.ConsumePasswordResetToken(req.Token)
-	if err != nil {
+	if err := s.keyringClient("").ResetPassword(c.Request.Context(), req.Token, req.NewPassword); err != nil {
 		respond(c, http.StatusBadRequest, "", errors.New("invalid or expired reset token"))
 		return
-	}
-
-	user, err := db.GetUserByID(userID)
-	if err != nil {
-		respond(c, http.StatusInternalServerError, "", errors.New("user not found"))
-		return
-	}
-
-	hashed, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
-	if err != nil {
-		respond(c, http.StatusInternalServerError, "", fmt.Errorf("hash password: %w", err))
-		return
-	}
-
-	if err := db.UpdatePassword(userID, string(hashed)); err != nil {
-		respond(c, http.StatusInternalServerError, "", fmt.Errorf("update password: %w", err))
-		return
-	}
-
-	if err := db.DeleteSessionsForUser(userID); err != nil {
-		logger.Errorf("revoke sessions after password reset: %v", err)
-	}
-
-	if err := email.Send(email.Message{
-		To:      user.Email,
-		Subject: "Your password was changed",
-		Text:    "Your Avenue account password was just changed via a password reset. If you did not make this change, please contact your administrator immediately.",
-	}); err != nil {
-		logger.Errorf("email(reset password confirmation): %v", err)
 	}
 
 	c.Status(http.StatusNoContent)
 }
 
+// AdminSendPasswordReset emails a password-reset link to the target user.
+// Keyring has no admin-triggered variant of this, so it goes through the
+// same public ForgotPassword flow keyring's own self-serve reset uses.
 func (s *Server) AdminSendPasswordReset(c *gin.Context) {
-	caller, ok := requireAdmin(c)
-	if !ok {
+	if !requireAdmin(c) {
 		return
 	}
 
-	targetID, err := strconv.ParseInt(c.Param("userID"), 10, 64)
+	token, err := shared.GetSessionIDFromContext(c.Request.Context())
+	if err != nil {
+		respond(c, http.StatusBadRequest, "", errors.New("session token not found"))
+		return
+	}
+
+	targetLocalID, err := strconv.ParseInt(c.Param("userID"), 10, 64)
 	if err != nil {
 		respond(c, http.StatusBadRequest, "", errors.New("invalid user id"))
 		return
 	}
 
-	target, err := db.GetUserByID(targetID)
+	targetLocal, err := db.GetLocalUserByID(targetLocalID)
 	if err != nil {
 		respond(c, http.StatusNotFound, "", errors.New("user not found"))
 		return
 	}
 
-	token, err := db.CreatePasswordResetToken(target.ID)
+	kc := s.keyringClient(token)
+	target, err := findKeyringUserByID(c.Request.Context(), kc, targetLocal.KeyringUserID)
 	if err != nil {
-		respond(c, http.StatusInternalServerError, "", fmt.Errorf("create reset token: %w", err))
+		respond(c, http.StatusNotFound, "", errors.New("user not found"))
 		return
 	}
 
-	scheme := "https"
-	if c.Request.TLS == nil {
-		scheme = "http"
-	}
-	resetURL := scheme + "://" + c.Request.Host + "/reset-password?token=" + token
-
-	if err := email.Send(email.Message{
-		To:      target.Email,
-		Subject: "Reset your Avenue password",
-		HTML:    forgotPasswordHTML(resetURL),
-		Text:    "An administrator has sent you a password reset for your Avenue account.\n\nClick the link below to set a new password:\n\n" + resetURL + "\n\nThis link expires in 1 hour.",
-	}); err != nil {
-		if errors.Is(err, email.ErrNotConfigured) {
-			respond(c, http.StatusServiceUnavailable, "", errors.New("email is not configured"))
-			return
-		}
-		respond(c, http.StatusInternalServerError, "", fmt.Errorf("send email: %w", err))
+	if err := kc.ForgotPassword(c.Request.Context(), target.Email); err != nil {
+		respond(c, http.StatusInternalServerError, "", fmt.Errorf("send reset email: %w", err))
 		return
 	}
 
-	logger.Infof("admin password reset email sent: target=%d by=%d", target.ID, caller.ID)
 	c.Status(http.StatusNoContent)
 }

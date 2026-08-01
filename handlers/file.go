@@ -52,7 +52,7 @@ func (s *Server) Upload(c *gin.Context) {
 		return
 	}
 
-	user, err := db.GetUserByIDStr(userID)
+	user, err := db.GetLocalUserByIDStr(userID)
 	if err != nil {
 		logger.Errorf("error getting user: %s", err.Error())
 		respond(c, http.StatusInternalServerError, "", err)

@@ -12,11 +12,12 @@ import (
 type cookieStr string
 
 const (
-	SESSIONCOOKIENAME  cookieStr = "session_id"
-	USERCOOKIENAME     cookieStr = "user_id"
-	USERCOOKIEVALUE    cookieStr = "test"
-	ROOTFOLDERID                 = "c32af1cc-aba9-4878-a305-5006dc7a5b76"
-	DEFAULTMAXFILESIZE int64     = 209715200
+	SESSIONCOOKIENAME    cookieStr = "session_id"
+	USERCOOKIENAME       cookieStr = "user_id"
+	USERCOOKIEVALUE      cookieStr = "test"
+	ISADMINCONTEXTKEY    cookieStr = "is_admin"
+	ROOTFOLDERID                   = "c32af1cc-aba9-4878-a305-5006dc7a5b76"
+	DEFAULTMAXFILESIZE   int64     = 209715200
 
 	DEFAULTPAGE      = 1
 	DEFAULTPAGELIMIT = 50
@@ -111,6 +112,13 @@ func ParsePagination(pageStr, limitStr string) (page, limit, offset int) {
 	offset = (page - 1) * limit
 
 	return page, limit, offset
+}
+
+// GetIsAdminFromContext returns whether the authenticated caller holds the
+// keyring "admin" role, as set by the session middleware.
+func GetIsAdminFromContext(ctx context.Context) bool {
+	isAdmin, _ := ctx.Value(ISADMINCONTEXTKEY).(bool)
+	return isAdmin
 }
 
 func GetSessionIDFromContext(ctx context.Context) (string, error) {

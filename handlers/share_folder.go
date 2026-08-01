@@ -233,7 +233,7 @@ func (s *Server) UploadToSharedFolder(c *gin.Context) {
 	}
 	creatorIDStr := fmt.Sprint(creatorID)
 
-	creator, err := db.GetUserByIDStr(creatorIDStr)
+	creator, err := db.GetLocalUserByIDStr(creatorIDStr)
 	if err != nil {
 		respond(c, http.StatusInternalServerError, "", err)
 		return
@@ -443,7 +443,7 @@ func effectiveMaxFileSize(linkMax int64) int64 {
 func uploadLimitForLink(link sdk.ShareFolderLink) int64 {
 	limit := effectiveMaxFileSize(link.MaxFileSize)
 
-	owner, err := db.GetUserByIDStr(fmt.Sprint(link.CreatedBy))
+	owner, err := db.GetLocalUserByIDStr(fmt.Sprint(link.CreatedBy))
 	if err != nil || owner.Quota == 0 {
 		return limit
 	}

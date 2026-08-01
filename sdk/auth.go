@@ -38,6 +38,12 @@ func (c *Client) Register(h http.Header, req RegisterRequest) (User, error) {
 	return out, err
 }
 
+// VerifyEmail activates a self-registered account, letting it log in.
+func (c *Client) VerifyEmail(h http.Header, token string) error {
+	req := VerifyEmailRequest{Token: token}
+	return c.request(h, http.MethodPost, "/verify-email", req, nil)
+}
+
 // ForgotPassword emails a password-reset link, if the email matches an
 // account. Always succeeds on the wire to avoid leaking account existence.
 func (c *Client) ForgotPassword(h http.Header, email string) error {

@@ -15,7 +15,7 @@ func (s *Server) DashboardInfo(c *gin.Context) {
 
 	userID, err := shared.GetUserIDFromContext(c.Request.Context())
 	if err == nil {
-		user, err := db.GetUserByIDStr(userID)
+		user, err := db.GetLocalUserByIDStr(userID)
 		if err == nil && user.Quota > 0 {
 			remaining := user.Quota - user.SpaceUsed
 			if remaining < maxFileSize {

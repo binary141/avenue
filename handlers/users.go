@@ -1,44 +1,40 @@
 package handlers
 
 import (
-	"bytes"
-	"crypto/rand"
-	"embed"
-	"encoding/hex"
+	"context"
 	"errors"
 	"fmt"
-	"html/template"
 	"net/http"
-	"strings"
+	"strconv"
 
 	"avenue/backend/db"
-	"avenue/backend/email"
 	"avenue/backend/logger"
 	"avenue/backend/sdk"
 	"avenue/backend/shared"
 
+	ksdk "github.com/binary141/keyring/sdk"
 	"github.com/gin-gonic/gin"
-	"golang.org/x/crypto/bcrypt"
 )
-
-//go:embed templates/user_created.html
-var userCreatedTmplFS embed.FS
-
-var userCreatedTmpl = template.Must(
-	template.New("user_created.html").ParseFS(userCreatedTmplFS, "templates/user_created.html"),
-)
-
-func userCreatedHTML(setPasswordURL string) string {
-	var buf bytes.Buffer
-	if err := userCreatedTmpl.Execute(&buf, setPasswordURL); err != nil {
-		return setPasswordURL
-	}
-	return buf.String()
-}
 
 func (s *Server) LoginMeta(c *gin.Context) {
 	enabled := shared.GetEnv("REGISTRATION_ENABLED", "false")
 	c.JSON(http.StatusOK, sdk.V1LoginMetaResponse{RegistrationEnabled: enabled})
+}
+
+// mapKeyringUser combines identity fields from keyring with quota/usage
+// tracked locally into the sdk.User shape the frontend already expects.
+func mapKeyringUser(u ksdk.User, local db.LocalUser) sdk.User {
+	return sdk.User{
+		ID:        local.ID,
+		Email:     u.Email,
+		FirstName: u.FirstName,
+		LastName:  u.LastName,
+		CanLogin:  u.CanLogin,
+		IsAdmin:   u.IsAdmin,
+		Quota:     local.Quota,
+		SpaceUsed: local.SpaceUsed,
+		CreatedAt: u.CreatedAt,
+	}
 }
 
 func (s *Server) Login(c *gin.Context) {
@@ -55,7 +51,7 @@ func (s *Server) Login(c *gin.Context) {
 		return
 	}
 
-	u, err := s.authorize(req.Email, req.Password)
+	resp, err := s.keyringClient("").Login(c.Request.Context(), req.Email, req.Password)
 	if err != nil {
 		c.Status(http.StatusUnauthorized)
 		return
@@ -63,38 +59,22 @@ func (s *Server) Login(c *gin.Context) {
 
 	loginEmailLimiter.reset(emailKey)
 
-	session, err := db.CreateSession(u.ID, c.Request.UserAgent(), c.ClientIP())
+	localUser, err := db.GetOrCreateLocalUser(resp.User.ID, resp.User.UUID)
 	if err != nil {
-		respond(c, http.StatusInternalServerError, "", fmt.Errorf("create session: %w", err))
+		respond(c, http.StatusInternalServerError, "", fmt.Errorf("resolve local user: %w", err))
 		return
 	}
 
 	maxAge := int(SessionRollingWindow.Seconds())
-	c.SetCookie(string(shared.USERCOOKIENAME), fmt.Sprintf("%d", u.ID), maxAge, "/", COOKIEDOMAIN, COOKIESECURE, true)
-	c.SetCookie(string(shared.SESSIONCOOKIENAME), session.SessionID, maxAge, "/", COOKIEDOMAIN, COOKIESECURE, true)
+	c.SetCookie(string(shared.USERCOOKIENAME), fmt.Sprintf("%d", localUser.ID), maxAge, "/", COOKIEDOMAIN, COOKIESECURE, true)
+	c.SetCookie(string(shared.SESSIONCOOKIENAME), resp.Token, maxAge, "/", COOKIEDOMAIN, COOKIESECURE, true)
 
 	c.JSON(http.StatusOK, sdk.V1LoginResponse{
 		Message:   "OK",
-		UserID:    u.ID,
-		SessionID: session.SessionID,
-		UserData:  u,
+		UserID:    localUser.ID,
+		SessionID: resp.Token,
+		UserData:  mapKeyringUser(resp.User, localUser),
 	})
-}
-
-func (s *Server) authorize(email, password string) (sdk.User, error) {
-	user, err := db.GetUserByEmail(email)
-	if err != nil {
-		return user, err
-	}
-
-	logger.Debugf("user password hash: %s", user.Password)
-
-	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password))
-	if err != nil {
-		return sdk.User{}, err
-	}
-
-	return user, nil
 }
 
 func (s *Server) Logout(c *gin.Context) {
@@ -104,14 +84,14 @@ func (s *Server) Logout(c *gin.Context) {
 	// sessionCheck (required by the secured route this handler is mounted on)
 	// authenticates via the Authorization header, not the ambient cookie, so
 	// logging out can't be triggered cross-site.
-	sessID, err := shared.GetSessionIDFromContext(c.Request.Context())
+	token, err := shared.GetSessionIDFromContext(c.Request.Context())
 	if err != nil {
 		c.Status(http.StatusOK)
 		return
 	}
 
-	if err = db.DeleteSession(sessID); err != nil {
-		respond(c, http.StatusInternalServerError, "", fmt.Errorf("delete session: %w", err))
+	if err := s.keyringClient(token).Logout(c.Request.Context()); err != nil {
+		respond(c, http.StatusInternalServerError, "", fmt.Errorf("logout: %w", err))
 		return
 	}
 
@@ -119,8 +99,7 @@ func (s *Server) Logout(c *gin.Context) {
 }
 
 func (s *Server) Register(c *gin.Context) {
-	enabled := strings.ToLower(shared.GetEnv("REGISTRATION_ENABLED", "false"))
-
+	enabled := shared.GetEnv("REGISTRATION_ENABLED", "false")
 	if enabled == "false" {
 		respond(c, http.StatusBadRequest, "", errors.New("registration is not enabled"))
 		return
@@ -138,63 +117,53 @@ func (s *Server) Register(c *gin.Context) {
 		return
 	}
 
-	if !db.IsUniqueEmail(req.Email) {
-		respond(c, http.StatusConflict, "", errors.New("email already exists"))
+	// Keyring's Register creates an unverified account and emails a
+	// verification link; the account can't log in until VerifyEmail is
+	// called. The response never reveals whether the email already existed.
+	if err := s.keyringClient("").Register(c.Request.Context(), req.Email, req.Password, "", req.FirstName, req.LastName); err != nil {
+		respond(c, http.StatusInternalServerError, "", fmt.Errorf("register: %w", err))
 		return
 	}
 
-	hashedPass, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
-	if err != nil {
-		respond(c, http.StatusInternalServerError, "", fmt.Errorf("hash password: %w", err))
-		return
-	}
-
-	isAdmin := false
-	u, err := db.CreateUser(req.Email, string(hashedPass), req.FirstName, req.LastName, isAdmin)
-	if err != nil {
-		respond(c, http.StatusInternalServerError, "", fmt.Errorf("create user: %w", err))
-		return
-	}
-
-	go func(userEmail string) {
-		if err := email.Send(email.Message{
-			To:      userEmail,
-			Subject: "Welcome to Avenue",
-			Text:    "Your Avenue account has been created. You can now log in at any time.",
-		}); err != nil && !errors.Is(err, email.ErrNotConfigured) {
-			logger.Errorf("email(register): %v", err)
-		}
-	}(u.Email)
-
-	c.JSON(http.StatusCreated, u)
+	c.JSON(http.StatusCreated, sdk.MessageResponse{
+		Message: "if this email is available, an account has been created; check your email to verify it",
+	})
 }
 
-// requireAdmin fetches the authenticated caller and confirms they're an
-// admin. On failure it writes the appropriate response and returns ok=false.
-func requireAdmin(c *gin.Context) (sdk.User, bool) {
-	userID, err := shared.GetUserIDFromContext(c.Request.Context())
-	if err != nil {
-		respond(c, http.StatusForbidden, "", fmt.Errorf("user id not found: %w", err))
-		return sdk.User{}, false
+// VerifyEmail activates a self-registered account, letting it log in.
+func (s *Server) VerifyEmail(c *gin.Context) {
+	var req sdk.VerifyEmailRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		respond(c, http.StatusBadRequest, "", err)
+		return
 	}
 
-	u, err := db.GetUserByIDStr(userID)
-	if err != nil {
-		respond(c, http.StatusInternalServerError, "", fmt.Errorf("get user: %w", err))
-		return sdk.User{}, false
+	if err := s.keyringClient("").VerifyEmail(c.Request.Context(), req.Token); err != nil {
+		respond(c, http.StatusBadRequest, "", errors.New("invalid or expired verification token"))
+		return
 	}
 
-	if !u.IsAdmin {
+	respond(c, http.StatusOK, "OK", nil)
+}
+
+// requireAdmin confirms the authenticated caller holds keyring's admin
+// flag. On failure it writes the appropriate response and returns ok=false.
+func requireAdmin(c *gin.Context) (ok bool) {
+	if !shared.GetIsAdminFromContext(c.Request.Context()) {
 		respond(c, http.StatusUnauthorized, "", errors.New("you are not an admin"))
-		return sdk.User{}, false
+		return false
 	}
-
-	return u, true
+	return true
 }
 
 func (s *Server) CreateUser(c *gin.Context) {
-	_, ok := requireAdmin(c)
-	if !ok {
+	if !requireAdmin(c) {
+		return
+	}
+
+	token, err := shared.GetSessionIDFromContext(c.Request.Context())
+	if err != nil {
+		respond(c, http.StatusBadRequest, "", errors.New("session token not found"))
 		return
 	}
 
@@ -205,71 +174,41 @@ func (s *Server) CreateUser(c *gin.Context) {
 		return
 	}
 
-	if !req.SendEmail && req.Password == nil {
-		respond(c, http.StatusBadRequest, "", errors.New("password is required when not sending an invite email"))
+	if req.Password == nil {
+		respond(c, http.StatusBadRequest, "", errors.New("password is required"))
 		return
 	}
 
-	if !db.IsUniqueEmail(req.Email) {
-		respond(c, http.StatusConflict, "", errors.New("email already exists"))
-		return
-	}
+	kc := s.keyringClient(token)
 
-	// When sending an invite email the admin doesn't set a password — generate a
-	// random placeholder that the user will replace via the set-password link.
-	password := ""
-	if req.Password != nil {
-		password = *req.Password
-	} else {
-		b := make([]byte, 32)
-		if _, err := rand.Read(b); err != nil {
-			respond(c, http.StatusInternalServerError, "", fmt.Errorf("generate password: %w", err))
-			return
-		}
-		password = hex.EncodeToString(b)
-	}
-
-	hashed, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-	if err != nil {
-		respond(c, http.StatusInternalServerError, "", fmt.Errorf("hash password: %w", err))
-		return
-	}
-
-	nu, err := db.CreateUser(req.Email, string(hashed), req.FirstName, req.LastName, req.IsAdmin)
-	if err != nil {
+	if err := kc.CreateUser(c.Request.Context(), req.Email, "", req.FirstName, req.LastName, *req.Password); err != nil {
 		respond(c, http.StatusInternalServerError, "", fmt.Errorf("create user: %w", err))
 		return
 	}
 
-	logger.Infof("new user created: id=%d email=%s", nu.ID, nu.Email)
-
-	if req.SendEmail {
-		// Capture request fields before entering the goroutine — gin may recycle the context.
-		scheme := "https"
-		if c.Request.TLS == nil {
-			scheme = "http"
+	created, err := findKeyringUserByEmail(c.Request.Context(), kc, req.Email)
+	if err == nil {
+		localUser, err := db.GetOrCreateLocalUser(created.ID, created.UUID)
+		if err == nil {
+			if req.Quota != nil {
+				_ = db.UpdateQuota(localUser.ID, *req.Quota)
+			}
+			if req.IsAdmin {
+				_ = kc.PromoteUser(c.Request.Context(), created.ID)
+			}
 		}
-		host := c.Request.Host
-		go func(userID int64, userEmail, scheme, host string) {
-			token, err := db.CreatePasswordResetToken(userID)
-			if err != nil {
-				logger.Errorf("email(user created): create reset token: %v", err)
-				return
-			}
-			setPasswordURL := scheme + "://" + host + "/reset-password?token=" + token
-			if err := email.Send(email.Message{
-				To:      userEmail,
-				Subject: "Your Avenue account has been created",
-				HTML:    userCreatedHTML(setPasswordURL),
-				Text:    "An administrator has created an Avenue account for you.\n\nClick the link below to set your password:\n\n" + setPasswordURL + "\n\nThis link expires in 1 hour.",
-			}); err != nil && !errors.Is(err, email.ErrNotConfigured) {
-				logger.Errorf("email(user created): %v", err)
-			}
-		}(nu.ID, nu.Email, scheme, host)
 	}
 
-	// todo allow pagination
-	us, err := db.GetUsers()
+	// Keyring doesn't yet send real invite email either (it logs the link
+	// server-side), but this keeps the two systems consistent: get the new
+	// user a reset link to set their own password.
+	if req.SendEmail {
+		_ = kc.ForgotPassword(c.Request.Context(), req.Email)
+	}
+
+	logger.Infof("new user created: email=%s", req.Email)
+
+	us, err := s.listUsersWithQuota(c, token)
 	if err != nil {
 		respond(c, http.StatusInternalServerError, "", fmt.Errorf("list users: %w", err))
 		return
@@ -278,14 +217,78 @@ func (s *Server) CreateUser(c *gin.Context) {
 	c.JSON(http.StatusOK, us)
 }
 
+// findKeyringUserByEmail scans keyring's user list for a matching email.
+// Keyring's admin API only exposes bulk listing, not single-user lookup by
+// email, so this trades an extra round trip for staying entirely on the
+// public API surface.
+func findKeyringUserByEmail(ctx context.Context, kc *ksdk.Client, email string) (ksdk.User, error) {
+	users, err := kc.ListUsers(ctx)
+	if err != nil {
+		return ksdk.User{}, err
+	}
+	for _, u := range users {
+		if u.Email == email {
+			return u, nil
+		}
+	}
+	return ksdk.User{}, fmt.Errorf("user with email %q not found", email)
+}
+
+// findKeyringUserByID scans keyring's user list for a matching ID, for the
+// same reason as findKeyringUserByEmail.
+func findKeyringUserByID(ctx context.Context, kc *ksdk.Client, id int64) (ksdk.User, error) {
+	users, err := kc.ListUsers(ctx)
+	if err != nil {
+		return ksdk.User{}, err
+	}
+	for _, u := range users {
+		if u.ID == id {
+			return u, nil
+		}
+	}
+	return ksdk.User{}, fmt.Errorf("user %d not found", id)
+}
+
+// listUsersWithQuota fetches every user from keyring and joins in the
+// locally-tracked quota/space_used for each, creating a local mirror row
+// for any keyring user seen for the first time.
+func (s *Server) listUsersWithQuota(c *gin.Context, token string) ([]sdk.User, error) {
+	kUsers, err := s.keyringClient(token).ListUsers(c.Request.Context())
+	if err != nil {
+		return nil, err
+	}
+
+	local, err := db.ListLocalUsersByKeyringID()
+	if err != nil {
+		return nil, err
+	}
+
+	out := make([]sdk.User, 0, len(kUsers))
+	for _, ku := range kUsers {
+		lu, ok := local[ku.ID]
+		if !ok {
+			lu, err = db.GetOrCreateLocalUser(ku.ID, ku.UUID)
+			if err != nil {
+				return nil, err
+			}
+		}
+		out = append(out, mapKeyringUser(ku, lu))
+	}
+	return out, nil
+}
+
 func (s *Server) GetUsers(c *gin.Context) {
-	_, ok := requireAdmin(c)
-	if !ok {
+	if !requireAdmin(c) {
 		return
 	}
 
-	// todo allow pagination
-	us, err := db.GetUsers()
+	token, err := shared.GetSessionIDFromContext(c.Request.Context())
+	if err != nil {
+		respond(c, http.StatusBadRequest, "", errors.New("session token not found"))
+		return
+	}
+
+	us, err := s.listUsersWithQuota(c, token)
 	if err != nil {
 		respond(c, http.StatusInternalServerError, "", fmt.Errorf("list users: %w", err))
 		return
@@ -301,181 +304,182 @@ func (s *Server) GetProfile(c *gin.Context) {
 		respond(c, http.StatusBadRequest, "", fmt.Errorf("user id not found: %w", err))
 		return
 	}
+	token, err := shared.GetSessionIDFromContext(ctx)
+	if err != nil {
+		respond(c, http.StatusBadRequest, "", errors.New("session token not found"))
+		return
+	}
 
-	u, err := db.GetUserByIDStr(userID)
+	localUser, err := db.GetLocalUserByIDStr(userID)
+	if err != nil {
+		respond(c, http.StatusInternalServerError, "", fmt.Errorf("get local user: %w", err))
+		return
+	}
+
+	me, err := s.keyringClient(token).Me(ctx)
 	if err != nil {
 		respond(c, http.StatusInternalServerError, "", fmt.Errorf("get user: %w", err))
 		return
 	}
 
-	c.JSON(http.StatusOK, u)
-}
-
-// validateProfileUpdate checks the authorization/validation rules for a
-// profile update against already-fetched state: whether the caller may edit
-// this target, whether the new email conflicts with another account, whether
-// a current password was supplied when required, and whether demoting an
-// admin would leave the app with none. It does not verify the current
-// password's hash — that still requires bcrypt and the target's stored hash,
-// so it stays in the handler.
-func validateProfileUpdate(callerID string, callerIsAdmin bool, req sdk.UpdateProfileRequest, emailConflict bool, hasOtherAdmins bool) error {
-	targetID := fmt.Sprintf("%d", req.ID)
-
-	if targetID != callerID && !callerIsAdmin {
-		return errors.New("only admin users can edit another user's information")
-	}
-
-	if req.Email != nil && emailConflict {
-		return errors.New("email already exists")
-	}
-
-	if req.Password != nil && targetID == callerID {
-		if req.CurrentPassword == nil || *req.CurrentPassword == "" {
-			return errors.New("current password is required")
-		}
-	}
-
-	if req.IsAdmin != nil && callerIsAdmin && !hasOtherAdmins && !*req.IsAdmin {
-		return errors.New("application requires at least one admin user")
-	}
-
-	return nil
+	c.JSON(http.StatusOK, mapKeyringUser(me.User, localUser))
 }
 
 func (s *Server) UpdateProfile(c *gin.Context) {
 	ctx := c.Request.Context()
-	userID, err := shared.GetUserIDFromContext(ctx)
+	callerLocalIDStr, err := shared.GetUserIDFromContext(ctx)
 	if err != nil {
 		respond(c, http.StatusBadRequest, "", errors.New("user id not found"))
 		return
 	}
+	token, err := shared.GetSessionIDFromContext(ctx)
+	if err != nil {
+		respond(c, http.StatusBadRequest, "", errors.New("session token not found"))
+		return
+	}
+	callerIsAdmin := shared.GetIsAdminFromContext(ctx)
 
 	var req sdk.UpdateProfileRequest
-
 	if err := c.ShouldBindJSON(&req); err != nil {
 		respond(c, http.StatusBadRequest, "", err)
 		return
 	}
 
-	u, err := db.GetUserByIDStr(userID)
+	callerLocalID, err := strconv.ParseInt(callerLocalIDStr, 10, 64)
 	if err != nil {
-		respond(c, http.StatusInternalServerError, "", fmt.Errorf("get user: %w", err))
+		respond(c, http.StatusInternalServerError, "", errors.New("invalid caller id"))
 		return
 	}
 
-	updatingUser, err := db.GetUserByID(req.ID)
+	targetLocal, err := db.GetLocalUserByID(req.ID)
 	if err != nil {
 		respond(c, http.StatusInternalServerError, "", fmt.Errorf("get target user: %w", err))
 		return
 	}
 
-	emailConflict := req.Email != nil && *req.Email != updatingUser.Email && !db.IsUniqueEmail(*req.Email)
-
-	var hasOtherAdmins bool
-	if req.IsAdmin != nil && u.IsAdmin {
-		hasOtherAdmins, _ = db.HasOtherAdmins(updatingUser)
-	}
-
-	if err := validateProfileUpdate(userID, u.IsAdmin, req, emailConflict, hasOtherAdmins); err != nil {
-		status := http.StatusBadRequest
-		if err.Error() == "email already exists" {
-			status = http.StatusConflict
-		}
-		respond(c, status, "", err)
+	isSelf := req.ID == callerLocalID
+	if !isSelf && !callerIsAdmin {
+		respond(c, http.StatusBadRequest, "", errors.New("only admin users can edit another user's information"))
 		return
 	}
 
-	if req.Email != nil {
-		updatingUser.Email = *req.Email
+	kc := s.keyringClient(token)
+
+	target, err := findKeyringUserByID(ctx, kc, targetLocal.KeyringUserID)
+	if err != nil {
+		respond(c, http.StatusInternalServerError, "", fmt.Errorf("get target user: %w", err))
+		return
 	}
 
-	if req.FirstName != nil {
-		updatingUser.FirstName = *req.FirstName
-	}
-
-	if req.LastName != nil {
-		updatingUser.LastName = *req.LastName
-	}
-
-	if req.Password != nil {
-		// Only require the current password when users change their own password;
-		// admins resetting another user's password don't know it and shouldn't need to.
-		if fmt.Sprintf("%d", req.ID) == userID {
-			if err := bcrypt.CompareHashAndPassword([]byte(updatingUser.Password), []byte(*req.CurrentPassword)); err != nil {
-				respond(c, http.StatusUnauthorized, "", errors.New("current password is incorrect"))
-				return
-			}
-		}
-
-		hashed, err := bcrypt.GenerateFromPassword([]byte(*req.Password), bcrypt.DefaultCost)
-		if err != nil {
-			respond(c, http.StatusInternalServerError, "", fmt.Errorf("hash password: %w", err))
+	if req.Password != nil && isSelf {
+		if req.CurrentPassword == nil || *req.CurrentPassword == "" {
+			respond(c, http.StatusBadRequest, "", errors.New("current password is required"))
 			return
 		}
-		updatingUser.Password = string(hashed)
+		if err := kc.ChangePassword(ctx, *req.CurrentPassword, *req.Password); err != nil {
+			respond(c, http.StatusUnauthorized, "", errors.New("current password is incorrect"))
+			return
+		}
 	}
 
-	if req.IsAdmin != nil && u.IsAdmin {
-		updatingUser.IsAdmin = *req.IsAdmin
+	email := target.Email
+	if req.Email != nil {
+		email = *req.Email
+	}
+	firstName := target.FirstName
+	if req.FirstName != nil {
+		firstName = *req.FirstName
+	}
+	lastName := target.LastName
+	if req.LastName != nil {
+		lastName = *req.LastName
 	}
 
-	if req.Quota != nil && u.IsAdmin {
-		updatingUser.Quota = *req.Quota
+	if req.Email != nil || req.FirstName != nil || req.LastName != nil {
+		if err := kc.UpdateUser(ctx, target.ID, email, target.DisplayName, firstName, lastName); err != nil {
+			status := http.StatusInternalServerError
+			var apiErr *ksdk.APIError
+			if errors.As(err, &apiErr) {
+				status = apiErr.StatusCode
+			}
+			respond(c, status, "", fmt.Errorf("update user: %w", err))
+			return
+		}
 	}
 
-	updatingUser, err = db.UpdateUser(updatingUser)
+	if req.Quota != nil && callerIsAdmin {
+		if err := db.UpdateQuota(targetLocal.ID, *req.Quota); err != nil {
+			respond(c, http.StatusInternalServerError, "", fmt.Errorf("update quota: %w", err))
+			return
+		}
+	}
+
+	if req.IsAdmin != nil && callerIsAdmin {
+		var roleErr error
+		if *req.IsAdmin {
+			roleErr = kc.PromoteUser(ctx, target.ID)
+		} else {
+			roleErr = kc.DemoteUser(ctx, target.ID)
+		}
+		if roleErr != nil {
+			status := http.StatusInternalServerError
+			var apiErr *ksdk.APIError
+			if errors.As(roleErr, &apiErr) {
+				status = apiErr.StatusCode
+			}
+			respond(c, status, "", fmt.Errorf("update admin status: %w", roleErr))
+			return
+		}
+	}
+
+	updated, err := findKeyringUserByID(ctx, kc, target.ID)
 	if err != nil {
-		respond(c, http.StatusInternalServerError, "", fmt.Errorf("update user: %w", err))
+		respond(c, http.StatusInternalServerError, "", fmt.Errorf("get updated user: %w", err))
+		return
+	}
+	targetLocal, err = db.GetLocalUserByID(targetLocal.ID)
+	if err != nil {
+		respond(c, http.StatusInternalServerError, "", fmt.Errorf("get updated local user: %w", err))
 		return
 	}
 
-	c.JSON(http.StatusOK, updatingUser)
+	c.JSON(http.StatusOK, mapKeyringUser(updated, targetLocal))
 }
 
 func (s *Server) UpdatePassword(c *gin.Context) {
 	ctx := c.Request.Context()
-	userID, err := shared.GetUserIDFromContext(ctx)
+	token, err := shared.GetSessionIDFromContext(ctx)
 	if err != nil {
-		respond(c, http.StatusBadRequest, "", errors.New("user id not found"))
+		respond(c, http.StatusBadRequest, "", errors.New("session token not found"))
 		return
 	}
 
 	var req sdk.UpdatePasswordRequest
-
 	if err := c.ShouldBindJSON(&req); err != nil {
 		respond(c, http.StatusBadRequest, "", err)
 		return
 	}
 
-	u, err := db.GetUserByIDStr(userID)
+	if err := s.keyringClient(token).ChangePassword(ctx, req.CurrentPassword, req.Password); err != nil {
+		respond(c, http.StatusUnauthorized, "", errors.New("current password is incorrect"))
+		return
+	}
+
+	userID, err := shared.GetUserIDFromContext(ctx)
+	if err != nil {
+		respond(c, http.StatusBadRequest, "", errors.New("user id not found"))
+		return
+	}
+	localUser, err := db.GetLocalUserByIDStr(userID)
+	if err != nil {
+		respond(c, http.StatusInternalServerError, "", fmt.Errorf("get local user: %w", err))
+		return
+	}
+	me, err := s.keyringClient(token).Me(ctx)
 	if err != nil {
 		respond(c, http.StatusInternalServerError, "", fmt.Errorf("get user: %w", err))
 		return
 	}
 
-	if err := bcrypt.CompareHashAndPassword([]byte(u.Password), []byte(req.CurrentPassword)); err != nil {
-		respond(c, http.StatusUnauthorized, "", errors.New("current password is incorrect"))
-		return
-	}
-
-	hashed, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
-	if err != nil {
-		respond(c, http.StatusInternalServerError, "", fmt.Errorf("hash password: %w", err))
-		return
-	}
-	u.Password = string(hashed)
-
-	u, err = db.UpdateUser(u)
-	if err != nil {
-		respond(c, http.StatusInternalServerError, "", fmt.Errorf("update password: %w", err))
-		return
-	}
-
-	if currentSessionID, err := shared.GetSessionIDFromContext(ctx); err == nil {
-		if err := db.DeleteOtherSessions(u.ID, currentSessionID); err != nil {
-			logger.Errorf("revoke other sessions after password change: %v", err)
-		}
-	}
-
-	c.JSON(http.StatusOK, u)
+	c.JSON(http.StatusOK, mapKeyringUser(me.User, localUser))
 }

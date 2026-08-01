@@ -60,6 +60,10 @@ export function setURLRoot(root: string): void {
   apiRoot = root;
 }
 
+export function getURLRoot(): string {
+  return apiRoot;
+}
+
 export function setGlobalRequestHeader(
   header: string,
   value: string | undefined = undefined,

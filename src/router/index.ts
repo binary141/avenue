@@ -29,6 +29,12 @@ const router = createRouter({
             component: () => import('@/views/DrivePage.vue'),
         },
         {
+            path: '/oauth/callback',
+            name: 'oauth-callback',
+            component: () => import('@/views/OAuthCallbackPage.vue'),
+            meta: { allowAnonymous: true },
+        },
+        {
             path: '/logout',
             name: 'logout',
             component: () => import('@/views/LogoutPage.vue')

@@ -3,6 +3,8 @@ services:
     # Build from source only if BACKEND_TARGET is set to a build target
     build:
       context: ./
+      additional_contexts:
+        keyring: ../keyring
       dockerfile: "${DOCKERFILE:-Dockerfile}"
       target: "${BACKEND_TARGET:-live-dev}"  # defaults to live-dev
     # Pull/run prebuilt image if BACKEND_TARGET is 'image' or not set
@@ -10,17 +12,23 @@ services:
 
     volumes:
       - ./:/app:rw
+      - ../keyring:/keyring
       - upload-data:/avenue/uploads
     ports:
       - "8080:8080"
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
+      keyring:
+        condition: service_healthy
     environment:
       # 1GiB
       # MAX_FILE_BYTE_SIZE: 1073741824
 
       # 20Gib
       MAX_FILE_BYTE_SIZE: 21474836480
+      KEYRING_URL: http://keyring:8080
+      KEYRING_PUBLIC_URL: http://localhost:8081
 
       ENABLE_FOLDER_SHARING: true
       ENABLE_FILE_SHARING: true
@@ -44,6 +52,27 @@ services:
 
       ALLOWED_ORIGINS:  ${ALLOWED_ORIGINS:-}
 
+  keyring:
+    # Build from source only if BACKEND_TARGET is set to a build target
+    build:
+      context: ../keyring
+      dockerfile: Dockerfile
+      target: "${BACKEND_TARGET:-live-dev}"  # defaults to live-dev
+    volumes:
+      - ../keyring:/app:rw
+    ports:
+      - "8081:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      ../keyring/.env
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/healthcheck"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
   postgres:
     image: postgres:16.3
     volumes:
@@ -54,6 +83,11 @@ services:
       POSTGRES_DB: avenue
     ports:
       - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d avenue"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
 
 volumes:
   upload-data:

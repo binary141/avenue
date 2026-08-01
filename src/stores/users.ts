@@ -60,6 +60,25 @@ export const useUsersStore = defineStore('users', () => {
         return response;
     }
 
+    async function getOAuthProviders() {
+        const response = await api({
+            url: "auth/providers",
+            method: "GET",
+        });
+
+        return response;
+    }
+
+    async function exchangeOAuthCode(code: string) {
+        const response = await api({
+            url: "auth/exchange",
+            method: "POST",
+            json: { code },
+        });
+
+        return response;
+    }
+
     async function logOut() {
         const response = await api({
             url: "v1/logout",
@@ -145,6 +164,8 @@ export const useUsersStore = defineStore('users', () => {
         logIn,
         resetSession,
         logInAPI,
+        getOAuthProviders,
+        exchangeOAuthCode,
         logOut,
         signUpAPI,
         signUp,

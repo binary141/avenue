@@ -134,6 +134,10 @@ type V1LoginMetaResponse struct {
 	RegistrationEnabled string `json:"registration_enabled"`
 }
 
+type V1OAuthProvidersResponse struct {
+	Providers []string `json:"providers"`
+}
+
 type V1DashboardResponse struct {
 	MaxFileSize          int64 `json:"maxFileSize"`
 	FileSharingEnabled   bool  `json:"fileSharingEnabled"`

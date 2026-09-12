@@ -264,6 +264,15 @@ func (s *Server) CompleteUpload(c *gin.Context) {
 	}
 	defer src.Close()
 
+	// Force the assembled blob to disk before we treat it as durable — chunk
+	// writes may still be sitting in the OS page cache, and a crash before
+	// they're flushed would silently lose bytes in a file we've already told
+	// the client is complete.
+	if err := src.Sync(); err != nil {
+		respond(c, http.StatusInternalServerError, "could not sync uploaded blob", err)
+		return
+	}
+
 	sniff := make([]byte, 512)
 	n, err := io.ReadAtLeast(src, sniff, 1)
 	if err != nil && err != io.ErrUnexpectedEOF {

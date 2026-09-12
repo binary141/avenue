@@ -3,6 +3,7 @@ package db
 import (
 	"strconv"
 
+	"avenue/backend/logger"
 	"avenue/backend/sdk"
 
 	"golang.org/x/crypto/bcrypt"
@@ -90,6 +91,7 @@ func IsUniqueEmail(email string) bool {
 	var count int
 	err := DB.QueryRow(`SELECT COUNT(*) FROM users WHERE email=$1 AND deleted_at IS NULL`, email).Scan(&count)
 	if err != nil {
+		logger.Errorf("check email uniqueness: %v", err)
 		return false
 	}
 	return count == 0

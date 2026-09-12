@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bytes"
+	"database/sql"
 	"embed"
 	"errors"
 	"fmt"
@@ -50,6 +51,9 @@ func (s *Server) ForgotPassword(c *gin.Context) {
 
 	user, err := db.GetUserByEmail(req.Email)
 	if err != nil {
+		if !errors.Is(err, sql.ErrNoRows) {
+			logger.Errorf("forgot password lookup: %v", err)
+		}
 		// Return success regardless so we don't leak which emails are registered.
 		c.Status(http.StatusNoContent)
 		return

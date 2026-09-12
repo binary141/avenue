@@ -442,6 +442,7 @@ func (s *Server) GetFile(c *gin.Context) {
 
 	// ----- Stream file to client -----
 	if _, err := io.Copy(c.Writer, fileData); err != nil {
+		logger.Errorf("stream file to client: %v", err)
 		c.Status(http.StatusInternalServerError)
 		return
 	}

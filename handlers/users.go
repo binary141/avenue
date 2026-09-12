@@ -373,7 +373,11 @@ func (s *Server) UpdateProfile(c *gin.Context) {
 
 	var hasOtherAdmins bool
 	if req.IsAdmin != nil && u.IsAdmin {
-		hasOtherAdmins, _ = db.HasOtherAdmins(updatingUser)
+		var err error
+		hasOtherAdmins, err = db.HasOtherAdmins(updatingUser)
+		if err != nil {
+			logger.Errorf("check for other admins: %v", err)
+		}
 	}
 
 	if err := validateProfileUpdate(userID, u.IsAdmin, req, emailConflict, hasOtherAdmins); err != nil {

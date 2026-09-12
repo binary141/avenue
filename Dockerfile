@@ -12,7 +12,7 @@ FROM builder AS image
 
 RUN CGO_ENABLED=0 GOOS=linux go build -tags prod -o /app/api ./
 
-FROM alpine:latest as final
+FROM alpine:latest AS final
 
 WORKDIR /app
 COPY --from=image /app/api /app/api

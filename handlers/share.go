@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"avenue/backend/db"
+	"avenue/backend/logger"
 	"avenue/backend/sdk"
 	"avenue/backend/shared"
 
@@ -191,6 +192,7 @@ func (s *Server) DownloadSharedFile(c *gin.Context) {
 	c.Writer.Flush()
 
 	if _, err := io.Copy(c.Writer, fileData); err != nil {
+		logger.Errorf("stream shared file to client: %v", err)
 		c.Status(http.StatusInternalServerError)
 		return
 	}

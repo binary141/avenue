@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"avenue/backend/db"
+	"avenue/backend/logger"
 	"avenue/backend/sdk"
 	"avenue/backend/shared"
 
@@ -444,12 +445,17 @@ func uploadLimitForLink(link sdk.ShareFolderLink) int64 {
 	limit := effectiveMaxFileSize(link.MaxFileSize)
 
 	owner, err := db.GetUserByIDStr(fmt.Sprint(link.CreatedBy))
-	if err != nil || owner.Quota == 0 {
+	if err != nil {
+		logger.Errorf("get share link owner: %v", err)
+		return limit
+	}
+	if owner.Quota == 0 {
 		return limit
 	}
 
 	used, err := db.GetUserUsage(link.CreatedBy)
 	if err != nil {
+		logger.Errorf("get share link owner usage: %v", err)
 		return limit
 	}
 

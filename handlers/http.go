@@ -89,6 +89,7 @@ func (s *Server) ServeUI(uiFS embed.FS) {
 	s.router.NoRoute(func(c *gin.Context) {
 		data, err := fs.ReadFile(distFS, "index.html")
 		if err != nil {
+			logger.Errorf("read embedded index.html: %v", err)
 			c.String(http.StatusInternalServerError, "index.html not found")
 			return
 		}

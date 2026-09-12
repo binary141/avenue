@@ -48,5 +48,7 @@ func main() {
 	}
 
 	// Start the server
-	_ = server.Run(":8080")
+	if err := server.Run(":8080"); err != nil {
+		logger.Errorf("server exited: %v", err)
+	}
 }

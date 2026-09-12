@@ -56,7 +56,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue';
+import { onMounted, onUnmounted, ref, watch } from 'vue';
 import logo from '@/assets/avenue-logo.png'
 import AppButton from './views/components/AppButton.vue';
 import SpinnerView from './views/components/SpinnerView.vue';
@@ -80,8 +80,27 @@ watch(
   }
 )
 
+// Sessions use a rolling window that's only renewed by authenticated
+// requests (see SessionRollingWindow in handlers/http.go). Sitting idle on
+// a page with no navigation triggers no requests, so without this the
+// session silently expires underneath the user. Heartbeat well inside the
+// window so a brief network hiccup doesn't cost us the renewal.
+const HEARTBEAT_INTERVAL_MS = 5 * 60 * 1000;
+let heartbeatHandle: ReturnType<typeof setInterval> | undefined;
+
 onMounted(() => {
   getUserAndLogin();
+  heartbeatHandle = setInterval(() => {
+    if (isLoggedIn.value) {
+      getUserAndLogin();
+    }
+  }, HEARTBEAT_INTERVAL_MS);
+})
+
+onUnmounted(() => {
+  if (heartbeatHandle !== undefined) {
+    clearInterval(heartbeatHandle);
+  }
 })
 
 function home() {

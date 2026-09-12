@@ -39,6 +39,7 @@ func main() {
 
 	sweeper.Start(server.FS())
 	sweeper.StartSessionSweeper()
+	sweeper.StartUploadSessionSweeper(server.FS())
 
 	server.SetupRoutes()
 

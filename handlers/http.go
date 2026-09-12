@@ -301,6 +301,11 @@ func (s *Server) SetupRoutes() {
 
 	// -- file routes -- //
 	securedRouterV1.POST("/file", s.Upload)
+	securedRouterV1.POST("/upload", s.InitUpload)
+	securedRouterV1.GET("/upload/:uploadID", s.UploadStatus)
+	securedRouterV1.PUT("/upload/:uploadID/chunk", s.UploadChunk)
+	securedRouterV1.POST("/upload/:uploadID/complete", s.CompleteUpload)
+	securedRouterV1.DELETE("/upload/:uploadID", s.CancelUpload)
 	secureFileShare := securedRouterV1.Group("")
 	secureFileShare.Use(s.fileSharingRequired)
 	secureFileShare.POST("/file/:fileID/share", s.CreateShareLink)

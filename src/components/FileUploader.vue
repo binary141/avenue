@@ -140,7 +140,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watchEffect } from 'vue'
-import { GLOBAL_HEADERS, type JsonValue } from '@/utils/api'
+import api, { GLOBAL_HEADERS, type JsonValue } from '@/utils/api'
 import type { FolderItem } from '@/types/folder'
 
 interface Props {
@@ -169,6 +169,12 @@ const emit = defineEmits<{
 }>()
 
 const CONCURRENT_UPLOADS = 5
+// Large files are sent in fixed-size chunks so a dropped connection loses at
+// most one chunk instead of the whole transfer, and so a resumed upload
+// (after a page reload) only has to re-send what the server never got.
+const CHUNK_SIZE = 16 * 1024 * 1024
+const MAX_CHUNK_RETRIES = 5
+const RESUME_STORAGE_PREFIX = 'avenue:upload:'
 
 const isDragging = ref(false)
 const fileInput = ref<HTMLInputElement | null>(null)
@@ -266,51 +272,154 @@ const removeFile = (index: number) => {
   selectedFiles.value.splice(index, 1)
 }
 
-function uploadFileXHR(file: File, formData: FormData, key: string, onProgress: (pct: number, speedStr: string) => void): Promise<{ ok: boolean; status: number; body: JsonValue; aborted: boolean }> {
+// Resume state survives a page reload: keyed by fileKey() (name+size+mtime)
+// so re-selecting the same file after a crash/reload picks the upload back
+// up instead of restarting it. The File object itself can't be persisted —
+// the browser only gives us a fresh one when the user re-selects it — so
+// this is only consulted once handleFiles() sees a matching file again.
+interface ResumeInfo { uploadId: string }
+
+function loadResumeInfo(key: string): ResumeInfo | null {
+  try {
+    const raw = localStorage.getItem(RESUME_STORAGE_PREFIX + key)
+    return raw ? JSON.parse(raw) : null
+  } catch {
+    return null
+  }
+}
+
+function saveResumeInfo(key: string, info: ResumeInfo): void {
+  try {
+    localStorage.setItem(RESUME_STORAGE_PREFIX + key, JSON.stringify(info))
+  } catch { /* localStorage unavailable (private mode, quota) — resume just won't survive a reload */ }
+}
+
+function clearResumeInfo(key: string): void {
+  try {
+    localStorage.removeItem(RESUME_STORAGE_PREFIX + key)
+  } catch { /* ignore */ }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+// Sends one chunk via XHR (rather than fetch) so upload progress within a
+// large chunk still drives the progress bar, not just whole-chunk jumps.
+function sendChunkXHR(uploadId: string, file: File, start: number, end: number, key: string, onProgress: (loaded: number) => void): Promise<{ status: number; body: JsonValue; aborted: boolean }> {
   return new Promise((resolve) => {
     const xhr = new XMLHttpRequest()
     activeXHRs.set(key, xhr)
-    const startTime = Date.now()
 
     xhr.upload.onprogress = (e) => {
       if (!e.lengthComputable) return
-      const pct = Math.round((e.loaded / e.total) * 100)
-      const elapsed = (Date.now() - startTime) / 1000
-      const speedStr = elapsed > 0
-        ? (e.loaded / elapsed / (1024 * 1024)).toFixed(1) + ' MB/s'
-        : ''
-      onProgress(pct, speedStr)
+      onProgress(e.loaded)
     }
 
     xhr.onload = () => {
       activeXHRs.delete(key)
       let body: JsonValue = null
       try { body = JSON.parse(xhr.responseText) } catch { /* ignore */ }
-      resolve({ ok: xhr.status >= 200 && xhr.status < 300, status: xhr.status, body, aborted: false })
+      resolve({ status: xhr.status, body, aborted: false })
     }
-
     xhr.onerror = () => {
       activeXHRs.delete(key)
-      resolve({ ok: false, status: 0, body: null, aborted: false })
+      resolve({ status: 0, body: null, aborted: false })
     }
     xhr.onabort = () => {
       activeXHRs.delete(key)
-      resolve({ ok: false, status: 0, body: null, aborted: true })
+      resolve({ status: 0, body: null, aborted: true })
     }
 
     const apiRoot = import.meta.env.VITE_APP_API_URL || ''
-    xhr.open('POST', `${apiRoot}v1/file`)
-    // Session auth is an HttpOnly cookie now, not a GLOBAL_HEADERS
-    // Authorization header, so it must be opted into explicitly for
-    // cross-origin requests (e.g. the Vite dev server on a different port).
+    xhr.open('PUT', `${apiRoot}v1/upload/${uploadId}/chunk`)
     xhr.withCredentials = true
-
-    for (const [key, value] of Object.entries(GLOBAL_HEADERS)) {
-      if (value !== undefined) xhr.setRequestHeader(key, value)
+    xhr.setRequestHeader('Content-Range', `bytes ${start}-${end - 1}/${file.size}`)
+    for (const [header, value] of Object.entries(GLOBAL_HEADERS)) {
+      if (value !== undefined) xhr.setRequestHeader(header, value)
     }
-
-    xhr.send(formData)
+    xhr.send(file.slice(start, end))
   })
+}
+
+// Uploads one file end to end: resumes an existing session if the resume
+// store has one for this file, otherwise starts a new one, then sends
+// chunks until the server has all of it, then finalizes. Returns the
+// created file record, or an error/aborted flag.
+async function uploadOneFile(file: File, key: string, onProgress: (pct: number, speedStr: string) => void): Promise<{ ok: boolean; aborted: boolean; body?: JsonValue; error?: string }> {
+  let uploadId: string
+  let bytesReceived: number
+
+  const resumeInfo = loadResumeInfo(key)
+  if (resumeInfo) {
+    const status = await api({ url: `v1/upload/${resumeInfo.uploadId}`, method: 'GET' })
+    if (status.ok) {
+      uploadId = resumeInfo.uploadId
+      bytesReceived = status.body.bytesReceived
+    } else {
+      clearResumeInfo(key)
+      const init = await api({ url: 'v1/upload', method: 'POST', json: { name: file.name, size: file.size, parent: props.parent || '' } })
+      if (!init.ok) return { ok: false, aborted: false, error: init.body?.error || init.body?.message || 'Could not start upload' }
+      uploadId = init.body.uploadId
+      bytesReceived = 0
+      saveResumeInfo(key, { uploadId })
+    }
+  } else {
+    const init = await api({ url: 'v1/upload', method: 'POST', json: { name: file.name, size: file.size, parent: props.parent || '' } })
+    if (!init.ok) return { ok: false, aborted: false, error: init.body?.error || init.body?.message || 'Could not start upload' }
+    uploadId = init.body.uploadId
+    bytesReceived = 0
+    saveResumeInfo(key, { uploadId })
+  }
+
+  const sessionStartBytes = bytesReceived
+  const startTime = Date.now()
+
+  while (bytesReceived < file.size) {
+    if (cancelRequested) return { ok: false, aborted: true }
+
+    const chunkStart = bytesReceived
+    const chunkEnd = Math.min(chunkStart + CHUNK_SIZE, file.size)
+
+    let attempt = 0
+    let advanced = false
+    while (!advanced) {
+      const result = await sendChunkXHR(uploadId, file, chunkStart, chunkEnd, key, (loaded) => {
+        const pct = Math.round(((chunkStart + loaded) / file.size) * 100)
+        const elapsed = (Date.now() - startTime) / 1000
+        const speedStr = elapsed > 0
+          ? ((chunkStart + loaded - sessionStartBytes) / elapsed / (1024 * 1024)).toFixed(1) + ' MB/s'
+          : ''
+        onProgress(pct, speedStr)
+      })
+
+      if (result.aborted || cancelRequested) return { ok: false, aborted: true }
+
+      if (result.status === 200) {
+        bytesReceived = result.body.bytesReceived
+        advanced = true
+      } else if (result.status === 409 && result.body) {
+        // Server's offset drifted from ours (e.g. a retried chunk already
+        // landed) — resync to what it actually has and re-slice from there.
+        bytesReceived = result.body.bytesReceived
+        advanced = true
+      } else {
+        attempt += 1
+        if (attempt > MAX_CHUNK_RETRIES) {
+          return { ok: false, aborted: false, error: result.body?.error || result.body?.message || 'Upload failed — you can retry without losing progress' }
+        }
+        await sleep(Math.min(500 * 2 ** attempt, 8000))
+      }
+    }
+  }
+
+  const complete = await api({ url: `v1/upload/${uploadId}/complete`, method: 'POST' })
+  if (!complete.ok) {
+    return { ok: false, aborted: false, error: complete.body?.error || complete.body?.message || 'Could not finalize upload' }
+  }
+
+  clearResumeInfo(key)
+  return { ok: true, aborted: false, body: complete.body }
 }
 
 const cancelUpload = () => {
@@ -353,13 +462,7 @@ const uploadFiles = async () => {
       const key = fileKey(file)
       fileStatus.value.set(key, { progress: 0, speed: '' })
 
-      const formData = new FormData()
-      formData.append('file', file)
-      if (props.parent) {
-        formData.append('parent', props.parent)
-      }
-
-      const response = await uploadFileXHR(file, formData, key, (pct, speedStr) => {
+      const response = await uploadOneFile(file, key, (pct, speedStr) => {
         fileStatus.value.set(key, { progress: pct, speed: speedStr })
       })
 
@@ -370,7 +473,7 @@ const uploadFiles = async () => {
       }
 
       if (!response.ok) {
-        uploadError = response.body?.error || response.body?.message || 'Upload failed'
+        uploadError = response.error || 'Upload failed'
         emit('error', `Failed to upload "${file.name}": ${uploadError}`)
         return
       }

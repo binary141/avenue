@@ -231,6 +231,10 @@ func (s *Server) UploadChunk(c *gin.Context) {
 			respond(c, http.StatusNotFound, "upload session not found", nil)
 			return
 		}
+		if errors.Is(err, db.ErrOverlappingChunk) {
+			respond(c, http.StatusBadRequest, "chunk overlaps a different previously received range", nil)
+			return
+		}
 		respond(c, http.StatusInternalServerError, "could not record chunk progress", err)
 		return
 	}

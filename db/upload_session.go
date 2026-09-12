@@ -2,10 +2,17 @@ package db
 
 import (
 	"database/sql"
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
 )
+
+// ErrOverlappingChunk is returned by RecordUploadChunk when a chunk's byte
+// range partially overlaps a different range already recorded for the same
+// session — a sign of a misbehaving client, since honest retries always
+// resend the exact same [start, end) they sent before.
+var ErrOverlappingChunk = errors.New("chunk range overlaps a previously received range")
 
 // UploadSession tracks an in-progress chunked upload. Its id doubles as the
 // eventual file's UUID once the upload completes, so the blob can be written
@@ -71,6 +78,15 @@ type ChunkRange struct {
 // succeeded) is a no-op rather than double-counted — which is what lets
 // several chunks for the same session be in flight, and retried,
 // concurrently instead of requiring strict in-order arrival.
+//
+// A range that partially overlaps a different range already recorded (never
+// sent by this project's own clients, which always chunk on fixed
+// boundaries, but not otherwise ruled out by the request itself) is rejected
+// with ErrOverlappingChunk instead of being written — without this check,
+// two overlapping-but-distinct ranges could sum to total_size while a real
+// gap remains in the file, letting CompleteUpload finalize on missing bytes.
+// The session row is locked for the duration of the check-then-insert so
+// concurrent chunk requests for the same session can't race past it.
 func RecordUploadChunk(id string, userID int64, start, end int64) (int64, error) {
 	tx, err := DB.Beginx()
 	if err != nil {
@@ -78,26 +94,34 @@ func RecordUploadChunk(id string, userID int64, start, end int64) (int64, error)
 	}
 	defer tx.Rollback()
 
-	res, err := tx.Exec(`
-		INSERT INTO upload_session_chunks (session_id, start_offset, end_offset)
-		SELECT $1, $2, $3 WHERE EXISTS (SELECT 1 FROM upload_sessions WHERE id=$1 AND user_id=$4)
-		ON CONFLICT (session_id, start_offset) DO NOTHING
-	`, id, start, end, userID)
-	if err != nil {
+	var exists bool
+	if err := tx.Get(&exists, `SELECT EXISTS(SELECT 1 FROM upload_sessions WHERE id=$1 AND user_id=$2 FOR UPDATE)`, id, userID); err != nil {
 		return 0, err
 	}
-	if n, _ := res.RowsAffected(); n == 0 {
-		// Either this exact chunk was already recorded, or the session
-		// doesn't exist / doesn't belong to this user — tell those apart so
-		// the latter still surfaces as sql.ErrNoRows like the rest of this
-		// package's lookups.
-		var exists bool
-		if err := tx.Get(&exists, `SELECT EXISTS(SELECT 1 FROM upload_sessions WHERE id=$1 AND user_id=$2)`, id, userID); err != nil {
-			return 0, err
-		}
-		if !exists {
-			return 0, sql.ErrNoRows
-		}
+	if !exists {
+		return 0, sql.ErrNoRows
+	}
+
+	var overlaps bool
+	if err := tx.Get(&overlaps, `
+		SELECT EXISTS(
+			SELECT 1 FROM upload_session_chunks
+			WHERE session_id=$1 AND start_offset < $3 AND end_offset > $2
+			AND NOT (start_offset=$2 AND end_offset=$3)
+		)
+	`, id, start, end); err != nil {
+		return 0, err
+	}
+	if overlaps {
+		return 0, ErrOverlappingChunk
+	}
+
+	if _, err := tx.Exec(`
+		INSERT INTO upload_session_chunks (session_id, start_offset, end_offset)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (session_id, start_offset) DO NOTHING
+	`, id, start, end); err != nil {
+		return 0, err
 	}
 
 	var total int64

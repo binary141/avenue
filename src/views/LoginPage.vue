@@ -106,7 +106,7 @@ async function handleLogin() {
     const saferedirect = redirect && !redirect.startsWith('/logout') ? redirect : undefined;
     router.replace(saferedirect || { name: "home" });
   } else {
-    error.value = response.body.error;
+    error.value = response.body?.error || "Unable to log in. Please try again.";
   }
 }
 </script>

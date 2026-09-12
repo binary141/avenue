@@ -204,3 +204,20 @@ type MessageResponse struct {
 	Message string `json:"message"`
 	Error   string `json:"error"`
 }
+
+// InitUploadRequest starts a chunked upload session (POST /v1/upload).
+// Parent is the destination folder's UUID, or "" for the root folder.
+type InitUploadRequest struct {
+	Name   string `json:"name"`
+	Size   int64  `json:"size"`
+	Parent string `json:"parent,omitempty"`
+}
+
+// UploadSessionStatus reports how many bytes of a chunked upload session the
+// server has received so far. It's returned by InitUpload, GetUploadStatus,
+// and UploadChunk (including a 409 response, when a chunk's offset didn't
+// match — see UploadChunk).
+type UploadSessionStatus struct {
+	UploadID      string `json:"uploadId"`
+	BytesReceived int64  `json:"bytesReceived"`
+}

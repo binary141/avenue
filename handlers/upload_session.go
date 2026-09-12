@@ -205,20 +205,18 @@ func (s *Server) UploadChunk(c *gin.Context) {
 	}
 
 	body := http.MaxBytesReader(c.Writer, c.Request.Body, chunkLen)
-	buf := make([]byte, chunkLen)
-	if _, err := io.ReadFull(body, buf); err != nil {
-		respond(c, http.StatusBadRequest, "could not read chunk body", err)
-		return
-	}
 
 	dst, err := s.fs.OpenFile(shared.BlobPath(session.ID), os.O_WRONLY, 0o644)
 	if err != nil {
 		respond(c, http.StatusInternalServerError, "could not open upload destination", err)
 		return
 	}
-	if _, err := dst.WriteAt(buf, start); err != nil {
+	if written, err := io.Copy(io.NewOffsetWriter(dst, start), body); err != nil || written != chunkLen {
 		_ = dst.Close()
-		respond(c, http.StatusInternalServerError, "could not write chunk", err)
+		if err == nil {
+			err = io.ErrUnexpectedEOF
+		}
+		respond(c, http.StatusBadRequest, "could not read chunk body", err)
 		return
 	}
 	if err := dst.Close(); err != nil {

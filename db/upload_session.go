@@ -1,6 +1,7 @@
 package db
 
 import (
+	"database/sql"
 	"time"
 
 	"github.com/google/uuid"
@@ -56,21 +57,85 @@ func GetUploadSession(id string, userID int64) (*UploadSession, error) {
 	return &s, nil
 }
 
-// AdvanceUploadSession records that a chunk landing at [prevBytesReceived,
-// prevBytesReceived+chunkLen) was written, moving bytes_received forward by
-// chunkLen. It's conditioned on the row still being at prevBytesReceived so
-// two racing requests for the same session can't both apply their chunk.
-func AdvanceUploadSession(id string, userID int64, prevBytesReceived, chunkLen int64) (int64, error) {
-	var newBytesReceived int64
-	err := DB.QueryRow(`
-		UPDATE upload_sessions SET bytes_received = bytes_received + $3, updated_at = now()
-		WHERE id=$1 AND user_id=$2 AND bytes_received=$4
-		RETURNING bytes_received
-	`, id, userID, chunkLen, prevBytesReceived).Scan(&newBytesReceived)
+// ChunkRange is a byte range [Start, End) of a file that has already been
+// received for an in-progress upload session.
+type ChunkRange struct {
+	Start int64 `json:"start"`
+	End   int64 `json:"end"`
+}
+
+// RecordUploadChunk records that the byte range [start, end) has been
+// received for session id, and returns the total distinct bytes received
+// across the whole session so far. It's idempotent — a chunk resent at the
+// same offset (e.g. after a client-side retry timeout that actually
+// succeeded) is a no-op rather than double-counted — which is what lets
+// several chunks for the same session be in flight, and retried,
+// concurrently instead of requiring strict in-order arrival.
+func RecordUploadChunk(id string, userID int64, start, end int64) (int64, error) {
+	tx, err := DB.Beginx()
 	if err != nil {
 		return 0, err
 	}
-	return newBytesReceived, nil
+	defer tx.Rollback()
+
+	res, err := tx.Exec(`
+		INSERT INTO upload_session_chunks (session_id, start_offset, end_offset)
+		SELECT $1, $2, $3 WHERE EXISTS (SELECT 1 FROM upload_sessions WHERE id=$1 AND user_id=$4)
+		ON CONFLICT (session_id, start_offset) DO NOTHING
+	`, id, start, end, userID)
+	if err != nil {
+		return 0, err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		// Either this exact chunk was already recorded, or the session
+		// doesn't exist / doesn't belong to this user — tell those apart so
+		// the latter still surfaces as sql.ErrNoRows like the rest of this
+		// package's lookups.
+		var exists bool
+		if err := tx.Get(&exists, `SELECT EXISTS(SELECT 1 FROM upload_sessions WHERE id=$1 AND user_id=$2)`, id, userID); err != nil {
+			return 0, err
+		}
+		if !exists {
+			return 0, sql.ErrNoRows
+		}
+	}
+
+	var total int64
+	if err := tx.Get(&total, `SELECT COALESCE(SUM(end_offset - start_offset), 0) FROM upload_session_chunks WHERE session_id=$1`, id); err != nil {
+		return 0, err
+	}
+	if _, err := tx.Exec(`UPDATE upload_sessions SET bytes_received=$2, updated_at=now() WHERE id=$1`, id, total); err != nil {
+		return 0, err
+	}
+
+	return total, tx.Commit()
+}
+
+// ListUploadSessionChunks returns every byte range accepted so far for
+// session id, ordered by offset, so a resuming client can skip chunks it
+// already sent instead of just resuming from a contiguous prefix.
+func ListUploadSessionChunks(id string, userID int64) ([]ChunkRange, error) {
+	rows, err := DB.Query(`
+		SELECT c.start_offset, c.end_offset
+		FROM upload_session_chunks c
+		JOIN upload_sessions s ON s.id = c.session_id
+		WHERE c.session_id=$1 AND s.user_id=$2
+		ORDER BY c.start_offset
+	`, id, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	ranges := []ChunkRange{}
+	for rows.Next() {
+		var r ChunkRange
+		if err := rows.Scan(&r.Start, &r.End); err != nil {
+			return nil, err
+		}
+		ranges = append(ranges, r)
+	}
+	return ranges, rows.Err()
 }
 
 // DeleteUploadSession removes an upload session row (its blob is the

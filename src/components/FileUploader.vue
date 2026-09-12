@@ -171,6 +171,7 @@ const emit = defineEmits<{
 }>()
 
 const CONCURRENT_UPLOADS = 5
+const CHUNKS_IN_FLIGHT_PER_FILE = 3
 const MAX_CHUNK_RETRIES = 5
 const RESUME_STORAGE_PREFIX = 'avenue:upload:'
 
@@ -342,77 +343,119 @@ function sendChunkXHR(uploadId: string, file: File, start: number, end: number, 
 
 // Uploads one file end to end: resumes an existing session if the resume
 // store has one for this file, otherwise starts a new one, then sends
-// chunks until the server has all of it, then finalizes. Returns the
-// created file record, or an error/aborted flag.
+// chunks — a few at a time in flight — until the server has all of it, then
+// finalizes. Returns the created file record, or an error/aborted flag.
 async function uploadOneFile(file: File, key: string, onProgress: (pct: number, speedStr: string) => void): Promise<{ ok: boolean; aborted: boolean; body?: JsonValue; error?: string }> {
   let uploadId: string
-  let bytesReceived: number
+  // Chunk indices (0-based, each props.chunkSize bytes except the last)
+  // the server has already told us it has, so a resumed upload only
+  // re-sends what's actually missing instead of just a contiguous prefix.
+  let receivedChunkIndexes = new Set<number>()
 
   const resumeInfo = loadResumeInfo(key)
   if (resumeInfo) {
     const status = await api({ url: `v1/upload/${resumeInfo.uploadId}`, method: 'GET' })
     if (status.ok) {
       uploadId = resumeInfo.uploadId
-      bytesReceived = status.body.bytesReceived
+      receivedChunkIndexes = chunkIndexesFromRanges(status.body.receivedRanges || [])
     } else {
       clearResumeInfo(key)
       const init = await api({ url: 'v1/upload', method: 'POST', json: { name: file.name, size: file.size, parent: props.parent || '' } })
       if (!init.ok) return { ok: false, aborted: false, error: init.body?.error || init.body?.message || 'Could not start upload' }
       uploadId = init.body.uploadId
-      bytesReceived = 0
       saveResumeInfo(key, { uploadId })
     }
   } else {
     const init = await api({ url: 'v1/upload', method: 'POST', json: { name: file.name, size: file.size, parent: props.parent || '' } })
     if (!init.ok) return { ok: false, aborted: false, error: init.body?.error || init.body?.message || 'Could not start upload' }
     uploadId = init.body.uploadId
-    bytesReceived = 0
     saveResumeInfo(key, { uploadId })
   }
 
-  const sessionStartBytes = bytesReceived
+  const chunkCount = Math.ceil(file.size / props.chunkSize)
+  const chunkBounds = (idx: number): [number, number] => [idx * props.chunkSize, Math.min((idx + 1) * props.chunkSize, file.size)]
+
+  // Bytes confirmed by the server (whole chunks) plus bytes reported
+  // in-flight by each chunk's own XHR progress event, so the progress bar
+  // and speed readout reflect every chunk currently uploading, not just one.
+  let confirmedBytes = 0
+  for (const idx of receivedChunkIndexes) {
+    const [start, end] = chunkBounds(idx)
+    confirmedBytes += end - start
+  }
+  const inFlightBytes = new Map<number, number>()
+  const sessionStartBytes = confirmedBytes
   const startTime = Date.now()
 
-  while (bytesReceived < file.size) {
-    if (cancelRequested) return { ok: false, aborted: true }
+  const reportProgress = () => {
+    let loaded = confirmedBytes
+    for (const bytes of inFlightBytes.values()) loaded += bytes
+    const pct = Math.round((loaded / file.size) * 100)
+    const elapsed = (Date.now() - startTime) / 1000
+    const speedStr = elapsed > 0
+      ? ((loaded - sessionStartBytes) / elapsed / (1024 * 1024)).toFixed(1) + ' MB/s'
+      : ''
+    onProgress(pct, speedStr)
+  }
 
-    // Large files are sent in fixed-size chunks so a dropped connection loses at
-    // most one chunk instead of the whole transfer, and so a resumed upload
-    // (after a page reload) only has to re-send what the server never got.
-    const chunkStart = bytesReceived
-    const chunkEnd = Math.min(chunkStart + props.chunkSize, file.size)
+  let nextIdx = 0
+  const claimNextChunk = (): number | null => {
+    while (nextIdx < chunkCount && receivedChunkIndexes.has(nextIdx)) nextIdx += 1
+    if (nextIdx >= chunkCount) return null
+    return nextIdx++
+  }
 
-    let attempt = 0
-    let advanced = false
-    while (!advanced) {
-      const result = await sendChunkXHR(uploadId, file, chunkStart, chunkEnd, key, (loaded) => {
-        const pct = Math.round(((chunkStart + loaded) / file.size) * 100)
-        const elapsed = (Date.now() - startTime) / 1000
-        const speedStr = elapsed > 0
-          ? ((chunkStart + loaded - sessionStartBytes) / elapsed / (1024 * 1024)).toFixed(1) + ' MB/s'
-          : ''
-        onProgress(pct, speedStr)
-      })
+  let failure: string | null = null
+  let aborted = false
 
-      if (result.aborted || cancelRequested) return { ok: false, aborted: true }
+  // Large files are sent in fixed-size chunks so a dropped connection loses
+  // at most a few chunks instead of the whole transfer, and so a resumed
+  // upload only has to re-send what the server never got. A handful of
+  // chunks per file are kept in flight at once (workers below) instead of
+  // one at a time, so one file's upload isn't bottlenecked on round-trip
+  // latency per chunk.
+  const chunkWorker = async () => {
+    while (!failure && !aborted) {
+      if (cancelRequested) { aborted = true; return }
+      const idx = claimNextChunk()
+      if (idx === null) return
 
-      if (result.status === 200) {
-        bytesReceived = result.body.bytesReceived
-        advanced = true
-      } else if (result.status === 409 && result.body) {
-        // Server's offset drifted from ours (e.g. a retried chunk already
-        // landed) — resync to what it actually has and re-slice from there.
-        bytesReceived = result.body.bytesReceived
-        advanced = true
-      } else {
-        attempt += 1
-        if (attempt > MAX_CHUNK_RETRIES) {
-          return { ok: false, aborted: false, error: result.body?.error || result.body?.message || 'Upload failed — you can retry without losing progress' }
+      const [chunkStart, chunkEnd] = chunkBounds(idx)
+      const chunkKey = `${key}:${idx}`
+
+      let attempt = 0
+      let done = false
+      while (!done) {
+        const result = await sendChunkXHR(uploadId, file, chunkStart, chunkEnd, chunkKey, (loaded) => {
+          inFlightBytes.set(idx, loaded)
+          reportProgress()
+        })
+
+        if (result.aborted || cancelRequested) { aborted = true; return }
+
+        if (result.status === 200) {
+          inFlightBytes.delete(idx)
+          confirmedBytes += chunkEnd - chunkStart
+          reportProgress()
+          done = true
+        } else {
+          inFlightBytes.delete(idx)
+          attempt += 1
+          if (attempt > MAX_CHUNK_RETRIES) {
+            failure = result.body?.error || result.body?.message || 'Upload failed — you can retry without losing progress'
+            return
+          }
+          await sleep(Math.min(500 * 2 ** attempt, 8000))
         }
-        await sleep(Math.min(500 * 2 ** attempt, 8000))
       }
     }
   }
+
+  const workerCount = Math.min(CHUNKS_IN_FLIGHT_PER_FILE, chunkCount)
+  await Promise.all(Array.from({ length: workerCount }, () => chunkWorker()))
+
+  if (aborted || cancelRequested) return { ok: false, aborted: true }
+  if (failure) return { ok: false, aborted: false, error: failure }
 
   const complete = await api({ url: `v1/upload/${uploadId}/complete`, method: 'POST' })
   if (!complete.ok) {
@@ -421,6 +464,20 @@ async function uploadOneFile(file: File, key: string, onProgress: (pct: number, 
 
   clearResumeInfo(key)
   return { ok: true, aborted: false, body: complete.body }
+}
+
+// Converts the server's received byte ranges into chunk indexes, aligned to
+// this upload's chunkSize. A range that doesn't start on a chunk boundary
+// (e.g. chunkSize changed since the session started) is simply not counted
+// as received — the chunk gets re-sent, which is always safe since chunk
+// writes are idempotent.
+function chunkIndexesFromRanges(ranges: { start: number; end: number }[]): Set<number> {
+  const indexes = new Set<number>()
+  for (const { start } of ranges) {
+    if (start % props.chunkSize !== 0) continue
+    indexes.add(start / props.chunkSize)
+  }
+  return indexes
 }
 
 const cancelUpload = () => {

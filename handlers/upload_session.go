@@ -29,8 +29,9 @@ type initUploadRequest struct {
 }
 
 type initUploadResponse struct {
-	UploadID      string `json:"uploadId"`
-	BytesReceived int64  `json:"bytesReceived"`
+	UploadID       string          `json:"uploadId"`
+	BytesReceived  int64           `json:"bytesReceived"`
+	ReceivedRanges []db.ChunkRange `json:"receivedRanges,omitempty"`
 }
 
 // parseContentRange parses a "bytes start-end/total" Content-Range header
@@ -135,11 +136,16 @@ func (s *Server) InitUpload(c *gin.Context) {
 // already received, so a client that lost its in-memory state (e.g. a page
 // reload) can resume from the right offset instead of restarting.
 func (s *Server) UploadStatus(c *gin.Context) {
-	_, session, ok := s.loadUploadSession(c)
+	userIDInt, session, ok := s.loadUploadSession(c)
 	if !ok {
 		return
 	}
-	c.JSON(http.StatusOK, initUploadResponse{UploadID: session.ID, BytesReceived: session.BytesReceived})
+	ranges, err := db.ListUploadSessionChunks(session.ID, userIDInt)
+	if err != nil {
+		respond(c, http.StatusInternalServerError, "could not load upload progress", err)
+		return
+	}
+	c.JSON(http.StatusOK, initUploadResponse{UploadID: session.ID, BytesReceived: session.BytesReceived, ReceivedRanges: ranges})
 }
 
 // loadUploadSession fetches the upload session named by the :uploadID param,
@@ -172,11 +178,11 @@ func (s *Server) loadUploadSession(c *gin.Context) (int64, *db.UploadSession, bo
 
 // UploadChunk appends one chunk to an in-progress upload. The chunk's byte
 // range is given by the Content-Range header (bytes start-end/total, as sent
-// by the client) and must start exactly where the server's bytes_received
-// left off — anything else means the client and server have drifted (e.g. a
-// duplicate retry, or a stale resume after another tab advanced the same
-// session) and is rejected with the server's real offset so the client can
-// resync instead of corrupting the blob.
+// by the client). Chunks may arrive out of order and several may be in
+// flight at once (the client sends a handful of chunks per file in
+// parallel) — the destination file is written with WriteAt at the chunk's
+// own offset, and db.RecordUploadChunk idempotently tracks which byte
+// ranges have landed so a retried chunk can't be double-counted.
 func (s *Server) UploadChunk(c *gin.Context) {
 	userIDInt, session, ok := s.loadUploadSession(c)
 	if !ok {
@@ -190,10 +196,6 @@ func (s *Server) UploadChunk(c *gin.Context) {
 	}
 	if total != session.TotalSize {
 		respond(c, http.StatusBadRequest, "Content-Range total does not match upload size", nil)
-		return
-	}
-	if start != session.BytesReceived {
-		c.JSON(http.StatusConflict, initUploadResponse{UploadID: session.ID, BytesReceived: session.BytesReceived})
 		return
 	}
 	chunkLen := end - start + 1
@@ -223,17 +225,11 @@ func (s *Server) UploadChunk(c *gin.Context) {
 		logger.Errorf("close upload chunk dest: %v", err)
 	}
 
-	newBytesReceived, err := db.AdvanceUploadSession(session.ID, userIDInt, start, chunkLen)
+	newBytesReceived, err := db.RecordUploadChunk(session.ID, userIDInt, start, end+1)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			// Another request for this session (a racing retry) already
-			// advanced bytes_received past what we assumed; report where
-			// the session actually stands so the client can resync.
-			refreshed, gerr := db.GetUploadSession(session.ID, userIDInt)
-			if gerr == nil {
-				c.JSON(http.StatusConflict, initUploadResponse{UploadID: session.ID, BytesReceived: refreshed.BytesReceived})
-				return
-			}
+			respond(c, http.StatusNotFound, "upload session not found", nil)
+			return
 		}
 		respond(c, http.StatusInternalServerError, "could not record chunk progress", err)
 		return

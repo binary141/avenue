@@ -26,6 +26,7 @@ func (s *Server) DashboardInfo(c *gin.Context) {
 
 	c.JSON(http.StatusOK, sdk.V1DashboardResponse{
 		MaxFileSize:          maxFileSize,
+		UploadChunkSize:      shared.GetEnvInt64("UPLOAD_CHUNK_SIZE", shared.DEFAULTUPLOADCHUNKSIZE),
 		FileSharingEnabled:   shared.GetEnvBool("ENABLE_FILE_SHARING", false),
 		FolderSharingEnabled: shared.GetEnvBool("ENABLE_FOLDER_SHARING", false),
 	})

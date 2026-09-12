@@ -136,6 +136,7 @@ type V1LoginMetaResponse struct {
 
 type V1DashboardResponse struct {
 	MaxFileSize          int64 `json:"maxFileSize"`
+	UploadChunkSize      int64 `json:"uploadChunkSize"`
 	FileSharingEnabled   bool  `json:"fileSharingEnabled"`
 	FolderSharingEnabled bool  `json:"folderSharingEnabled"`
 }

@@ -12,11 +12,12 @@ import (
 type cookieStr string
 
 const (
-	SESSIONCOOKIENAME  cookieStr = "session_id"
-	USERCOOKIENAME     cookieStr = "user_id"
-	USERCOOKIEVALUE    cookieStr = "test"
-	ROOTFOLDERID                 = "c32af1cc-aba9-4878-a305-5006dc7a5b76"
-	DEFAULTMAXFILESIZE int64     = 209715200
+	SESSIONCOOKIENAME      cookieStr = "session_id"
+	USERCOOKIENAME         cookieStr = "user_id"
+	USERCOOKIEVALUE        cookieStr = "test"
+	ROOTFOLDERID                     = "c32af1cc-aba9-4878-a305-5006dc7a5b76"
+	DEFAULTMAXFILESIZE     int64     = 209715200
+	DEFAULTUPLOADCHUNKSIZE int64     = 16 * 1024 * 1024
 
 	DEFAULTPAGE      = 1
 	DEFAULTPAGELIMIT = 50

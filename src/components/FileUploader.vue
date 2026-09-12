@@ -146,6 +146,7 @@ import type { FolderItem } from '@/types/folder'
 interface Props {
   accept?: string
   maxSize?: number // in bytes
+  chunkSize?: number // in bytes
   multiple?: boolean
   disabled?: boolean
   parent?: string // folder ID for parent folder
@@ -154,6 +155,7 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), {
   accept: '*',
   maxSize: 10_000_000,
+  chunkSize: 16 * 1024 * 1024,
   multiple: false,
   disabled: false,
   parent: ''
@@ -169,10 +171,6 @@ const emit = defineEmits<{
 }>()
 
 const CONCURRENT_UPLOADS = 5
-// Large files are sent in fixed-size chunks so a dropped connection loses at
-// most one chunk instead of the whole transfer, and so a resumed upload
-// (after a page reload) only has to re-send what the server never got.
-const CHUNK_SIZE = 16 * 1024 * 1024
 const MAX_CHUNK_RETRIES = 5
 const RESUME_STORAGE_PREFIX = 'avenue:upload:'
 
@@ -378,8 +376,11 @@ async function uploadOneFile(file: File, key: string, onProgress: (pct: number, 
   while (bytesReceived < file.size) {
     if (cancelRequested) return { ok: false, aborted: true }
 
+    // Large files are sent in fixed-size chunks so a dropped connection loses at
+    // most one chunk instead of the whole transfer, and so a resumed upload
+    // (after a page reload) only has to re-send what the server never got.
     const chunkStart = bytesReceived
-    const chunkEnd = Math.min(chunkStart + CHUNK_SIZE, file.size)
+    const chunkEnd = Math.min(chunkStart + props.chunkSize, file.size)
 
     let attempt = 0
     let advanced = false

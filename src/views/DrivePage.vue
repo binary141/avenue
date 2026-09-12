@@ -34,6 +34,7 @@
       @error="handleUploadError"
       :multiple=true
       :maxSize=maxFileSize
+      :chunkSize=uploadChunkSize
       :disabled="serverMax === 0 || (usersStore.userData.data.quota !== 0 && usersStore.userData.data.spaceUsed >= usersStore.userData.data.quota)"
     >
       <template #aside>
@@ -520,6 +521,7 @@ const emit = defineEmits(['close-menu']);
 const router = useRouter();
 const loading = ref(false);
 const serverMax = ref(0);
+const uploadChunkSize = ref(16 * 1024 * 1024);
 const fileSharingEnabled = computed(() => usersStore.fileSharingEnabled);
 const folderSharingEnabled = computed(() => usersStore.folderSharingEnabled);
 const maxFileSize = computed(() => {
@@ -1426,6 +1428,7 @@ async function getDashboardInfo() {
   // 200MiB
   const defaultSize = 209715200;
   serverMax.value = response.body.maxFileSize || defaultSize;
+  uploadChunkSize.value = response.body.uploadChunkSize || uploadChunkSize.value;
   usersStore.fileSharingEnabled = response.body.fileSharingEnabled !== false;
   usersStore.folderSharingEnabled = response.body.folderSharingEnabled !== false;
 }

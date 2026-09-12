@@ -34,7 +34,7 @@ watch(
   () => props.msg,
   (newMsg) => {
     if (!newMsg) return
-    setTimeout(() => emit("clear"), 3000)
+    setTimeout(() => emit("clear"), 8000)
   }
 )
 </script>

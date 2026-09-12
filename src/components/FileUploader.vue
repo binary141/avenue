@@ -171,13 +171,45 @@ const emit = defineEmits<{
 }>()
 
 const CONCURRENT_UPLOADS = 5
-// Target number of chunk requests in flight across the whole batch at once.
-// Per-file chunk concurrency scales down as more files upload concurrently,
-// so a single large file still gets real parallelism instead of being
-// capped at the same per-file limit as each file in a big batch.
-const CHUNKS_IN_FLIGHT_BUDGET = 6
+// Bounds how many chunk PUT requests are in flight across the WHOLE batch at
+// once, shared by every file uploading concurrently, rather than a fixed
+// per-file share. A file with fewer chunks left (or none) doesn't hog its
+// slots — they're returned to the shared pool immediately for whichever
+// other file has work — so the limit reflects real transport capacity (e.g.
+// a browser's ~6 connection cap per origin under HTTP/1.1) instead of a
+// guessed static split. A single big file uploading alone can still use the
+// whole budget itself.
+const MAX_CHUNKS_IN_FLIGHT = 6
 const MAX_CHUNK_RETRIES = 5
 const RESUME_STORAGE_PREFIX = 'avenue:upload:'
+
+// Simple counting semaphore: acquire() resolves immediately while permits
+// remain, otherwise queues the caller until a release() frees one up.
+class Semaphore {
+  private available: number
+  private readonly waiters: Array<() => void> = []
+
+  constructor(permits: number) {
+    this.available = permits
+  }
+
+  acquire(): Promise<void> {
+    if (this.available > 0) {
+      this.available -= 1
+      return Promise.resolve()
+    }
+    return new Promise((resolve) => this.waiters.push(resolve))
+  }
+
+  release(): void {
+    const next = this.waiters.shift()
+    if (next) {
+      next()
+    } else {
+      this.available += 1
+    }
+  }
+}
 
 const isDragging = ref(false)
 const fileInput = ref<HTMLInputElement | null>(null)
@@ -362,7 +394,7 @@ async function sendChunkXHR(uploadId: string, file: File, start: number, end: nu
 // store has one for this file, otherwise starts a new one, then sends
 // chunks — a few at a time in flight — until the server has all of it, then
 // finalizes. Returns the created file record, or an error/aborted flag.
-async function uploadOneFile(file: File, key: string, chunksInFlight: number, onProgress: (pct: number, speedStr: string) => void): Promise<{ ok: boolean; aborted: boolean; body?: JsonValue; error?: string }> {
+async function uploadOneFile(file: File, key: string, chunkSemaphore: Semaphore, onProgress: (pct: number, speedStr: string) => void): Promise<{ ok: boolean; aborted: boolean; body?: JsonValue; error?: string }> {
   let uploadId: string
   // Chunk indices (0-based, each props.chunkSize bytes except the last)
   // the server has already told us it has, so a resumed upload only
@@ -427,10 +459,11 @@ async function uploadOneFile(file: File, key: string, chunksInFlight: number, on
 
   // Large files are sent in fixed-size chunks so a dropped connection loses
   // at most a few chunks instead of the whole transfer, and so a resumed
-  // upload only has to re-send what the server never got. A handful of
-  // chunks per file are kept in flight at once (workers below) instead of
-  // one at a time, so one file's upload isn't bottlenecked on round-trip
-  // latency per chunk.
+  // upload only has to re-send what the server never got. Actual network
+  // concurrency is gated by chunkSemaphore, shared across every file in the
+  // batch — these worker loops just claim chunks and queue on it, so one
+  // file's upload isn't bottlenecked on round-trip latency per chunk, and a
+  // file with nothing left to send never holds a slot idle.
   const chunkWorker = async () => {
     while (!failure && !aborted) {
       if (cancelRequested) { aborted = true; return }
@@ -443,10 +476,12 @@ async function uploadOneFile(file: File, key: string, chunksInFlight: number, on
       let attempt = 0
       let done = false
       while (!done) {
+        await chunkSemaphore.acquire()
         const result = await sendChunkXHR(uploadId, file, chunkStart, chunkEnd, chunkKey, (loaded) => {
           inFlightBytes.set(idx, loaded)
           reportProgress()
         })
+        chunkSemaphore.release()
 
         if (result.aborted || cancelRequested) { aborted = true; return }
 
@@ -468,7 +503,7 @@ async function uploadOneFile(file: File, key: string, chunksInFlight: number, on
     }
   }
 
-  const workerCount = Math.min(chunksInFlight, chunkCount)
+  const workerCount = Math.min(MAX_CHUNKS_IN_FLIGHT, chunkCount)
   await Promise.all(Array.from({ length: workerCount }, () => chunkWorker()))
 
   if (aborted || cancelRequested) return { ok: false, aborted: true }
@@ -529,10 +564,10 @@ const uploadFiles = async () => {
   const uploaded: File[] = []
   let uploadError: string | null = null
 
-  // Chunk concurrency per file is the shared budget split across however
-  // many files are actually uploading in parallel this batch.
-  const activeFileWorkers = Math.min(CONCURRENT_UPLOADS, pending.length)
-  const chunksInFlight = Math.max(1, Math.round(CHUNKS_IN_FLIGHT_BUDGET / activeFileWorkers))
+  // One semaphore shared by every file's chunk workers this batch, so chunk
+  // concurrency reflects real transport capacity instead of a fixed
+  // per-file share.
+  const chunkSemaphore = new Semaphore(MAX_CHUNKS_IN_FLIGHT)
 
   const worker = async () => {
     while (!cancelRequested && !uploadError) {
@@ -542,7 +577,7 @@ const uploadFiles = async () => {
       const key = fileKey(file)
       fileStatus.value.set(key, { progress: 0, speed: '' })
 
-      const response = await uploadOneFile(file, key, chunksInFlight, (pct, speedStr) => {
+      const response = await uploadOneFile(file, key, chunkSemaphore, (pct, speedStr) => {
         fileStatus.value.set(key, { progress: pct, speed: speedStr })
       })
 

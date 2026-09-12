@@ -1,6 +1,8 @@
 package sdk
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -38,7 +40,20 @@ func (c *Client) GetUploadStatus(h http.Header, uploadID string) (UploadSessionS
 // an error, so the returned status is always populated — check
 // out.BytesReceived == end to confirm the chunk was accepted, and resend
 // from out.BytesReceived otherwise.
-func (c *Client) UploadChunk(h http.Header, uploadID string, start, end, totalSize int64, data io.Reader) (UploadSessionStatus, error) {
+//
+// data must support Seek because the chunk is hashed up front (its digest is
+// sent as a request header, so it has to be known before the body starts
+// streaming) and then re-read from the start to actually send.
+func (c *Client) UploadChunk(h http.Header, uploadID string, start, end, totalSize int64, data io.ReadSeeker) (UploadSessionStatus, error) {
+	hasher := sha256.New()
+	if _, err := io.Copy(hasher, data); err != nil {
+		return UploadSessionStatus{}, err
+	}
+	if _, err := data.Seek(0, io.SeekStart); err != nil {
+		return UploadSessionStatus{}, err
+	}
+	checksum := hex.EncodeToString(hasher.Sum(nil))
+
 	req, err := http.NewRequest(http.MethodPut, c.BaseURL+fmt.Sprintf("/v1/upload/%s/chunk", uploadID), data)
 	if err != nil {
 		return UploadSessionStatus{}, err
@@ -47,6 +62,7 @@ func (c *Client) UploadChunk(h http.Header, uploadID string, start, end, totalSi
 		req.Header[k] = v
 	}
 	req.Header.Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", start, end-1, totalSize))
+	req.Header.Set("X-Chunk-Checksum", "sha256:"+checksum)
 
 	resp, err := c.httpClient().Do(req)
 	if err != nil {

@@ -171,7 +171,11 @@ const emit = defineEmits<{
 }>()
 
 const CONCURRENT_UPLOADS = 5
-const CHUNKS_IN_FLIGHT_PER_FILE = 3
+// Target number of chunk requests in flight across the whole batch at once.
+// Per-file chunk concurrency scales down as more files upload concurrently,
+// so a single large file still gets real parallelism instead of being
+// capped at the same per-file limit as each file in a big batch.
+const CHUNKS_IN_FLIGHT_BUDGET = 6
 const MAX_CHUNK_RETRIES = 5
 const RESUME_STORAGE_PREFIX = 'avenue:upload:'
 
@@ -303,9 +307,21 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
+// Hashes a chunk up front so its digest can ride along as a request header —
+// the server verifies it against the bytes it actually receives, catching a
+// corrupted chunk immediately (cheap resend of one chunk) instead of only
+// surfacing it via the whole-file checksum after every chunk has landed.
+async function sha256Hex(blob: Blob): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', await blob.arrayBuffer())
+  return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, '0')).join('')
+}
+
 // Sends one chunk via XHR (rather than fetch) so upload progress within a
 // large chunk still drives the progress bar, not just whole-chunk jumps.
-function sendChunkXHR(uploadId: string, file: File, start: number, end: number, key: string, onProgress: (loaded: number) => void): Promise<{ status: number; body: JsonValue; aborted: boolean }> {
+async function sendChunkXHR(uploadId: string, file: File, start: number, end: number, key: string, onProgress: (loaded: number) => void): Promise<{ status: number; body: JsonValue; aborted: boolean }> {
+  const chunk = file.slice(start, end)
+  const checksum = await sha256Hex(chunk)
+
   return new Promise((resolve) => {
     const xhr = new XMLHttpRequest()
     activeXHRs.set(key, xhr)
@@ -334,10 +350,11 @@ function sendChunkXHR(uploadId: string, file: File, start: number, end: number, 
     xhr.open('PUT', `${apiRoot}v1/upload/${uploadId}/chunk`)
     xhr.withCredentials = true
     xhr.setRequestHeader('Content-Range', `bytes ${start}-${end - 1}/${file.size}`)
+    xhr.setRequestHeader('X-Chunk-Checksum', `sha256:${checksum}`)
     for (const [header, value] of Object.entries(GLOBAL_HEADERS)) {
       if (value !== undefined) xhr.setRequestHeader(header, value)
     }
-    xhr.send(file.slice(start, end))
+    xhr.send(chunk)
   })
 }
 
@@ -345,7 +362,7 @@ function sendChunkXHR(uploadId: string, file: File, start: number, end: number, 
 // store has one for this file, otherwise starts a new one, then sends
 // chunks — a few at a time in flight — until the server has all of it, then
 // finalizes. Returns the created file record, or an error/aborted flag.
-async function uploadOneFile(file: File, key: string, onProgress: (pct: number, speedStr: string) => void): Promise<{ ok: boolean; aborted: boolean; body?: JsonValue; error?: string }> {
+async function uploadOneFile(file: File, key: string, chunksInFlight: number, onProgress: (pct: number, speedStr: string) => void): Promise<{ ok: boolean; aborted: boolean; body?: JsonValue; error?: string }> {
   let uploadId: string
   // Chunk indices (0-based, each props.chunkSize bytes except the last)
   // the server has already told us it has, so a resumed upload only
@@ -451,7 +468,7 @@ async function uploadOneFile(file: File, key: string, onProgress: (pct: number, 
     }
   }
 
-  const workerCount = Math.min(CHUNKS_IN_FLIGHT_PER_FILE, chunkCount)
+  const workerCount = Math.min(chunksInFlight, chunkCount)
   await Promise.all(Array.from({ length: workerCount }, () => chunkWorker()))
 
   if (aborted || cancelRequested) return { ok: false, aborted: true }
@@ -512,6 +529,11 @@ const uploadFiles = async () => {
   const uploaded: File[] = []
   let uploadError: string | null = null
 
+  // Chunk concurrency per file is the shared budget split across however
+  // many files are actually uploading in parallel this batch.
+  const activeFileWorkers = Math.min(CONCURRENT_UPLOADS, pending.length)
+  const chunksInFlight = Math.max(1, Math.round(CHUNKS_IN_FLIGHT_BUDGET / activeFileWorkers))
+
   const worker = async () => {
     while (!cancelRequested && !uploadError) {
       const file = pending.shift()
@@ -520,7 +542,7 @@ const uploadFiles = async () => {
       const key = fileKey(file)
       fileStatus.value.set(key, { progress: 0, speed: '' })
 
-      const response = await uploadOneFile(file, key, (pct, speedStr) => {
+      const response = await uploadOneFile(file, key, chunksInFlight, (pct, speedStr) => {
         fileStatus.value.set(key, { progress: pct, speed: speedStr })
       })
 

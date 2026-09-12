@@ -176,6 +176,30 @@ func (s *Server) loadUploadSession(c *gin.Context) (int64, *db.UploadSession, bo
 	return userIDInt, session, true
 }
 
+// chunkChecksumHeader carries a per-chunk integrity check, formatted as
+// "sha256:<hex digest>" of the chunk's exact bytes. It lets UploadChunk catch
+// a corrupted chunk immediately (so the client can cheaply resend just that
+// chunk) instead of only finding out via CompleteUpload's whole-file hash
+// after every chunk has already landed.
+const chunkChecksumHeader = "X-Chunk-Checksum"
+
+// parseChunkChecksum extracts the hex sha256 digest from a chunkChecksumHeader
+// value.
+func parseChunkChecksum(header string) (string, error) {
+	const prefix = "sha256:"
+	if !strings.HasPrefix(header, prefix) {
+		return "", fmt.Errorf("missing or malformed %s header", chunkChecksumHeader)
+	}
+	sum := strings.TrimPrefix(header, prefix)
+	if len(sum) != hex.EncodedLen(sha256.Size) {
+		return "", fmt.Errorf("invalid checksum length in %s header", chunkChecksumHeader)
+	}
+	if _, err := hex.DecodeString(sum); err != nil {
+		return "", fmt.Errorf("invalid checksum encoding in %s header", chunkChecksumHeader)
+	}
+	return sum, nil
+}
+
 // UploadChunk appends one chunk to an in-progress upload. The chunk's byte
 // range is given by the Content-Range header (bytes start-end/total, as sent
 // by the client). Chunks may arrive out of order and several may be in
@@ -204,6 +228,12 @@ func (s *Server) UploadChunk(c *gin.Context) {
 		return
 	}
 
+	wantChecksum, err := parseChunkChecksum(c.GetHeader(chunkChecksumHeader))
+	if err != nil {
+		respond(c, http.StatusBadRequest, "invalid chunk checksum header", err)
+		return
+	}
+
 	body := http.MaxBytesReader(c.Writer, c.Request.Body, chunkLen)
 
 	dst, err := s.fs.OpenFile(shared.BlobPath(session.ID), os.O_WRONLY, 0o644)
@@ -211,7 +241,8 @@ func (s *Server) UploadChunk(c *gin.Context) {
 		respond(c, http.StatusInternalServerError, "could not open upload destination", err)
 		return
 	}
-	if written, err := io.Copy(io.NewOffsetWriter(dst, start), body); err != nil || written != chunkLen {
+	hasher := sha256.New()
+	if written, err := io.Copy(io.NewOffsetWriter(dst, start), io.TeeReader(body, hasher)); err != nil || written != chunkLen {
 		_ = dst.Close()
 		if err == nil {
 			err = io.ErrUnexpectedEOF
@@ -221,6 +252,11 @@ func (s *Server) UploadChunk(c *gin.Context) {
 	}
 	if err := dst.Close(); err != nil {
 		logger.Errorf("close upload chunk dest: %v", err)
+	}
+
+	if gotChecksum := hex.EncodeToString(hasher.Sum(nil)); gotChecksum != wantChecksum {
+		respond(c, http.StatusBadRequest, "chunk checksum mismatch", nil)
+		return
 	}
 
 	newBytesReceived, err := db.RecordUploadChunk(session.ID, userIDInt, start, end+1)

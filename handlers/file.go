@@ -143,6 +143,20 @@ func (s *Server) Upload(c *gin.Context) {
 			}
 			contentType = http.DetectContentType(buf[:n])
 
+			// The parent form field is client-supplied, so check the caller may
+			// actually put a file there. Uploads into a folder shared with the
+			// caller belong to the folder's owner and count against their quota,
+			// which this endpoint can't know before it starts streaming — those
+			// go through the chunked upload API instead.
+			owner, ok := resolveUploadOwner(c, userID, parent)
+			if !ok {
+				return
+			}
+			if owner != userIDInt {
+				respond(c, http.StatusForbidden, "uploading into a shared folder requires the chunked upload API", nil)
+				return
+			}
+
 			// Create file record in database
 			createdAt = time.Now().UTC()
 			fileRecord := &sdk.File{
@@ -334,27 +348,26 @@ func (s *Server) MoveFile(c *gin.Context) {
 		return
 	}
 
-	file, err := db.GetFileByIDForUser(c.Param("fileID"), userID)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			respond(c, http.StatusNotFound, "file not found in db", err)
-			return
-		}
-
-		respond(c, http.StatusInternalServerError, "could not get file", err)
+	fileID := c.Param("fileID")
+	if _, ok := requireFileAccess(c, fileID, userID, db.AccessEditor); !ok {
+		return
+	}
+	if !requireRestructure(c, db.CanRestructureFile, fileID, userID, "file") {
 		return
 	}
 
 	if req.Parent != "" {
-		if _, err := db.GetFolder(req.Parent, userID); err != nil {
+		if _, err := db.GetFolderForUser(req.Parent, userID, db.AccessEditor); err != nil {
 			respond(c, http.StatusBadRequest, "destination folder must exist", err)
 			return
 		}
 	}
 
-	file.Parent = req.Parent
-
-	if err := db.UpdateFile(*file, userID); err != nil {
+	if err := db.BulkMove([]string{fileID}, nil, req.Parent, userID); err != nil {
+		if errors.Is(err, db.ErrCrossOwnerMove) {
+			respond(c, http.StatusForbidden, "files can't be moved between different owners' drives", err)
+			return
+		}
 		respond(c, http.StatusInternalServerError, "could not move file", err)
 		return
 	}
@@ -372,6 +385,10 @@ func (s *Server) UpdateFileName(c *gin.Context) {
 	newName := c.Param("fileName")
 	if newName == "" {
 		respond(c, http.StatusBadRequest, "filename can't be empty", nil)
+		return
+	}
+
+	if _, ok := requireFileAccess(c, c.Param("fileID"), userID, db.AccessEditor); !ok {
 		return
 	}
 
@@ -541,7 +558,7 @@ func (s *Server) DownloadFilesZip(c *gin.Context) {
 // target one folder (enforced by the caller), but multiple folder downloads
 // can run concurrently across the server.
 func (s *Server) downloadFolderZip(c *gin.Context, userID, folderID string) {
-	folder, err := db.GetFolder(folderID, userID)
+	folder, err := db.GetFolderForUser(folderID, userID, db.AccessViewer)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			respond(c, http.StatusNotFound, "folder not found in db", err)
@@ -619,6 +636,13 @@ func (s *Server) DeleteFile(c *gin.Context) {
 	userID, err := shared.GetUserIDFromContext(c.Request.Context())
 	if err != nil {
 		respond(c, http.StatusInternalServerError, "could not get user id", err)
+		return
+	}
+
+	if _, ok := requireFileAccess(c, c.Param("fileID"), userID, db.AccessEditor); !ok {
+		return
+	}
+	if !requireRestructure(c, db.CanRestructureFile, c.Param("fileID"), userID, "file") {
 		return
 	}
 

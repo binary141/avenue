@@ -76,7 +76,15 @@ func (s *Server) InitUpload(c *gin.Context) {
 		return
 	}
 
-	user, err := db.GetUserByIDStr(userID)
+	// Uploading into a folder shared with the caller stores the file in the
+	// folder owner's drive, so it's the owner's quota that applies. This also
+	// checks the caller may upload to req.Parent at all.
+	ownerID, ok := resolveUploadOwner(c, userID, req.Parent)
+	if !ok {
+		return
+	}
+
+	owner, err := db.GetUserByID(ownerID)
 	if err != nil {
 		logger.Errorf("error getting user: %s", err.Error())
 		respond(c, http.StatusInternalServerError, "", err)
@@ -85,8 +93,8 @@ func (s *Server) InitUpload(c *gin.Context) {
 
 	envMaxFileSize := shared.GetEnvInt64("MAX_FILE_BYTE_SIZE", shared.DEFAULTMAXFILESIZE)
 	var totalUsed int64
-	if user.Quota != 0 {
-		totalUsed, err = db.GetUserUsage(userIDInt)
+	if owner.Quota != 0 {
+		totalUsed, err = db.GetUserUsage(ownerID)
 		if err != nil {
 			logger.Errorf("error getting user quota: %s", err.Error())
 			respond(c, http.StatusInternalServerError, "", err)
@@ -94,9 +102,13 @@ func (s *Server) InitUpload(c *gin.Context) {
 		}
 	}
 
-	maxFileSize, overQuota := computeUploadLimit(user.Quota, totalUsed, envMaxFileSize)
+	maxFileSize, overQuota := computeUploadLimit(owner.Quota, totalUsed, envMaxFileSize)
 	if overQuota {
-		respond(c, http.StatusUnprocessableEntity, "", errors.New("max quota reached. Please delete files to be able to upload files"))
+		msg := "max quota reached. Please delete files to be able to upload files"
+		if ownerID != userIDInt {
+			msg = "the storage quota of the drive this folder belongs to is full"
+		}
+		respond(c, http.StatusUnprocessableEntity, "", errors.New(msg))
 		return
 	}
 	if req.Size > maxFileSize {
@@ -292,6 +304,13 @@ func (s *Server) CompleteUpload(c *gin.Context) {
 		return
 	}
 
+	// Re-check access rather than trusting what InitUpload saw: the share may
+	// have been revoked while the upload was in flight.
+	ownerID, ok := resolveUploadOwner(c, userID, session.Parent)
+	if !ok {
+		return
+	}
+
 	blobPath := shared.BlobPath(session.ID)
 	src, err := s.fs.Open(blobPath)
 	if err != nil {
@@ -332,7 +351,7 @@ func (s *Server) CompleteUpload(c *gin.Context) {
 		MimeType:  contentType,
 		FileSize:  session.TotalSize,
 		Parent:    session.Parent,
-		CreatedBy: userIDInt,
+		CreatedBy: ownerID,
 	}
 	if _, err := db.CreateFile(fileRecord); err != nil {
 		respond(c, http.StatusInternalServerError, "could not create file record", err)

@@ -151,6 +151,9 @@ type V1FolderContentsResponse struct {
 	Page        int          `json:"page"`
 	Limit       int          `json:"limit"`
 	Total       int          `json:"total"`
+	// Access is the caller's role on this folder: "owner" for their own
+	// drive, or "editor"/"viewer" for a folder shared with them.
+	Access string `json:"access"`
 }
 
 // V1TrashResponse lists the top-level trashed items for a user, i.e. the
@@ -221,4 +224,36 @@ type InitUploadRequest struct {
 type UploadSessionStatus struct {
 	UploadID      string `json:"uploadId"`
 	BytesReceived int64  `json:"bytesReceived"`
+}
+
+// UserShare is one user-to-user grant on a file or folder: GranteeID can act
+// on the resource with the given Role ("viewer" or "editor"). ResourceType is
+// FolderItemTypeFolder or FolderItemTypeFile, and ResourceID is its UUID.
+type UserShare struct {
+	ID               int64     `json:"id"`
+	ResourceType     string    `json:"resource_type"`
+	ResourceID       string    `json:"resource_id"`
+	GranteeID        int64     `json:"grantee_id"`
+	GranteeEmail     string    `json:"grantee_email"`
+	GranteeFirstName string    `json:"grantee_first_name"`
+	GranteeLastName  string    `json:"grantee_last_name"`
+	Role             string    `json:"role"`
+	CreatedAt        time.Time `json:"created_at"`
+}
+
+// SharedWithMeItem is a file or folder another user shared directly with the
+// caller. ShareID identifies the grant, which the caller can delete to leave
+// the share.
+type SharedWithMeItem struct {
+	ShareID       int64     `json:"share_id"`
+	Type          string    `json:"type"`
+	UUID          string    `json:"uuid"`
+	Name          string    `json:"name"`
+	Extension     string    `json:"extension,omitempty"`
+	MimeType      string    `json:"mimeType,omitempty"`
+	FileSize      int64     `json:"file_size"`
+	Role          string    `json:"role"`
+	SharedByID    int64     `json:"shared_by_id"`
+	SharedByEmail string    `json:"shared_by_email"`
+	SharedAt      time.Time `json:"shared_at"`
 }

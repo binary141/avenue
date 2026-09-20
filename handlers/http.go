@@ -323,6 +323,15 @@ func (s *Server) SetupRoutes() {
 	secureFolderShare.GET("/folder-shares/expired", s.ListExpiredUserFolderShares)
 	secureFolderShare.DELETE("/share/folder/:token", s.RevokeShareFolderLink)
 
+	// Sharing with other users of this server (as opposed to public links).
+	securedRouterV1.POST("/file/:fileID/user-shares", s.CreateFileUserShare)
+	securedRouterV1.GET("/file/:fileID/user-shares", s.ListFileUserShares)
+	securedRouterV1.POST("/folder/:folderID/user-shares", s.CreateFolderUserShare)
+	securedRouterV1.GET("/folder/:folderID/user-shares", s.ListFolderUserShares)
+	securedRouterV1.PATCH("/user-shares/:shareID", s.UpdateUserShare)
+	securedRouterV1.DELETE("/user-shares/:shareID", s.DeleteUserShare)
+	securedRouterV1.GET("/shared-with-me", s.ListSharedWithMe)
+
 	securedRouterV1.GET("/file/list", s.ListFiles)
 	securedRouterV1.GET("/folder/files/:fileName", s.SearchFiles) // search root folder
 	securedRouterV1.GET("/folder/:folderID/files/:fileName", s.SearchFiles)

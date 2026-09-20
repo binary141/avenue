@@ -25,11 +25,22 @@ func CreateFolder(f *sdk.Folder) (string, error) {
 	return f.UUID, err
 }
 
+// GetFolder returns a non-trashed folder that userID owns. Use
+// GetFolderForUser where shared access is enough.
 func GetFolder(folderID, userID string) (*sdk.Folder, error) {
+	return GetFolderForUser(folderID, userID, AccessOwner)
+}
+
+// GetFolderForUser returns a non-trashed folder if userID has at least the
+// given access level on it (AccessViewer, AccessEditor or AccessOwner) —
+// through owning it, or a grant on it or a folder above it. Returns
+// sql.ErrNoRows otherwise, whether or not the folder exists.
+func GetFolderForUser(folderID, userID string, minAccess int) (*sdk.Folder, error) {
 	var f sdk.Folder
 	err := DB.QueryRow(
-		`SELECT id, uuid, name, COALESCE(parent_id, 0), owner_id FROM folders WHERE uuid=$1 AND owner_id=$2::BIGINT AND deleted_at IS NULL`,
-		folderID, userID,
+		`SELECT id, uuid, name, COALESCE(parent_id, 0), owner_id FROM folders
+		 WHERE uuid=$1 AND deleted_at IS NULL AND folder_access(id, $2::BIGINT) >= $3`,
+		folderID, userID, minAccess,
 	).Scan(&f.ID, &f.UUID, &f.Name, &f.ParentID, &f.OwnerID)
 	if err != nil {
 		return nil, err
@@ -37,12 +48,14 @@ func GetFolder(folderID, userID string) (*sdk.Folder, error) {
 	return &f, nil
 }
 
-func UpdateFolder(f sdk.Folder) error {
-	_, err := DB.Exec(
-		`UPDATE folders SET name=$2 WHERE uuid=$1 AND owner_id=$3`,
-		f.UUID, f.Name, f.OwnerID,
+// UpdateFolder renames a folder if userID has edit access to it. Returns
+// sql.ErrNoRows if the folder doesn't exist or userID can't edit it.
+func UpdateFolder(f sdk.Folder, userID string) error {
+	res, err := DB.Exec(
+		`UPDATE folders SET name=$2 WHERE uuid=$1 AND deleted_at IS NULL AND folder_access(id, $3::BIGINT) >= 2`,
+		f.UUID, f.Name, userID,
 	)
-	return err
+	return requireRowsAffected(res, err)
 }
 
 // folderSubtreeIDs returns the id of rootID plus the ids of every folder
@@ -85,15 +98,15 @@ type ZipFileEntry struct {
 }
 
 // ListFolderFilesForZip returns every file nested (at any depth) under
-// folderID, owned by ownerID, along with the path of the containing folder
+// folderID, if userID can see it, along with the path of the containing folder
 // relative to folderID's own name. Used to build a folder download zip that
 // preserves the folder's directory structure.
-func ListFolderFilesForZip(folderID, ownerID string) ([]ZipFileEntry, error) {
+func ListFolderFilesForZip(folderID, userID string) ([]ZipFileEntry, error) {
 	rows, err := DB.Query(`
 		WITH RECURSIVE subtree AS (
 			SELECT id, name::text AS dir_path
 			FROM folders
-			WHERE uuid = $1 AND owner_id = $2::BIGINT AND deleted_at IS NULL
+			WHERE uuid = $1 AND folder_access(id, $2::BIGINT) >= 1 AND deleted_at IS NULL
 			UNION ALL
 			SELECT f.id, s.dir_path || '/' || f.name
 			FROM folders f
@@ -104,7 +117,7 @@ func ListFolderFilesForZip(folderID, ownerID string) ([]ZipFileEntry, error) {
 		FROM subtree
 		JOIN files ON files.parent_id = subtree.id
 		WHERE files.deleted_at IS NULL
-	`, folderID, ownerID)
+	`, folderID, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -122,13 +135,14 @@ func ListFolderFilesForZip(folderID, ownerID string) ([]ZipFileEntry, error) {
 }
 
 // TrashFolder soft-deletes folderID and its entire subtree (nested folders
-// and all files within them), and revokes any share links pointing into
+// and all files within them) if userID owns it or has edit access to the
+// folder it lives in (see folder_can_restructure), and revokes any share links pointing into
 // that subtree.
-func TrashFolder(folderID, ownerID string) error {
+func TrashFolder(folderID, userID string) error {
 	var rootID int64
 	err := DB.QueryRow(
-		`SELECT id FROM folders WHERE uuid=$1 AND owner_id=$2::BIGINT AND deleted_at IS NULL`,
-		folderID, ownerID,
+		`SELECT id FROM folders WHERE uuid=$1 AND folder_can_restructure(id, $2::BIGINT) AND deleted_at IS NULL`,
+		folderID, userID,
 	).Scan(&rootID)
 	if err != nil {
 		return err
@@ -163,8 +177,8 @@ func TrashFolder(folderID, ownerID string) error {
 
 // BulkTrash soft-deletes the given files and folders (recursively for each
 // folder, same as TrashFolder) for userID in a single transaction. IDs that
-// don't exist or aren't owned by userID are silently skipped, matching the
-// ownership semantics of TrashFileForUser/TrashFolder.
+// don't exist or that userID can't trash are silently skipped, matching the
+// access semantics of TrashFileForUser/TrashFolder.
 func BulkTrash(fileIDs, folderIDs []string, userID string) error {
 	tx, err := DB.Beginx()
 	if err != nil {
@@ -177,7 +191,7 @@ func BulkTrash(fileIDs, folderIDs []string, userID string) error {
 		rows, err := tx.Query(`
 			WITH RECURSIVE subtree AS (
 				SELECT id FROM folders
-				WHERE uuid = ANY($1::text[]) AND owner_id = $2::BIGINT AND deleted_at IS NULL
+				WHERE uuid = ANY($1::text[]) AND folder_can_restructure(id, $2::BIGINT) AND deleted_at IS NULL
 				UNION ALL
 				SELECT f.id FROM folders f
 				INNER JOIN subtree s ON f.parent_id = s.id
@@ -221,8 +235,7 @@ func BulkTrash(fileIDs, folderIDs []string, userID string) error {
 	if len(fileIDs) > 0 {
 		if _, err := tx.Exec(`
 			UPDATE files SET deleted_at = now() WHERE uuid = ANY($1::text[]) AND deleted_at IS NULL
-			  AND (created_by = $2::BIGINT
-			       OR parent_id IN (SELECT id FROM folders WHERE owner_id = $2::BIGINT))
+			  AND file_can_restructure(id, $2::BIGINT)
 		`, pq.Array(fileIDs), userID); err != nil {
 			return err
 		}
@@ -290,8 +303,7 @@ func BulkRestore(fileIDs, folderIDs []string, userID string) error {
 	if len(fileIDs) > 0 {
 		if _, err := tx.Exec(`
 			UPDATE files SET deleted_at = NULL WHERE uuid = ANY($1::text[]) AND deleted_at IS NOT NULL
-			  AND (created_by = $2::BIGINT
-			       OR parent_id IN (SELECT id FROM folders WHERE owner_id = $2::BIGINT))
+			  AND file_access(id, $2::BIGINT) = 3
 		`, pq.Array(fileIDs), userID); err != nil {
 			return err
 		}
@@ -300,12 +312,20 @@ func BulkRestore(fileIDs, folderIDs []string, userID string) error {
 	return tx.Commit()
 }
 
+// ErrCrossOwnerMove is returned by BulkMove when an item would end up in a
+// different owner's tree than it came from — e.g. an editor moving something
+// out of a folder shared with them into their own drive. Quota and ownership
+// are tracked per tree owner, so that isn't a plain move.
+var ErrCrossOwnerMove = errors.New("cannot move items between different owners' drives")
+
 // BulkMove moves the given files and folders to a new parent folder (or the
-// root, if parent is "") for userID in a single transaction. IDs that don't
-// exist or aren't owned by userID are silently skipped, matching the
-// ownership semantics of UpdateFile/UpdateFolder. Moving a folder into
-// itself or one of its own descendants is rejected, since that would
-// disconnect it from the tree.
+// root, if parent is "") for userID in a single transaction. userID needs edit
+// access to the destination folder, and to be allowed to restructure each item
+// (see folder_can_restructure/file_can_restructure); IDs that don't exist or
+// that userID can't move are silently skipped, matching the access semantics
+// of UpdateFile/UpdateFolder. Moving a folder into itself or one of its own
+// descendants is rejected, since that would disconnect it from the tree, and
+// so is moving anything across owners (ErrCrossOwnerMove).
 func BulkMove(fileIDs, folderIDs []string, parent, userID string) error {
 	tx, err := DB.Beginx()
 	if err != nil {
@@ -313,23 +333,47 @@ func BulkMove(fileIDs, folderIDs []string, parent, userID string) error {
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	// destOwner is who owns the tree the items are landing in: the caller for
+	// the root, otherwise the destination folder's owner.
 	var parentID sql.NullInt64
+	var destOwner int64
 	if parent != "" {
-		var id int64
+		var id, owner int64
 		if err := tx.QueryRow(
-			`SELECT id FROM folders WHERE uuid=$1 AND owner_id=$2::BIGINT AND deleted_at IS NULL`,
+			`SELECT id, owner_id FROM folders WHERE uuid=$1 AND deleted_at IS NULL AND folder_access(id, $2::BIGINT) >= 2`,
 			parent, userID,
-		).Scan(&id); err != nil {
+		).Scan(&id, &owner); err != nil {
 			return err
 		}
 		parentID = sql.NullInt64{Int64: id, Valid: true}
+		destOwner = owner
+	} else if err := tx.QueryRow(`SELECT $1::BIGINT`, userID).Scan(&destOwner); err != nil {
+		return err
+	}
+
+	var crossOwner int
+	if err := tx.QueryRow(`
+		SELECT
+			(SELECT COUNT(*) FROM folders
+			 WHERE uuid = ANY($1::text[]) AND deleted_at IS NULL
+			   AND folder_can_restructure(id, $3::BIGINT) AND owner_id <> $4)
+			+
+			(SELECT COUNT(*) FROM files
+			 WHERE uuid = ANY($2::text[]) AND deleted_at IS NULL
+			   AND file_can_restructure(id, $3::BIGINT)
+			   AND COALESCE((SELECT p.owner_id FROM folders p WHERE p.id = files.parent_id), created_by) <> $4)
+	`, pq.Array(folderIDs), pq.Array(fileIDs), userID, destOwner).Scan(&crossOwner); err != nil {
+		return err
+	}
+	if crossOwner > 0 {
+		return ErrCrossOwnerMove
 	}
 
 	if len(folderIDs) > 0 && parentID.Valid {
 		var inSubtree bool
 		if err := tx.QueryRow(`
 			WITH RECURSIVE subtree AS (
-				SELECT id FROM folders WHERE uuid = ANY($1::text[]) AND owner_id = $2::BIGINT
+				SELECT id FROM folders WHERE uuid = ANY($1::text[]) AND folder_can_restructure(id, $2::BIGINT)
 				UNION ALL
 				SELECT f.id FROM folders f INNER JOIN subtree s ON f.parent_id = s.id
 			)
@@ -344,7 +388,7 @@ func BulkMove(fileIDs, folderIDs []string, parent, userID string) error {
 
 	if len(folderIDs) > 0 {
 		if _, err := tx.Exec(
-			`UPDATE folders SET parent_id=$1 WHERE uuid = ANY($2::text[]) AND owner_id=$3::BIGINT AND deleted_at IS NULL`,
+			`UPDATE folders SET parent_id=$1 WHERE uuid = ANY($2::text[]) AND deleted_at IS NULL AND folder_can_restructure(id, $3::BIGINT)`,
 			parentID, pq.Array(folderIDs), userID,
 		); err != nil {
 			return err
@@ -354,8 +398,7 @@ func BulkMove(fileIDs, folderIDs []string, parent, userID string) error {
 	if len(fileIDs) > 0 {
 		if _, err := tx.Exec(`
 			UPDATE files SET parent_id=$1 WHERE uuid = ANY($2::text[]) AND deleted_at IS NULL
-			  AND (created_by=$3::BIGINT
-			       OR parent_id IN (SELECT id FROM folders WHERE owner_id=$3::BIGINT))
+			  AND file_can_restructure(id, $3::BIGINT)
 		`, parentID, pq.Array(fileIDs), userID); err != nil {
 			return err
 		}
@@ -527,11 +570,12 @@ func CountTrashedFolders(ownerID string) (int, error) {
 	return count, err
 }
 
-// ListChildFolder lists the child folders of parentID, ordered by name.
+// ListChildFolder lists the child folders of parentID that userID can see,
+// ordered by name.
 // sortDir is interpolated directly into the query since placeholders can't
 // parameterize ORDER BY; it's a typed sdk.SortDirection so callers can't pass
 // arbitrary strings.
-func ListChildFolder(parentID, ownerID string, sortDir sdk.SortDirection, limit, offset int) ([]sdk.Folder, error) {
+func ListChildFolder(parentID, userID string, sortDir sdk.SortDirection, limit, offset int) ([]sdk.Folder, error) {
 	var (
 		rows *sql.Rows
 		err  error
@@ -540,14 +584,14 @@ func ListChildFolder(parentID, ownerID string, sortDir sdk.SortDirection, limit,
 	if parentID == "" || parentID == rootFolderID {
 		rows, err = DB.Query(
 			`SELECT id, uuid, name, COALESCE(parent_id, 0), owner_id FROM folders WHERE parent_id IS NULL AND owner_id=$1::BIGINT AND deleted_at IS NULL ORDER BY name `+string(sortDir)+` LIMIT $2 OFFSET $3`,
-			ownerID, limit, offset,
+			userID, limit, offset,
 		)
 	} else {
 		rows, err = DB.Query(`
 			SELECT id, uuid, name, COALESCE(parent_id, 0), owner_id FROM folders
-			WHERE parent_id = (SELECT id FROM folders WHERE uuid = $1 AND owner_id = $2::BIGINT)
-			  AND owner_id = $2::BIGINT AND deleted_at IS NULL ORDER BY name `+string(sortDir)+` LIMIT $3 OFFSET $4`,
-			parentID, ownerID, limit, offset,
+			WHERE parent_id = (SELECT id FROM folders WHERE uuid = $1 AND folder_access(id, $2::BIGINT) >= 1)
+				  AND deleted_at IS NULL ORDER BY name `+string(sortDir)+` LIMIT $3 OFFSET $4`,
+			parentID, userID, limit, offset,
 		)
 	}
 	if err != nil {
@@ -568,41 +612,46 @@ func ListChildFolder(parentID, ownerID string, sortDir sdk.SortDirection, limit,
 
 // CountChildFolders returns the total number of (non-deleted) child folders
 // of parentID, for computing pagination totals alongside ListChildFolder.
-func CountChildFolders(parentID, ownerID string) (int, error) {
+func CountChildFolders(parentID, userID string) (int, error) {
 	var count int
 	var err error
 
 	if parentID == "" || parentID == rootFolderID {
 		err = DB.QueryRow(
 			`SELECT COUNT(*) FROM folders WHERE parent_id IS NULL AND owner_id=$1::BIGINT AND deleted_at IS NULL`,
-			ownerID,
+			userID,
 		).Scan(&count)
 	} else {
 		err = DB.QueryRow(`
 			SELECT COUNT(*) FROM folders
-			WHERE parent_id = (SELECT id FROM folders WHERE uuid = $1 AND owner_id = $2::BIGINT)
-			  AND owner_id = $2::BIGINT AND deleted_at IS NULL`,
-			parentID, ownerID,
+			WHERE parent_id = (SELECT id FROM folders WHERE uuid = $1 AND folder_access(id, $2::BIGINT) >= 1)
+				  AND deleted_at IS NULL`,
+			parentID, userID,
 		).Scan(&count)
 	}
 	return count, err
 }
 
-func ListFolderParents(folderID, ownerID string) ([]sdk.Folder, error) {
+// ListFolderParents returns folderID followed by its ancestors, leaf-first,
+// stopping at the last folder userID can see. For a shared folder that means
+// the trail ends at the shared folder itself instead of leaking the names of
+// the owner's private folders above it.
+func ListFolderParents(folderID, userID string) ([]sdk.Folder, error) {
 	rows, err := DB.Query(`
 		WITH RECURSIVE folder_breadcrumbs (id, uuid, name, parent_id, owner_id) AS (
 			SELECT id, uuid, name, parent_id, owner_id
 			FROM folders
-			WHERE owner_id = $1::BIGINT AND uuid = $2
+			WHERE uuid = $2 AND folder_access(id, $1::BIGINT) >= 1
 
 			UNION ALL
 
 			SELECT p.id, p.uuid, p.name, p.parent_id, p.owner_id
 			FROM folders p
 			INNER JOIN folder_breadcrumbs c ON p.id = c.parent_id
+			WHERE folder_access(p.id, $1::BIGINT) >= 1
 		)
 		SELECT id, uuid, name, COALESCE(parent_id, 0), owner_id FROM folder_breadcrumbs
-	`, ownerID, folderID)
+	`, userID, folderID)
 	if err != nil {
 		return nil, err
 	}

@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
-	"strconv"
 
 	"avenue/backend/db"
 	"avenue/backend/logger"
@@ -27,20 +26,22 @@ func (s *Server) CreateFolder(c *gin.Context) {
 		return
 	}
 
+	// A folder created inside a shared folder belongs to that folder's owner
+	// — every folder in a tree has the same owner, which is what lets access
+	// checks and quota accounting work per tree.
+	ownerIDInt, ok := resolveUploadOwner(c, userID, req.Parent)
+	if !ok {
+		return
+	}
+
 	var parentID int64
 	if req.Parent != "" {
-		parentFolder, err := db.GetFolder(req.Parent, userID)
+		parentFolder, err := db.GetFolderForUser(req.Parent, userID, db.AccessEditor)
 		if err != nil {
 			respond(c, http.StatusBadRequest, "parent folder must exist", err)
 			return
 		}
 		parentID = parentFolder.ID
-	}
-
-	ownerIDInt, err := strconv.ParseInt(userID, 10, 64)
-	if err != nil {
-		respond(c, http.StatusInternalServerError, "", err)
-		return
 	}
 
 	_, err = db.CreateFolder(&sdk.Folder{
@@ -65,6 +66,12 @@ func (s *Server) DeleteFolder(c *gin.Context) {
 	}
 
 	folderID := c.Param("folderID")
+	if _, ok := requireFolderAccess(c, folderID, userID, db.AccessEditor); !ok {
+		return
+	}
+	if !requireRestructure(c, db.CanRestructureFolder, folderID, userID, "folder") {
+		return
+	}
 
 	err = db.TrashFolder(folderID, userID)
 	if err != nil {
@@ -163,13 +170,17 @@ func (s *Server) BulkMove(c *gin.Context) {
 	}
 
 	if req.Parent != "" {
-		if _, err := db.GetFolder(req.Parent, userID); err != nil {
+		if _, err := db.GetFolderForUser(req.Parent, userID, db.AccessEditor); err != nil {
 			respond(c, http.StatusBadRequest, "destination folder must exist", err)
 			return
 		}
 	}
 
 	if err := db.BulkMove(req.FileIDs, req.FolderIDs, req.Parent, userID); err != nil {
+		if errors.Is(err, db.ErrCrossOwnerMove) {
+			respond(c, http.StatusForbidden, "items can't be moved between different owners' drives", err)
+			return
+		}
 		respond(c, http.StatusInternalServerError, "could not move items", err)
 		return
 	}
@@ -250,7 +261,11 @@ func (s *Server) UpdateFolderName(c *gin.Context) {
 		return
 	}
 
-	folder, err := db.GetFolder(c.Param("folderID"), userID)
+	if _, ok := requireFolderAccess(c, c.Param("folderID"), userID, db.AccessEditor); !ok {
+		return
+	}
+
+	folder, err := db.GetFolderForUser(c.Param("folderID"), userID, db.AccessEditor)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			respond(c, http.StatusNotFound, "folder not found in db", err)
@@ -263,7 +278,7 @@ func (s *Server) UpdateFolderName(c *gin.Context) {
 
 	folder.Name = newName
 
-	err = db.UpdateFolder(*folder)
+	err = db.UpdateFolder(*folder, userID)
 	if err != nil {
 		respond(c, http.StatusInternalServerError, "could not update folder", err)
 		return
@@ -324,6 +339,17 @@ func (s *Server) ListFolderContents(c *gin.Context) {
 	}
 
 	folderID := c.Param("folderID")
+
+	// The root is always the caller's own drive; anything else must be a
+	// folder they own or that's been shared with them.
+	access := db.AccessOwner
+	if folderID != "" && folderID != shared.ROOTFOLDERID {
+		var ok bool
+		if access, ok = requireFolderAccess(c, folderID, userID, db.AccessViewer); !ok {
+			return
+		}
+	}
+
 	items, err := db.ListFolderItems(folderID, userID, sortColumn, sortDir, limit, offset, itemType)
 	if err != nil {
 		respond(c, http.StatusInternalServerError, "Internal server error", err)
@@ -355,6 +381,7 @@ func (s *Server) ListFolderContents(c *gin.Context) {
 	}
 
 	x.Items = items
+	x.Access = db.AccessRole(access)
 	x.Page = page
 	x.Limit = limit
 	x.Total = totalFolders + totalFiles

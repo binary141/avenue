@@ -68,6 +68,31 @@ func testClient(t *testing.T) *sdk.Client {
 func authedClient(t *testing.T) (*sdk.Client, http.Header) {
 	t.Helper()
 
+	client, h, _ := authedUser(t)
+	return client, h
+}
+
+// authedUser is authedClient that also returns the logged-in user's email,
+// for tests that need to refer to the user (e.g. to share something with
+// them). Call it more than once to get several distinct users, as long as the
+// server has self registration enabled.
+func authedUser(t *testing.T) (*sdk.Client, http.Header, string) {
+	t.Helper()
+
+	client, h, email := loginNewUser(t)
+	t.Cleanup(func() {
+		_, _ = client.Logout(h)
+	})
+	return client, h, email
+}
+
+// loginNewUser is authedUser without the per-test logout, for users that are
+// shared across several tests (see sharedUsers) and logged out once at the end
+// of the run. The server rate limits logins per IP (20 a minute), so a suite
+// that logs in a fresh user in every test trips it.
+func loginNewUser(t *testing.T) (*sdk.Client, http.Header, string) {
+	t.Helper()
+
 	client := testClient(t)
 
 	meta, err := client.LoginMeta(http.Header{})
@@ -106,9 +131,5 @@ func authedClient(t *testing.T) (*sdk.Client, http.Header) {
 
 	h := http.Header{"Authorization": []string{"Token " + login.SessionID}}
 
-	t.Cleanup(func() {
-		_, _ = client.Logout(h)
-	})
-
-	return client, h
+	return client, h, email
 }

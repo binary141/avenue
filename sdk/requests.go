@@ -87,3 +87,17 @@ type CreateShareLinkRequest struct {
 	AllowUpload  bool       `json:"allow_upload"`
 	MaxFileSize  int64      `json:"max_file_size"`
 }
+
+// CreateUserShareRequest shares a file or folder with another user, found by
+// email. Role is "viewer" (list, preview, download) or "editor" (also upload,
+// create, rename, and trash or move things inside a shared folder). Sharing
+// again with someone who already has access just changes their role.
+type CreateUserShareRequest struct {
+	Email string `json:"email"`
+	Role  string `json:"role"`
+}
+
+// UpdateUserShareRequest changes the role of an existing user share.
+type UpdateUserShareRequest struct {
+	Role string `json:"role"`
+}

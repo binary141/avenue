@@ -42,6 +42,9 @@ export interface FolderItem {
 export interface Breadcrumb {
   folder_id: string;
   label: string;
+  // Route to go to instead of the folder with folder_id, for crumbs that
+  // aren't folders (e.g. "Shared with me").
+  path?: string;
 }
 
 export interface FolderContents {
@@ -50,4 +53,9 @@ export interface FolderContents {
   page: number;
   limit: number;
   total: number;
+  // The caller's role on this folder: 'owner' for their own drive, or
+  // 'editor' / 'viewer' for a folder someone shared with them.
+  access?: FolderAccess;
 }
+
+export type FolderAccess = 'owner' | 'editor' | 'viewer';

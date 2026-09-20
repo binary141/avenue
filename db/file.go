@@ -111,8 +111,10 @@ func GetFileByID(id, creatorID string) (*sdk.File, error) {
 	return &f, nil
 }
 
-// GetFileByIDForUser returns a file if the user is either its creator or owns
-// the folder it lives in. Used where folder owners need to manage uploaded files.
+// GetFileByIDForUser returns a file if the user can see it: they created it,
+// own the folder it lives in, or it (or a folder above it) has been shared
+// with them. Callers that go on to change the file must enforce a higher
+// access level themselves — UpdateFile and the Trash/Purge functions do.
 //
 // The parent folder's UUID is included (via a join) so callers that fetch a
 // file and pass it straight to UpdateFile don't accidentally null out
@@ -125,8 +127,7 @@ func GetFileByIDForUser(id, userID string) (*sdk.File, error) {
 		FROM files f
 		LEFT JOIN folders p ON p.id = f.parent_id
 		WHERE f.uuid=$1 AND f.deleted_at IS NULL
-		  AND (f.created_by=$2::BIGINT
-		       OR f.parent_id IN (SELECT id FROM folders WHERE owner_id=$2::BIGINT))
+		  AND file_access(f.id, $2::BIGINT) >= 1
 	`, id, userID).Scan(&f.ID, &f.UUID, &f.Name, &f.Extension, &f.MimeType, &f.FileSize, &checksum, &f.CreatedBy, &f.CreatedAt, &parent)
 	if err != nil {
 		return nil, err
@@ -181,8 +182,9 @@ func DeleteFile(id, creatorID string) error {
 	return err
 }
 
-// TrashFileForUser soft-deletes a file if the user is its creator or owns
-// its parent folder, and revokes any share links pointing at it.
+// TrashFileForUser soft-deletes a file if the user owns it or has edit access
+// to the folder it lives in (see file_can_restructure), and revokes any share
+// links pointing at it. A trashed file lands in its owner's trash.
 func TrashFileForUser(id, userID string) error {
 	tx, err := DB.Beginx()
 	if err != nil {
@@ -192,8 +194,7 @@ func TrashFileForUser(id, userID string) error {
 
 	res, err := tx.Exec(`
 		UPDATE files SET deleted_at = now() WHERE uuid=$1 AND deleted_at IS NULL
-		  AND (created_by=$2::BIGINT
-		       OR parent_id IN (SELECT id FROM folders WHERE owner_id=$2::BIGINT))
+		  AND file_can_restructure(id, $2::BIGINT)
 	`, id, userID)
 	if err != nil {
 		return err
@@ -211,13 +212,11 @@ func TrashFileForUser(id, userID string) error {
 	return tx.Commit()
 }
 
-// RestoreFileForUser un-trashes a file if the user is its creator or owns
-// its parent folder.
+// RestoreFileForUser un-trashes a file if the user owns it.
 func RestoreFileForUser(id, userID string) error {
 	res, err := DB.Exec(`
 		UPDATE files SET deleted_at = NULL WHERE uuid=$1 AND deleted_at IS NOT NULL
-		  AND (created_by=$2::BIGINT
-		       OR parent_id IN (SELECT id FROM folders WHERE owner_id=$2::BIGINT))
+		  AND file_access(id, $2::BIGINT) = 3
 	`, id, userID)
 	if err != nil {
 		return err
@@ -230,15 +229,14 @@ func RestoreFileForUser(id, userID string) error {
 	return nil
 }
 
-// PurgeFileForUser permanently deletes a trashed file if the user is its
-// creator or owns its parent folder, and returns the deleted row so the
-// caller can remove its blob from the filesystem and reconcile quota usage.
+// PurgeFileForUser permanently deletes a trashed file if the user owns it,
+// and returns the deleted row so the caller can remove its blob from the
+// filesystem and reconcile quota usage.
 func PurgeFileForUser(id, userID string) (*sdk.File, error) {
 	var f sdk.File
 	err := DB.QueryRow(`
 		DELETE FROM files WHERE uuid=$1 AND deleted_at IS NOT NULL
-		  AND (created_by=$2::BIGINT
-		       OR parent_id IN (SELECT id FROM folders WHERE owner_id=$2::BIGINT))
+		  AND file_access(id, $2::BIGINT) = 3
 		RETURNING uuid, created_by, file_size
 	`, id, userID).Scan(&f.UUID, &f.CreatedBy, &f.FileSize)
 	if err != nil {
@@ -348,20 +346,22 @@ func ListChildFilePublic(parentID string) ([]sdk.File, error) {
 }
 
 // CountChildFiles returns the total number of (non-deleted) files in
-// parentID, for computing pagination totals alongside db.ListFolderItems.
-func CountChildFiles(parentID, ownerID string) (int, error) {
+// parentID that userID can see, for computing pagination totals alongside
+// db.ListFolderItems.
+func CountChildFiles(parentID, userID string) (int, error) {
 	var count int
 	var err error
 
 	if parentID == "" {
 		err = DB.QueryRow(`
 			SELECT COUNT(*) FROM files WHERE parent_id IS NULL AND created_by=$1::BIGINT AND deleted_at IS NULL
-		`, ownerID).Scan(&count)
+		`, userID).Scan(&count)
 	} else {
 		err = DB.QueryRow(`
 			SELECT COUNT(*) FROM files
-			WHERE parent_id = (SELECT id FROM folders WHERE uuid = $1 AND owner_id = $2::BIGINT) AND deleted_at IS NULL
-		`, parentID, ownerID).Scan(&count)
+			WHERE parent_id = (SELECT id FROM folders WHERE uuid = $1 AND folder_access(id, $2::BIGINT) >= 1)
+			  AND deleted_at IS NULL
+		`, parentID, userID).Scan(&count)
 	}
 	return count, err
 }
@@ -374,8 +374,8 @@ func escapeLikePattern(s string) string {
 }
 
 // SearchChildFiles returns files directly inside parentID (or the root, if
-// parentID is "") owned by ownerID whose name starts with namePrefix.
-func SearchChildFiles(parentID, ownerID, namePrefix string) ([]sdk.File, error) {
+// parentID is "") that userID can see and whose name starts with namePrefix.
+func SearchChildFiles(parentID, userID, namePrefix string) ([]sdk.File, error) {
 	pattern := escapeLikePattern(namePrefix) + "%"
 
 	var (
@@ -388,14 +388,14 @@ func SearchChildFiles(parentID, ownerID, namePrefix string) ([]sdk.File, error) 
 			SELECT id, uuid, name, extension, mime_type, file_size, checksum, created_by, created_at
 			FROM files
 			WHERE parent_id IS NULL AND created_by=$1::BIGINT AND name LIKE $2 ESCAPE '\' AND deleted_at IS NULL
-		`, ownerID, pattern)
+		`, userID, pattern)
 	} else {
 		rows, err = DB.Query(`
 			SELECT id, uuid, name, extension, mime_type, file_size, checksum, created_by, created_at
 			FROM files
-			WHERE parent_id = (SELECT id FROM folders WHERE uuid = $1 AND owner_id = $3::BIGINT)
+			WHERE parent_id = (SELECT id FROM folders WHERE uuid = $1 AND folder_access(id, $3::BIGINT) >= 1)
 			  AND name LIKE $2 ESCAPE '\' AND deleted_at IS NULL
-		`, parentID, pattern, ownerID)
+		`, parentID, pattern, userID)
 	}
 	if err != nil {
 		return nil, err
@@ -415,8 +415,10 @@ func SearchChildFiles(parentID, ownerID, namePrefix string) ([]sdk.File, error) 
 	return files, rows.Err()
 }
 
-// UpdateFile updates a file's metadata if userID is its creator or owns its
-// parent folder.
+// UpdateFile updates a file's metadata if userID has edit access to it (owns
+// it, or has an editor grant on it or a folder above it). It does not check
+// access to a new parent, so callers that move a file must do that
+// themselves — see BulkMove.
 func UpdateFile(f sdk.File, userID string) error {
 	res, err := DB.Exec(`
 		UPDATE files SET name=$2, extension=$3, mime_type=$4, file_size=$5, checksum=$7,
@@ -424,8 +426,7 @@ func UpdateFile(f sdk.File, userID string) error {
 			                 ELSE (SELECT id FROM folders WHERE uuid = $6)
 			            END
 		WHERE uuid=$1
-		  AND (created_by=$8::BIGINT
-		       OR parent_id IN (SELECT id FROM folders WHERE owner_id=$8::BIGINT))
+		  AND file_access(id, $8::BIGINT) >= 2
 	`, f.UUID, f.Name, f.Extension, f.MimeType, f.FileSize, f.Parent, sql.NullString{String: f.Checksum, Valid: f.Checksum != ""}, userID)
 	if err != nil {
 		return err

@@ -79,6 +79,11 @@ const router = createRouter({
             component: () => import('@/views/SharesPage.vue'),
         },
         {
+            path: '/shared',
+            name: 'shared-with-me',
+            component: () => import('@/views/SharedWithMePage.vue'),
+        },
+        {
             path: '/trash',
             name: 'trash',
             component: () => import('@/views/TrashPage.vue'),

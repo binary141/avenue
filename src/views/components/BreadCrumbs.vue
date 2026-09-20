@@ -50,6 +50,10 @@ defineProps({
 })
 
 function handleClick(breadcrumb: Breadcrumb) {
+  if (breadcrumb.path) {
+    router.push({ path: breadcrumb.path })
+    return
+  }
   router.push({
     path: '/',
     query: { folderId: breadcrumb.folder_id },

@@ -35,11 +35,12 @@ func scanFolderItems(rows *sql.Rows) ([]sdk.FolderItem, error) {
 }
 
 // ListFolderItems lists the folders and/or files directly inside parentID
-// (or the root, if parentID is "" or the root sentinel), owned by ownerID,
-// as a single deterministically-ordered, paginated list — combining what
-// were previously two separately-paginated queries (ListChildFolder,
-// ListChildFile) so a page boundary can't split inconsistently between the
-// two types. Folders are always grouped ahead of files — a fixed
+// (or the root, if parentID is "" or the root sentinel) that userID can see —
+// their own drive at the root, or anything inside a folder they own or that
+// has been shared with them — as a single deterministically-ordered,
+// paginated list — combining what were previously two separately-paginated
+// queries (ListChildFolder, ListChildFile) so a page boundary can't split
+// inconsistently between the two types. Folders are always grouped ahead of files — a fixed
 // "CASE WHEN item_type = 'folder' THEN 0 ELSE 1 END" leads the ORDER BY
 // regardless of sortDir — so the requested sortBy/sortDir only decide
 // ordering within each group. sortBy must already be validated by the
@@ -50,7 +51,7 @@ func scanFolderItems(rows *sql.Rows) ([]sdk.FolderItem, error) {
 // stable when the sort column has duplicate values. itemType filters the
 // result to just sdk.FolderItemTypeFolder or sdk.FolderItemTypeFile; an
 // empty string returns both, unioned as before.
-func ListFolderItems(parentID, ownerID, sortBy string, sortDir sdk.SortDirection, limit, offset int, itemType string) ([]sdk.FolderItem, error) {
+func ListFolderItems(parentID, userID, sortBy string, sortDir sdk.SortDirection, limit, offset int, itemType string) ([]sdk.FolderItem, error) {
 	orderBy := " ORDER BY (CASE WHEN item_type = 'folder' THEN 0 ELSE 1 END), " + sortBy + " " + string(sortDir) + ", uuid ASC"
 	includeFolders := itemType == "" || itemType == sdk.FolderItemTypeFolder
 	includeFiles := itemType == "" || itemType == sdk.FolderItemTypeFile
@@ -75,24 +76,25 @@ func ListFolderItems(parentID, ownerID, sortBy string, sortDir sdk.SortDirection
 			WHERE fi.parent_id IS NULL AND fi.created_by = $1::BIGINT AND fi.deleted_at IS NULL`
 
 		query := "SELECT * FROM (" + combineQueries(includeFolders, includeFiles, folderQuery, fileQuery) + `) combined` + orderBy + ` LIMIT $2 OFFSET $3`
-		rows, err = DB.Query(query, ownerID, limit, offset)
+		rows, err = DB.Query(query, userID, limit, offset)
 	} else {
 		folderQuery := `
 			SELECT 'folder' AS item_type, f.id, f.uuid, f.name, '' AS extension, '' AS mime_type,
 			       0::BIGINT AS file_size, NULL::TEXT AS checksum, COALESCE(f.parent_id, 0) AS parent_id,
 			       f.owner_id, 0::BIGINT AS created_by, f.created_at, f.deleted_at
 			FROM folders f
-			WHERE f.parent_id = (SELECT id FROM folders WHERE uuid = $1 AND owner_id = $2::BIGINT)
-			  AND f.owner_id = $2::BIGINT AND f.deleted_at IS NULL`
+			WHERE f.parent_id = (SELECT id FROM folders WHERE uuid = $1 AND folder_access(id, $2::BIGINT) >= 1)
+			  AND f.deleted_at IS NULL`
 		fileQuery := `
 			SELECT 'file' AS item_type, fi.id, fi.uuid, fi.name, fi.extension, fi.mime_type,
 			       fi.file_size, fi.checksum, COALESCE(fi.parent_id, 0) AS parent_id,
 			       0::BIGINT AS owner_id, fi.created_by, fi.created_at, fi.deleted_at
 			FROM files fi
-			WHERE fi.parent_id = (SELECT id FROM folders WHERE uuid = $1 AND owner_id = $2::BIGINT) AND fi.deleted_at IS NULL`
+			WHERE fi.parent_id = (SELECT id FROM folders WHERE uuid = $1 AND folder_access(id, $2::BIGINT) >= 1)
+			  AND fi.deleted_at IS NULL`
 
 		query := "SELECT * FROM (" + combineQueries(includeFolders, includeFiles, folderQuery, fileQuery) + `) combined` + orderBy + ` LIMIT $3 OFFSET $4`
-		rows, err = DB.Query(query, parentID, ownerID, limit, offset)
+		rows, err = DB.Query(query, parentID, userID, limit, offset)
 	}
 	if err != nil {
 		return nil, err

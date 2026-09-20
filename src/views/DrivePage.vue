@@ -4,6 +4,7 @@
       <h1 class="text-center flex-1 text-2xl font-bold">{{ pageTitle }}</h1>
 
       <AppButton
+        v-if="canEdit"
         @click="() => { openCreateFolderModal(); $emit('close-menu')}"
       >
         Create Folder
@@ -28,17 +29,19 @@
     </AppModal>
 
     <FileUploader
+      v-if="canEdit"
       :parent="currentFolderId"
       @file-uploaded="handleFileUploaded"
       @upload="refreshCurrentList"
       @error="handleUploadError"
       :multiple=true
-      :maxSize=maxFileSize
+      :maxSize="isOwner ? maxFileSize : serverMax"
       :chunkSize=uploadChunkSize
-      :disabled="serverMax === 0 || (usersStore.userData.data.quota !== 0 && usersStore.userData.data.spaceUsed >= usersStore.userData.data.quota)"
+      :disabled="serverMax === 0 || (isOwner && usersStore.userData.data.quota !== 0 && usersStore.userData.data.spaceUsed >= usersStore.userData.data.quota)"
     >
       <template #aside>
         <FileUsageBar
+          v-if="isOwner"
           :used="usersStore.userData.data.spaceUsed"
           :quota="usersStore.userData.data.quota"
         />
@@ -57,6 +60,7 @@
       </span>
 
       <AppButton
+        v-if="isOwner"
         size="sm"
         :disabled="selectedFiles.size === 0 && selectedFolders.size === 0"
         @click="openBulkMoveModal"
@@ -73,7 +77,7 @@
         Download
       </AppButton>
 
-      <AppButton variant="danger" size="sm" @click="bulkDelete">
+      <AppButton v-if="canEdit" variant="danger" size="sm" @click="bulkDelete">
         Delete
       </AppButton>
 
@@ -175,12 +179,13 @@
 
               <!-- Actions -->
               <span class="row-actions flex items-center gap-1" :class="{ 'row-actions--menu-open': openMenuId === 'folder-' + item.uuid }">
-                <span class="row-menu-wrap">
+                <span v-if="canEdit" class="row-menu-wrap">
                   <span class="icon-btn" title="More" @click.stop="toggleRowMenu('folder-' + item.uuid)">⋮</span>
                   <div v-if="openMenuId === 'folder-' + item.uuid" class="row-menu" :style="rowMenuStyle" @click.stop>
                     <button class="row-menu-item" @click="openFolderEditModal(item); openMenuId = null">Rename</button>
-                    <button v-if="folderSharingEnabled" class="row-menu-item" @click="openFolderShareModal(item); openMenuId = null">Share</button>
-                    <button class="row-menu-item" @click="openMoveModal(item); openMenuId = null">Move to…</button>
+                    <button v-if="isOwner" class="row-menu-item" @click="openUserShareModal(item); openMenuId = null">Share with people…</button>
+                    <button v-if="isOwner && folderSharingEnabled" class="row-menu-item" @click="openFolderShareModal(item); openMenuId = null">Share via link…</button>
+                    <button v-if="isOwner" class="row-menu-item" @click="openMoveModal(item); openMenuId = null">Move to…</button>
                     <button class="row-menu-item row-menu-item--danger" @click="deleteFolder(item.uuid, item.name); openMenuId = null">Delete</button>
                   </div>
                 </span>
@@ -217,12 +222,13 @@
                   <a @click.stop :href="getDownloadURL(item.uuid)" :download="item.name">⬇️</a>
                 </span>
 
-                <span class="row-menu-wrap">
+                <span v-if="canEdit" class="row-menu-wrap">
                   <span class="icon-btn" title="More" @click.stop="toggleRowMenu('file-' + item.uuid)">⋮</span>
                   <div v-if="openMenuId === 'file-' + item.uuid" class="row-menu" :style="rowMenuStyle" @click.stop>
                     <button class="row-menu-item" @click="openFileEditModal(item); openMenuId = null">Rename</button>
-                    <button class="row-menu-item" @click="openMoveModal(item); openMenuId = null">Move to…</button>
-                    <button v-if="fileSharingEnabled" class="row-menu-item" @click="openShareModal(item); openMenuId = null">Share</button>
+                    <button v-if="isOwner" class="row-menu-item" @click="openMoveModal(item); openMenuId = null">Move to…</button>
+                    <button v-if="isOwner" class="row-menu-item" @click="openUserShareModal(item); openMenuId = null">Share with people…</button>
+                    <button v-if="isOwner && fileSharingEnabled" class="row-menu-item" @click="openShareModal(item); openMenuId = null">Share via link…</button>
                     <button class="row-menu-item row-menu-item--danger" @click="deleteFile(item.uuid, item.name); openMenuId = null">Delete</button>
                   </div>
                 </span>
@@ -236,7 +242,7 @@
       <div v-if="!loading && items.length === 0" class="empty-state">
         <span class="empty-state-icon">🗂️</span>
         <p class="empty-state-title">This folder is empty</p>
-        <p class="empty-state-hint">Drag files in above, or click the upload area to get started.</p>
+        <p v-if="canEdit" class="empty-state-hint">Drag files in above, or click the upload area to get started.</p>
       </div>
 
       <!-- Searching -->
@@ -341,6 +347,12 @@
         </AppButton>
       </template>
     </AppModal>
+
+    <!-- Share with other users -->
+    <UserShareModal
+      :item="userSharingItem"
+      @close="userSharingItem = null"
+    />
 
     <!-- Share Folder Modal -->
     <AppModal :show="!!sharingFolder" width="520px" @close="closeFolderShareModal">
@@ -506,13 +518,14 @@ import BreadCrumbs from './components/BreadCrumbs.vue'
 import { ref, onMounted, onUnmounted, watch, nextTick, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import api from '@/utils/api';
-import type { Breadcrumb, FolderItem, FolderContents } from '@/types/folder';
+import type { Breadcrumb, FolderAccess, FolderItem, FolderContents } from '@/types/folder';
 import SpinnerView from './components/SpinnerView.vue';
 import ErrorMessage from './components/ErrorMessage.vue';
 import PaginationControls from './components/PaginationControls.vue';
 import FileUploader from '@/components/FileUploader.vue';
 import FileUsageBar from '@/components/FileUsageBar.vue';
 import FileViewer from '@/components/FileViewer.vue';
+import UserShareModal from '@/components/UserShareModal.vue';
 import { useUsersStore } from '../stores/users';
 import { confirm } from '@/composables/confirm';
 
@@ -542,6 +555,20 @@ const currentPageCount = computed(() => items.value.length);
 const totalItemsCount = computed(() => total.value);
 const currentFolderId = ref<string>('');
 const usersStore = useUsersStore();
+
+// The caller's role in the folder being shown. Their own drive is always
+// 'owner'; inside a folder shared with them it's 'editor' or 'viewer', which
+// limits what the page offers (the server enforces the same rules).
+const access = ref<FolderAccess>('owner');
+const isOwner = computed(() => access.value === 'owner');
+const canEdit = computed(() => access.value !== 'viewer');
+
+// ----- Share with other users -----
+const userSharingItem = ref<FolderItem | null>(null);
+
+function openUserShareModal(item: FolderItem) {
+  userSharingItem.value = item;
+}
 
 // ----- Modal State -----
 const viewingFile = ref<FolderItem | null>(null);
@@ -1354,7 +1381,17 @@ async function loadFolderContents(folderId: string = '') {
     if (response.ok && response.body) {
       const contents = response.body as FolderContents
       items.value = contents.items || []
+      access.value = contents.access || 'owner'
       breadcrumbs.value = contents.breadcrumbs || []
+      if (access.value !== 'owner' && breadcrumbs.value.length > 0) {
+        // The trail starts at "Drive", the caller's own root — but a shared
+        // folder lives in someone else's drive, so lead back to the list of
+        // things shared with them instead.
+        breadcrumbs.value = [
+          { label: 'Shared with me', folder_id: '', path: '/shared' },
+          ...breadcrumbs.value.slice(1),
+        ]
+      }
       page.value = contents.page || 1
       limit.value = contents.limit || limit.value
       total.value = contents.total || 0

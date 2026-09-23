@@ -9,5 +9,5 @@ mkdir -p /avenue/uploads
 chown -R app:app /avenue/uploads
 
 # Drop to the non-root user and run the app
-exec su-exec app "$@"
+exec su-exec "$PUID:$PGID" sh -c 'mkdir -p /avenue/uploads && exec "$@"' sh "$@"
 

@@ -15,6 +15,22 @@ func BlobPath(uuid string) string {
 	return "/" + uuid[0:2] + "/" + uuid[2:4] + "/" + uuid
 }
 
+// CheckBlobRootWritable verifies that the blob root can be written to by
+// creating and removing a probe file at its top level. Run at startup so a
+// misconfigured or read-only UPLOAD_DIR fails immediately instead of on the
+// first upload.
+func CheckBlobRootWritable(fs afero.Fs) error {
+	const probe = ".avenue-write-check"
+	f, err := fs.OpenFile(probe, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600)
+	if err != nil {
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	return fs.Remove(probe)
+}
+
 // EnsureBlobDir creates the shard directory that BlobPath(uuid) lives in, if
 // it doesn't already exist.
 func EnsureBlobDir(fs afero.Fs, uuid string) error {

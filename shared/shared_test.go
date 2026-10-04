@@ -1,6 +1,29 @@
 package shared
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/spf13/afero"
+)
+
+func TestCheckBlobRootWritable(t *testing.T) {
+	t.Run("writable", func(t *testing.T) {
+		fs := afero.NewMemMapFs()
+		if err := CheckBlobRootWritable(fs); err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+		if exists, _ := afero.Exists(fs, ".avenue-write-check"); exists {
+			t.Error("probe file was not removed")
+		}
+	})
+
+	t.Run("read-only", func(t *testing.T) {
+		fs := afero.NewReadOnlyFs(afero.NewMemMapFs())
+		if err := CheckBlobRootWritable(fs); err == nil {
+			t.Fatal("expected error for read-only filesystem, got nil")
+		}
+	})
+}
 
 func TestParsePagination(t *testing.T) {
 	tests := []struct {

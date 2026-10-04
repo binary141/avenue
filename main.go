@@ -37,6 +37,11 @@ func main() {
 
 	server := handlers.SetupServer()
 
+	if err := shared.CheckBlobRootWritable(server.FS()); err != nil {
+		logger.Errorf("uploads directory is not writable (UPLOAD_DIR=%s): %v", shared.GetEnv("UPLOAD_DIR", "./avenuectl/temp/"), err)
+		return
+	}
+
 	sweeper.Start(server.FS())
 	sweeper.StartSessionSweeper()
 	sweeper.StartUploadSessionSweeper(server.FS())

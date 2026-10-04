@@ -10,7 +10,8 @@ services:
 
     volumes:
       - ./:/app:rw
-      - upload-data:/avenue/uploads
+      # - upload-data:/avenue/uploads
+      - ./uploads:/avenue/uploads
     ports:
       - "8080:8080"
     depends_on:
@@ -21,6 +22,8 @@ services:
 
       # 20Gib
       MAX_FILE_BYTE_SIZE: 21474836480
+      PUID: 1000
+      PGID: 1000
 
       ENABLE_FOLDER_SHARING: true
       ENABLE_FILE_SHARING: true

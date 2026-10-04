@@ -6,7 +6,7 @@ PGID="${PGID:-1000}"
 
 # Make sure the uploads directory exists and is writable
 mkdir -p /avenue/uploads
-chown -R app:app /avenue/uploads
+chown -R "$PUID:$PGID" /avenue/uploads
 
 # Drop to the non-root user and run the app
 exec su-exec "$PUID:$PGID" sh -c 'mkdir -p /avenue/uploads && exec "$@"' sh "$@"

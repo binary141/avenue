@@ -63,7 +63,7 @@ func (s *Server) Login(c *gin.Context) {
 
 	loginEmailLimiter.reset(emailKey)
 
-	session, err := db.CreateSession(u.ID, c.Request.UserAgent(), c.ClientIP())
+	session, err := db.CreateSession(u.ID, c.Request.UserAgent(), c.ClientIP(), db.ClientTypeWeb)
 	if err != nil {
 		respond(c, http.StatusInternalServerError, "", fmt.Errorf("create session: %w", err))
 		return

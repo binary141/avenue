@@ -6,41 +6,55 @@ import (
 	"github.com/google/uuid"
 )
 
+// Client types recorded on a session. They must match the seeded rows in
+// session_types (migration 0020), which sessions.client_type references.
+const (
+	ClientTypeWeb    = "web"
+	ClientTypeMobile = "mobile"
+)
+
 type Session struct {
-	ID        int64     `json:"id"`
-	SessionID string    `json:"-"`
-	ExpiresAt int64     `json:"expiresAt"`
-	IsValid   bool      `json:"isValid"`
-	UserId    int64     `json:"userID"`
-	CreatedAt time.Time `json:"createdAt"`
-	UserAgent string    `json:"userAgent"`
-	IPAddress string    `json:"ipAddress"`
+	ID         int64     `json:"id"`
+	SessionID  string    `json:"-"`
+	ExpiresAt  int64     `json:"expiresAt"`
+	IsValid    bool      `json:"isValid"`
+	UserId     int64     `json:"userID"`
+	CreatedAt  time.Time `json:"createdAt"`
+	UserAgent  string    `json:"userAgent"`
+	IPAddress  string    `json:"ipAddress"`
+	ClientType string    `json:"clientType"`
 }
 
-func CreateSession(userId int64, userAgent, ipAddress string) (Session, error) {
+func CreateSession(userId int64, userAgent, ipAddress, clientType string) (Session, error) {
 	s := Session{
-		SessionID: uuid.NewString(),
-		ExpiresAt: time.Now().Add(15 * time.Minute).Unix(),
-		IsValid:   true,
-		UserId:    userId,
-		UserAgent: userAgent,
-		IPAddress: ipAddress,
+		SessionID:  uuid.NewString(),
+		ExpiresAt:  time.Now().Add(15 * time.Minute).Unix(),
+		IsValid:    true,
+		UserId:     userId,
+		UserAgent:  userAgent,
+		IPAddress:  ipAddress,
+		ClientType: clientType,
 	}
 
+	// The session_type_id subquery returns NULL for an unknown name, which the
+	// NOT NULL constraint rejects, so a bad clientType can't be stored.
 	err := DB.QueryRow(`
-		INSERT INTO sessions (uuid, expires_at, is_valid, user_id, user_agent, ip_address)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		INSERT INTO sessions (uuid, expires_at, is_valid, user_id, user_agent, ip_address, session_type_id)
+		VALUES ($1, $2, $3, $4, $5, $6, (SELECT id FROM session_types WHERE name = $7))
 		RETURNING id, created_at
-	`, s.SessionID, s.ExpiresAt, s.IsValid, s.UserId, s.UserAgent, s.IPAddress).Scan(&s.ID, &s.CreatedAt)
+	`, s.SessionID, s.ExpiresAt, s.IsValid, s.UserId, s.UserAgent, s.IPAddress, s.ClientType).Scan(&s.ID, &s.CreatedAt)
 	return s, err
 }
 
 func getSessionByToken(token string) (Session, error) {
 	var s Session
 	err := DB.QueryRow(
-		`SELECT id, uuid, expires_at, is_valid, user_id, created_at, COALESCE(user_agent,''), COALESCE(ip_address,'') FROM sessions WHERE uuid = $1`,
+		`SELECT s.id, s.uuid, s.expires_at, s.is_valid, s.user_id, s.created_at, COALESCE(s.user_agent,''), COALESCE(s.ip_address,''), st.name
+		FROM sessions s
+		JOIN session_types st ON st.id = s.session_type_id
+		WHERE s.uuid = $1`,
 		token,
-	).Scan(&s.ID, &s.SessionID, &s.ExpiresAt, &s.IsValid, &s.UserId, &s.CreatedAt, &s.UserAgent, &s.IPAddress)
+	).Scan(&s.ID, &s.SessionID, &s.ExpiresAt, &s.IsValid, &s.UserId, &s.CreatedAt, &s.UserAgent, &s.IPAddress, &s.ClientType)
 	return s, err
 }
 
@@ -48,10 +62,11 @@ func getSessionByToken(token string) (Session, error) {
 // most recently created first.
 func ListSessionsForUser(userID int64) ([]Session, error) {
 	rows, err := DB.Query(`
-		SELECT id, uuid, expires_at, is_valid, user_id, created_at, COALESCE(user_agent,''), COALESCE(ip_address,'')
-		FROM sessions
-		WHERE user_id = $1 AND is_valid = true AND expires_at >= $2
-		ORDER BY created_at DESC
+		SELECT s.id, s.uuid, s.expires_at, s.is_valid, s.user_id, s.created_at, COALESCE(s.user_agent,''), COALESCE(s.ip_address,''), st.name
+		FROM sessions s
+		JOIN session_types st ON st.id = s.session_type_id
+		WHERE s.user_id = $1 AND s.is_valid = true AND s.expires_at >= $2
+		ORDER BY s.created_at DESC
 	`, userID, time.Now().Unix())
 	if err != nil {
 		return nil, err
@@ -61,7 +76,7 @@ func ListSessionsForUser(userID int64) ([]Session, error) {
 	var sessions []Session
 	for rows.Next() {
 		var s Session
-		if err := rows.Scan(&s.ID, &s.SessionID, &s.ExpiresAt, &s.IsValid, &s.UserId, &s.CreatedAt, &s.UserAgent, &s.IPAddress); err != nil {
+		if err := rows.Scan(&s.ID, &s.SessionID, &s.ExpiresAt, &s.IsValid, &s.UserId, &s.CreatedAt, &s.UserAgent, &s.IPAddress, &s.ClientType); err != nil {
 			return nil, err
 		}
 		sessions = append(sessions, s)

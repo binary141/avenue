@@ -3,6 +3,7 @@ package sdk
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 )
 
 // CreateFolder creates a new folder. parent is the destination folder's
@@ -32,16 +33,16 @@ func (c *Client) PurgeFolder(h http.Header, folderID string) error {
 
 // UpdateFolderName renames a folder.
 func (c *Client) UpdateFolderName(h http.Header, folderID, newName string) error {
-	return c.request(h, http.MethodPatch, fmt.Sprintf("/v1/folder/%s/%s", folderID, newName), nil, nil)
+	return c.request(h, http.MethodPatch, fmt.Sprintf("/v1/folder/%s/%s", folderID, url.PathEscape(newName)), nil, nil)
 }
 
 // ListFolderContents lists the files and subfolders of a folder, along with
-// its breadcrumb trail. Pass "" for folderID to list the root folder. page
-// and limit control pagination of both lists; pass 0 for either to use the
-// server-side defaults.
-func (c *Client) ListFolderContents(h http.Header, folderID string, page, limit int) (V1FolderContentsResponse, error) {
+// its breadcrumb trail, as one unified page of Items. Pass "" for folderID to
+// list the root folder. opts.SortBy accepts SortByName, SortBySize and
+// SortByDate; opts.Type limits the list to folders or files.
+func (c *Client) ListFolderContents(h http.Header, folderID string, opts ListOptions) (V1FolderContentsResponse, error) {
 	var out V1FolderContentsResponse
-	path := fmt.Sprintf("/v1/folder/list/%s?%s", folderID, paginationQuery(page, limit))
+	path := fmt.Sprintf("/v1/folder/list/%s?%s", folderID, opts.query())
 	err := c.request(h, http.MethodGet, path, nil, &out)
 	return out, err
 }

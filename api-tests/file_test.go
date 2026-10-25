@@ -3,13 +3,15 @@ package apitests
 import (
 	"strings"
 	"testing"
+
+	"avenue/backend/sdk"
 )
 
 func TestFileLifecycle(t *testing.T) {
 	client, h := authedClient(t)
 	name := uniqueName("file") + ".txt"
 
-	if err := client.UploadFile(h, name, strings.NewReader("hello from api-tests"), ""); err != nil {
+	if _, err := client.UploadFile(h, name, strings.NewReader("hello from api-tests"), ""); err != nil {
 		t.Fatalf("UploadFile: %v", err)
 	}
 
@@ -38,7 +40,7 @@ func TestFileLifecycle(t *testing.T) {
 		t.Fatalf("trashed file %q still present in root listing", newName)
 	}
 
-	trash, err := client.ListTrash(h, 1, 200)
+	trash, err := client.ListTrash(h, sdk.ListOptions{Page: 1, Limit: 200})
 	if err != nil {
 		t.Fatalf("ListTrash: %v", err)
 	}

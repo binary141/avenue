@@ -16,7 +16,7 @@ func TestBulkDeleteAndRestore(t *testing.T) {
 	if err := client.CreateFolder(h, folderName, ""); err != nil {
 		t.Fatalf("CreateFolder: %v", err)
 	}
-	if err := client.UploadFile(h, fileName, strings.NewReader("bulk test content"), ""); err != nil {
+	if _, err := client.UploadFile(h, fileName, strings.NewReader("bulk test content"), ""); err != nil {
 		t.Fatalf("UploadFile: %v", err)
 	}
 
@@ -39,7 +39,7 @@ func TestBulkDeleteAndRestore(t *testing.T) {
 		t.Fatalf("expected both test items gone from root listing after bulk delete")
 	}
 
-	trash, err := client.ListTrash(h, 1, 200)
+	trash, err := client.ListTrash(h, sdk.ListOptions{Page: 1, Limit: 200})
 	if err != nil {
 		t.Fatalf("ListTrash: %v", err)
 	}
@@ -89,7 +89,7 @@ func TestBulkMove(t *testing.T) {
 	if err := client.CreateFolder(h, srcName, ""); err != nil {
 		t.Fatalf("CreateFolder (src): %v", err)
 	}
-	if err := client.UploadFile(h, fileName, strings.NewReader("bulk move test content"), ""); err != nil {
+	if _, err := client.UploadFile(h, fileName, strings.NewReader("bulk move test content"), ""); err != nil {
 		t.Fatalf("UploadFile: %v", err)
 	}
 
@@ -114,7 +114,7 @@ func TestBulkMove(t *testing.T) {
 		t.Fatalf("expected moved items gone from root listing after bulk move")
 	}
 
-	contents, err := client.ListFolderContents(h, dest.UUID, 1, 200)
+	contents, err := client.ListFolderContents(h, dest.UUID, sdk.ListOptions{Page: 1, Limit: 200})
 	if err != nil {
 		t.Fatalf("ListFolderContents (dest): %v", err)
 	}

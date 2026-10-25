@@ -2,6 +2,7 @@ package sdk
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -9,35 +10,42 @@ import (
 	"net/url"
 )
 
-// UploadFile uploads a file's contents. parent is the destination folder's
-// UUID, or "" for the root folder.
-func (c *Client) UploadFile(h http.Header, filename string, data io.Reader, parent string) error {
+// UploadFile uploads a file's contents in a single request and returns the
+// created file record. parent is the destination folder's UUID, or "" for the
+// root folder. The parent field is written before the file part, which the
+// server requires when checking where the file is going.
+func (c *Client) UploadFile(h http.Header, filename string, data io.Reader, parent string) (File, error) {
 	var buf bytes.Buffer
 	mw := multipart.NewWriter(&buf)
 
 	if parent != "" {
 		if err := mw.WriteField("parent", parent); err != nil {
-			return err
+			return File{}, err
 		}
 	}
 
 	fw, err := mw.CreateFormFile("file", filename)
 	if err != nil {
-		return err
+		return File{}, err
 	}
 	if _, err := io.Copy(fw, data); err != nil {
-		return err
+		return File{}, err
 	}
 	if err := mw.Close(); err != nil {
-		return err
+		return File{}, err
 	}
 
 	resp, err := c.rawRequest(h, http.MethodPost, "/v1/file", &buf, mw.FormDataContentType())
 	if err != nil {
-		return err
+		return File{}, err
 	}
 	defer func() { _ = resp.Body.Close() }()
-	return nil
+
+	var out File
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return File{}, err
+	}
+	return out, nil
 }
 
 // ListFiles lists every file owned by the authenticated user.
@@ -51,9 +59,9 @@ func (c *Client) ListFiles(h http.Header) ([]File, error) {
 // folderID to search the root folder.
 func (c *Client) SearchFiles(h http.Header, folderID, fileName string) ([]File, error) {
 	var out []File
-	path := fmt.Sprintf("/v1/folder/files/%s", fileName)
+	path := fmt.Sprintf("/v1/folder/files/%s", url.PathEscape(fileName))
 	if folderID != "" {
-		path = fmt.Sprintf("/v1/folder/%s/files/%s", folderID, fileName)
+		path = fmt.Sprintf("/v1/folder/%s/files/%s", folderID, url.PathEscape(fileName))
 	}
 	err := c.request(h, http.MethodGet, path, nil, &out)
 	return out, err
@@ -75,7 +83,7 @@ func (c *Client) MoveFile(h http.Header, fileID, parent string) error {
 
 // UpdateFileName renames a file.
 func (c *Client) UpdateFileName(h http.Header, fileID, newName string) error {
-	return c.request(h, http.MethodPatch, fmt.Sprintf("/v1/file/%s/%s", fileID, newName), nil, nil)
+	return c.request(h, http.MethodPatch, fmt.Sprintf("/v1/file/%s/%s", fileID, url.PathEscape(newName)), nil, nil)
 }
 
 // DeleteFile moves a file to the trash.
@@ -93,12 +101,12 @@ func (c *Client) PurgeFile(h http.Header, fileID string) error {
 	return c.request(h, http.MethodDelete, fmt.Sprintf("/v1/file/%s/purge", fileID), nil, nil)
 }
 
-// ListTrash lists the files and folders the user has trashed. page and
-// limit control pagination of both lists; pass 0 for either to use the
-// server-side defaults.
-func (c *Client) ListTrash(h http.Header, page, limit int) (V1TrashResponse, error) {
+// ListTrash lists the top-level files and folders the user has trashed. The
+// trash is ordered by deletion time unless opts.SortBy is SortByName or
+// SortBySize. opts.Type is ignored.
+func (c *Client) ListTrash(h http.Header, opts ListOptions) (V1TrashResponse, error) {
 	var out V1TrashResponse
-	path := "/v1/trash?" + paginationQuery(page, limit)
+	path := "/v1/trash?" + opts.query()
 	err := c.request(h, http.MethodGet, path, nil, &out)
 	return out, err
 }

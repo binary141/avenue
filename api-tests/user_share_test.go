@@ -119,7 +119,7 @@ func newShareFixture(t *testing.T, role string) *shareFixture {
 	if err := client.CreateFolder(alice, "sub", f.folderID); err != nil {
 		t.Fatalf("create subfolder: %v", err)
 	}
-	contents, err := client.ListFolderContents(alice, f.folderID, 1, 200)
+	contents, err := client.ListFolderContents(alice, f.folderID, sdk.ListOptions{Page: 1, Limit: 200})
 	if err != nil {
 		t.Fatalf("list shared folder: %v", err)
 	}
@@ -149,7 +149,7 @@ func TestUserShareViewer(t *testing.T) {
 	f := newShareFixture(t, "viewer")
 
 	// Sees the folder's contents, at every depth, with a viewer role.
-	contents, err := f.client.ListFolderContents(f.bob, f.folderID, 1, 200)
+	contents, err := f.client.ListFolderContents(f.bob, f.folderID, sdk.ListOptions{Page: 1, Limit: 200})
 	if err != nil {
 		t.Fatalf("viewer ListFolderContents: %v", err)
 	}
@@ -159,7 +159,7 @@ func TestUserShareViewer(t *testing.T) {
 	if len(contents.Items) != 2 {
 		t.Fatalf("viewer sees %d items, want 2 (the file and the subfolder)", len(contents.Items))
 	}
-	if _, err := f.client.ListFolderContents(f.bob, f.subID, 1, 200); err != nil {
+	if _, err := f.client.ListFolderContents(f.bob, f.subID, sdk.ListOptions{Page: 1, Limit: 200}); err != nil {
 		t.Fatalf("viewer can't list subfolder (grant should inherit): %v", err)
 	}
 
@@ -196,7 +196,7 @@ func TestUserShareStrangerSeesNothing(t *testing.T) {
 
 	// carol has no grant: everything reads as "not found", not "forbidden",
 	// so she can't tell which ids exist.
-	_, err := f.client.ListFolderContents(f.carol, f.folderID, 1, 200)
+	_, err := f.client.ListFolderContents(f.carol, f.folderID, sdk.ListOptions{Page: 1, Limit: 200})
 	wantStatus(t, "stranger list folder", err, http.StatusNotFound)
 	_, err = f.client.DownloadFile(f.carol, f.fileID)
 	wantStatus(t, "stranger download", err, http.StatusNotFound)
@@ -206,13 +206,14 @@ func TestUserShareStrangerSeesNothing(t *testing.T) {
 
 	// The legacy single-request upload used to accept any parent uuid without
 	// checking it belonged to the caller.
-	wantStatus(t, "stranger legacy upload", f.client.UploadFile(f.carol, "up.txt", strings.NewReader("x"), f.folderID), http.StatusNotFound)
+	_, err = f.client.UploadFile(f.carol, "up.txt", strings.NewReader("x"), f.folderID)
+	wantStatus(t, "stranger legacy upload", err, http.StatusNotFound)
 }
 
 func TestUserShareEditor(t *testing.T) {
 	f := newShareFixture(t, "editor")
 
-	contents, err := f.client.ListFolderContents(f.bob, f.folderID, 1, 200)
+	contents, err := f.client.ListFolderContents(f.bob, f.folderID, sdk.ListOptions{Page: 1, Limit: 200})
 	if err != nil {
 		t.Fatalf("editor ListFolderContents: %v", err)
 	}
@@ -256,7 +257,7 @@ func TestUserShareEditor(t *testing.T) {
 
 	// Alice sees them, and the upload is recorded as hers: it lives in her
 	// drive and counts against her quota.
-	aliceSub, err := f.client.ListFolderContents(f.alice, f.subID, 1, 200)
+	aliceSub, err := f.client.ListFolderContents(f.alice, f.subID, sdk.ListOptions{Page: 1, Limit: 200})
 	if err != nil {
 		t.Fatalf("alice list sub: %v", err)
 	}
@@ -311,7 +312,7 @@ func TestUserShareBreadcrumbsStopAtShareRoot(t *testing.T) {
 	if err := client.CreateFolder(alice, inner, outerF.UUID); err != nil {
 		t.Fatal(err)
 	}
-	contents, _ := client.ListFolderContents(alice, outerF.UUID, 1, 200)
+	contents, _ := client.ListFolderContents(alice, outerF.UUID, sdk.ListOptions{Page: 1, Limit: 200})
 	innerF := findItem(contents.Items, "folder", inner)
 	t.Cleanup(func() {
 		_, _ = client.DeleteFolder(alice, outerF.UUID)
@@ -322,7 +323,7 @@ func TestUserShareBreadcrumbsStopAtShareRoot(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := client.ListFolderContents(bob, innerF.UUID, 1, 200)
+	got, err := client.ListFolderContents(bob, innerF.UUID, sdk.ListOptions{Page: 1, Limit: 200})
 	if err != nil {
 		t.Fatalf("bob list shared folder: %v", err)
 	}
@@ -333,7 +334,7 @@ func TestUserShareBreadcrumbsStopAtShareRoot(t *testing.T) {
 	}
 
 	// And a grant on the inner folder gives no access to its parent.
-	_, err = client.ListFolderContents(bob, outerF.UUID, 1, 200)
+	_, err = client.ListFolderContents(bob, outerF.UUID, sdk.ListOptions{Page: 1, Limit: 200})
 	wantStatus(t, "list parent of shared folder", err, http.StatusNotFound)
 }
 
@@ -374,9 +375,9 @@ func TestUserShareRevokeUpdateAndLeave(t *testing.T) {
 	if err := f.client.DeleteUserShare(f.bob, f.shareID); err != nil {
 		t.Fatalf("grantee leaving share: %v", err)
 	}
-	_, err = f.client.ListFolderContents(f.bob, f.folderID, 1, 200)
+	_, err = f.client.ListFolderContents(f.bob, f.folderID, sdk.ListOptions{Page: 1, Limit: 200})
 	wantStatus(t, "list after leaving", err, http.StatusNotFound)
-	if _, err := f.client.ListFolderContents(f.alice, f.folderID, 1, 200); err != nil {
+	if _, err := f.client.ListFolderContents(f.alice, f.folderID, sdk.ListOptions{Page: 1, Limit: 200}); err != nil {
 		t.Fatalf("owner lost access: %v", err)
 	}
 

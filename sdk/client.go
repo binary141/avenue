@@ -29,15 +29,40 @@ func NewClient(baseURL string) *Client {
 	return &Client{BaseURL: baseURL}
 }
 
-// paginationQuery builds a "page=&limit=" query string, omitting either
-// value that's <= 0 so the server falls back to its own default.
-func paginationQuery(page, limit int) string {
+// ListOptions controls paging, ordering and filtering for list endpoints. Any
+// zero field is left out of the request so the server applies its own default.
+type ListOptions struct {
+	// Page is 1-based. Values <= 0 use the server default.
+	Page int
+	// Limit is the page size. Values <= 0 use the server default, and the
+	// server caps it at its maximum.
+	Limit int
+	// Sort is the direction, SortAsc or SortDesc.
+	Sort SortDirection
+	// SortBy is the column to order by. See SortBy for the accepted values.
+	SortBy SortBy
+	// Type restricts a folder listing to FolderItemTypeFolder or
+	// FolderItemTypeFile. Ignored by the trash, which always lists both.
+	Type string
+}
+
+// query encodes the options as a URL query string, omitting unset fields.
+func (o ListOptions) query() string {
 	q := url.Values{}
-	if page > 0 {
-		q.Set("page", strconv.Itoa(page))
+	if o.Page > 0 {
+		q.Set("page", strconv.Itoa(o.Page))
 	}
-	if limit > 0 {
-		q.Set("limit", strconv.Itoa(limit))
+	if o.Limit > 0 {
+		q.Set("limit", strconv.Itoa(o.Limit))
+	}
+	if o.Sort != "" {
+		q.Set("sort", string(o.Sort))
+	}
+	if o.SortBy != "" {
+		q.Set("sortBy", string(o.SortBy))
+	}
+	if o.Type != "" {
+		q.Set("type", o.Type)
 	}
 	return q.Encode()
 }

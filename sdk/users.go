@@ -42,9 +42,11 @@ func (c *Client) UpdateProfileByID(h http.Header, userID string, req UpdateProfi
 	return out, err
 }
 
-// UpdatePassword changes the authenticated user's own password.
-func (c *Client) UpdatePassword(h http.Header, newPassword string) (User, error) {
-	req := UpdatePasswordRequest{Password: newPassword}
+// UpdatePassword changes the authenticated user's own password. The server
+// requires currentPassword to match the stored password before it will change
+// it.
+func (c *Client) UpdatePassword(h http.Header, currentPassword, newPassword string) (User, error) {
+	req := UpdatePasswordRequest{CurrentPassword: currentPassword, Password: newPassword}
 	var out User
 	err := c.request(h, http.MethodPatch, "/v1/user/password", req, &out)
 	return out, err

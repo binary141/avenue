@@ -19,7 +19,7 @@ func findItem(items []sdk.FolderItem, itemType, name string) *sdk.FolderItem {
 
 func listRoot(t *testing.T, client *sdk.Client, h http.Header) []sdk.FolderItem {
 	t.Helper()
-	contents, err := client.ListFolderContents(h, "", 1, 200)
+	contents, err := client.ListFolderContents(h, "", sdk.ListOptions{Page: 1, Limit: 200})
 	if err != nil {
 		t.Fatalf("ListFolderContents: %v", err)
 	}
@@ -56,7 +56,7 @@ func TestFolderLifecycle(t *testing.T) {
 		t.Fatalf("trashed folder %q still present in root listing", newName)
 	}
 
-	trash, err := client.ListTrash(h, 1, 200)
+	trash, err := client.ListTrash(h, sdk.ListOptions{Page: 1, Limit: 200})
 	if err != nil {
 		t.Fatalf("ListTrash: %v", err)
 	}
@@ -104,7 +104,7 @@ func TestFolderListSortByName(t *testing.T) {
 		}
 	})
 
-	contents, err := client.ListFolderContents(h, "", 1, 200)
+	contents, err := client.ListFolderContents(h, "", sdk.ListOptions{Page: 1, Limit: 200})
 	if err != nil {
 		t.Fatalf("ListFolderContents: %v", err)
 	}

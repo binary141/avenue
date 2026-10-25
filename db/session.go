@@ -25,10 +25,11 @@ type Session struct {
 	ClientType string    `json:"clientType"`
 }
 
-func CreateSession(userId int64, userAgent, ipAddress, clientType string) (Session, error) {
+// CreateSession starts a session of clientType that expires window from now.
+func CreateSession(userId int64, userAgent, ipAddress, clientType string, window time.Duration) (Session, error) {
 	s := Session{
 		SessionID:  uuid.NewString(),
-		ExpiresAt:  time.Now().Add(15 * time.Minute).Unix(),
+		ExpiresAt:  time.Now().Add(window).Unix(),
 		IsValid:    true,
 		UserId:     userId,
 		UserAgent:  userAgent,

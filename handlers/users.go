@@ -41,7 +41,20 @@ func (s *Server) LoginMeta(c *gin.Context) {
 	c.JSON(http.StatusOK, sdk.V1LoginMetaResponse{RegistrationEnabled: enabled})
 }
 
+// Login signs in a web client. The session is also set in cookies, which the
+// browser sends back on later requests.
 func (s *Server) Login(c *gin.Context) {
+	s.login(c, db.ClientTypeWeb)
+}
+
+// LoginMobile signs in the mobile app. It returns the same body as Login but
+// creates a mobile session, which lasts MobileSessionRollingWindow. The app
+// sends the session ID back as an Authorization header, so no cookies are set.
+func (s *Server) LoginMobile(c *gin.Context) {
+	s.login(c, db.ClientTypeMobile)
+}
+
+func (s *Server) login(c *gin.Context, clientType string) {
 	var req sdk.LoginRequest
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -63,15 +76,18 @@ func (s *Server) Login(c *gin.Context) {
 
 	loginEmailLimiter.reset(emailKey)
 
-	session, err := db.CreateSession(u.ID, c.Request.UserAgent(), c.ClientIP(), db.ClientTypeWeb)
+	window := sessionWindow(clientType)
+	session, err := db.CreateSession(u.ID, c.Request.UserAgent(), c.ClientIP(), clientType, window)
 	if err != nil {
 		respond(c, http.StatusInternalServerError, "", fmt.Errorf("create session: %w", err))
 		return
 	}
 
-	maxAge := int(SessionRollingWindow.Seconds())
-	c.SetCookie(string(shared.USERCOOKIENAME), fmt.Sprintf("%d", u.ID), maxAge, "/", COOKIEDOMAIN, COOKIESECURE, true)
-	c.SetCookie(string(shared.SESSIONCOOKIENAME), session.SessionID, maxAge, "/", COOKIEDOMAIN, COOKIESECURE, true)
+	if clientType == db.ClientTypeWeb {
+		maxAge := int(window.Seconds())
+		c.SetCookie(string(shared.USERCOOKIENAME), fmt.Sprintf("%d", u.ID), maxAge, "/", COOKIEDOMAIN, COOKIESECURE, true)
+		c.SetCookie(string(shared.SESSIONCOOKIENAME), session.SessionID, maxAge, "/", COOKIEDOMAIN, COOKIESECURE, true)
+	}
 
 	c.JSON(http.StatusOK, sdk.V1LoginResponse{
 		Message:   "OK",

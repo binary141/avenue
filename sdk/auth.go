@@ -23,6 +23,15 @@ func (c *Client) Login(h http.Header, req LoginRequest) (V1LoginResponse, error)
 	return out, err
 }
 
+// LoginMobile authenticates the mobile app. It returns the same body as Login,
+// but the session lasts for the mobile window (90 days, rolling) and is sent
+// back in the Authorization header instead of cookies.
+func (c *Client) LoginMobile(h http.Header, req LoginRequest) (V1LoginResponse, error) {
+	var out V1LoginResponse
+	err := c.request(h, http.MethodPost, "/login-mobile", req, &out)
+	return out, err
+}
+
 // Logout ends the caller's current session.
 func (c *Client) Logout(h http.Header) (MessageResponse, error) {
 	var out MessageResponse

@@ -32,9 +32,21 @@ var (
 	COOKIESECURE = APPENV == "production"
 )
 
-// SessionRollingWindow is how long a session (and its cookies) stays valid
+// SessionRollingWindow is how long a web session (and its cookies) stays valid
 // after the most recent authenticated request.
 const SessionRollingWindow = 15 * time.Minute
+
+// MobileSessionRollingWindow is the equivalent for mobile sessions, which are
+// meant to stay signed in across app restarts.
+const MobileSessionRollingWindow = 90 * 24 * time.Hour
+
+// sessionWindow returns the rolling window for a session of clientType.
+func sessionWindow(clientType string) time.Duration {
+	if clientType == db.ClientTypeMobile {
+		return MobileSessionRollingWindow
+	}
+	return SessionRollingWindow
+}
 
 // FS returns the server's jailed filesystem, for callers outside the
 // handlers package (e.g. the trash sweeper) that need to remove blobs.
@@ -201,7 +213,8 @@ func (s *Server) sessionCheckImpl(c *gin.Context, allowQueryToken bool) {
 		return
 	}
 
-	session.ExpiresAt = time.Now().Add(SessionRollingWindow).Unix()
+	window := sessionWindow(session.ClientType)
+	session.ExpiresAt = time.Now().Add(window).Unix()
 
 	// update the session to be a rolling timeout
 	_, err := db.UpdateSession(session)
@@ -212,7 +225,7 @@ func (s *Server) sessionCheckImpl(c *gin.Context, allowQueryToken bool) {
 
 	// keep the cookies' Max-Age in sync with the rolling session window,
 	// otherwise the browser drops them well before the session expires
-	maxAge := int(SessionRollingWindow.Seconds())
+	maxAge := int(window.Seconds())
 	c.SetCookie(string(shared.USERCOOKIENAME), fmt.Sprint(session.UserId), maxAge, "/", COOKIEDOMAIN, COOKIESECURE, true)
 	c.SetCookie(string(shared.SESSIONCOOKIENAME), token, maxAge, "/", COOKIEDOMAIN, COOKIESECURE, true)
 
@@ -277,6 +290,7 @@ func (s *Server) SetupRoutes() {
 
 	unsecuredRouter.GET("/ping", s.pingHandler)
 	unsecuredRouter.POST("/login", s.Login)
+	unsecuredRouter.POST("/login-mobile", s.LoginMobile)
 	unsecuredRouter.GET("/loginMeta", s.LoginMeta)
 	unsecuredRouter.POST("/register", s.Register)
 	unsecuredRouter.POST("/forgot-password", s.ForgotPassword)

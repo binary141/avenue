@@ -108,3 +108,18 @@ func TestNameInPathIsEscaped(t *testing.T) {
 		})
 	}
 }
+
+func TestLoginMobileUsesMobileRoute(t *testing.T) {
+	var gotMethod, gotPath string
+	c, done := recordingServer(t, func(r *http.Request, _ []byte) {
+		gotMethod, gotPath = r.Method, r.URL.Path
+	})
+	defer done()
+
+	if _, err := c.LoginMobile(http.Header{}, LoginRequest{Email: "a@example.com", Password: "password1"}); err != nil {
+		t.Fatalf("LoginMobile: %v", err)
+	}
+	if gotMethod != http.MethodPost || gotPath != "/login-mobile" {
+		t.Errorf("request = %s %s, want POST /login-mobile", gotMethod, gotPath)
+	}
+}

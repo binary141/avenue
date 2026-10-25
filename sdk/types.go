@@ -114,6 +114,8 @@ type SessionInfo struct {
 	UserAgent string    `json:"userAgent"`
 	IPAddress string    `json:"ipAddress"`
 	IsCurrent bool      `json:"isCurrent"`
+	// ClientType is "web" or "mobile" (db.ClientTypeWeb / db.ClientTypeMobile).
+	ClientType string `json:"clientType"`
 }
 
 type Breadcrumb struct {

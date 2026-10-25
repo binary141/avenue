@@ -34,7 +34,12 @@
           :key="session.id"
           class="card flex flex-row items-center gap-3 p-4"
         >
-          <span style="font-size: 1.4rem; flex-shrink: 0;">💻</span>
+          <span style="font-size: 1.4rem; flex-shrink: 0;">{{ sessionIcon(session.clientType) }}</span>
+
+          <span
+            class="text-xs font-medium px-1.5 py-0.5 rounded shrink-0"
+            :style="sessionTypeStyle(session.clientType)"
+          >{{ sessionTypeLabel(session.clientType) }}</span>
 
           <span
             v-if="session.isCurrent"
@@ -86,12 +91,28 @@ interface SessionInfo {
   userAgent: string;
   ipAddress: string;
   isCurrent: boolean;
+  clientType: 'web' | 'mobile';
 }
 
 const loading = ref(true);
 const error = ref('');
 const successMsg = ref('');
 const sessions = ref<SessionInfo[]>([]);
+
+// Session types come from the server (session_types table): 'web' or 'mobile'.
+function sessionIcon(clientType: string): string {
+  return clientType === 'mobile' ? '📱' : '💻';
+}
+
+function sessionTypeLabel(clientType: string): string {
+  return clientType === 'mobile' ? 'Mobile app' : 'Web';
+}
+
+function sessionTypeStyle(clientType: string): string {
+  return clientType === 'mobile'
+    ? 'background: #e3f2fd; color: #1565c0;'
+    : 'background: var(--surface-muted, #eee); color: var(--text-secondary);';
+}
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' });

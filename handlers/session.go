@@ -42,12 +42,13 @@ func (s *Server) ListSessions(c *gin.Context) {
 	out := make([]sdk.SessionInfo, 0, len(sessions))
 	for _, sess := range sessions {
 		out = append(out, sdk.SessionInfo{
-			ID:        sess.ID,
-			CreatedAt: sess.CreatedAt,
-			ExpiresAt: time.Unix(sess.ExpiresAt, 0),
-			UserAgent: sess.UserAgent,
-			IPAddress: sess.IPAddress,
-			IsCurrent: sess.SessionID == currentSessionID,
+			ID:         sess.ID,
+			CreatedAt:  sess.CreatedAt,
+			ExpiresAt:  time.Unix(sess.ExpiresAt, 0),
+			UserAgent:  sess.UserAgent,
+			IPAddress:  sess.IPAddress,
+			IsCurrent:  sess.SessionID == currentSessionID,
+			ClientType: sess.ClientType,
 		})
 	}
 
